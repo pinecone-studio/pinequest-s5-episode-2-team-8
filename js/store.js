@@ -60,10 +60,11 @@
       this.state.log.push({ d: dkey(), ts: Date.now(), g: gameId, p: pillar, s: stars, t: together ? 1 : 0, sec: Math.round(seconds), pid: p && p.id });
       if (this.state.log.length > 3000) this.state.log.splice(0, this.state.log.length - 3000);
       this.save();
+      return TG.onGameRecorded ? TG.onGameRecorded({ stars, together, gameId }) : null; // village coins + XP
     },
     addFamilyStars(n) { this.state.familyStars += n; this.save(); },
     missionDoneToday(id) { return this.state.missions[id] === dkey(); },
-    completeMission(id) { this.state.missions[id] = dkey(); this.state.familyStars += 3; this.save(); },
+    completeMission(id) { this.state.missions[id] = dkey(); this.state.familyStars += 3; this.save(); return TG.onMissionDone ? TG.onMissionDone() : null; },
     usageToday() { return this.state.usage[dkey()] || 0; },
     extraToday() { const e = this.state.extend; return e && e.d === dkey() ? e.sec : 0; },
     tick(sec) { const k = dkey(); this.state.usage[k] = (this.state.usage[k] || 0) + sec; this.save(); },

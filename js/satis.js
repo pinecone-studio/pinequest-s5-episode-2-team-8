@@ -388,7 +388,7 @@
     function complete() {
       const stars = mistakes === 0 ? 3 : mistakes <= 2 ? 2 : 1, pg = prog(ag);
       pg[i] = Math.max(pg[i] || 0, stars);
-      S.record({ gameId: 'satis', pillar: lv.pillar, stars, together: players.length > 1, seconds: (Date.now() - t0) / 1000 });
+      const reward = S.record({ gameId: 'satis', pillar: lv.pillar, stars, together: players.length > 1, seconds: (Date.now() - t0) / 1000 });
       TG.sfx.win(); TG.confetti(60);
       const hasNext = i + 1 < TG.SATIS[ag].length;
       el.appendChild(h('div', { class: 'complete-back' }, h('div', { class: 'complete' },
@@ -396,6 +396,7 @@
         h('div', { class: 'res-stars' }, [1, 2, 3].map((k) => h('span', { class: k <= stars ? 'on' : '', style: { animationDelay: k * 0.15 + 's' } }, '★'))),
         h('div', { class: 'teach' }, h('b', null, '💡 ', L('Мэдсэн үү?', 'Did you know?')), h('p', null, tx(lv.teach))),
         players.length > 1 ? h('p', { class: 'muted' }, L(`Гэр бүлийн тэнгэрт +${stars} од ✨`, `+${stars} stars in your family sky ✨`)) : null,
+        reward && TG.rewardChip ? TG.rewardChip(reward) : null,
         h('div', { class: 'row-btns' },
           h('button', { class: 'btn ghost', onclick: () => TG.go('satis') }, '🗺️'),
           h('button', { class: 'btn ghost', onclick: () => TG.go('satisLevel', { ag, i }) }, '↻'),

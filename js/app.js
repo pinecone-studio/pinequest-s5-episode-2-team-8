@@ -36,7 +36,7 @@
         p && h('button', { class: 'profile-chip', onclick: profileSwitcher }, h('span', { class: 'av' }, p.avatar), h('span', { class: 'pn' }, p.name))));
   }
   const NAV = [
-    ['home', 'gamepad', 'Тоглоом', 'Play'], ['satis', 'sparkles', 'Цэгцлэе', 'Puzzles'], ['missions', 'heart', 'Даалгавар', 'Missions'],
+    ['home', 'gamepad', 'Тоглоом', 'Play'], ['village', 'sprout', 'Нутаг', 'Village'], ['satis', 'sparkles', 'Цэгцлэе', 'Puzzles'],
     ['memories', 'book', 'Дурсамж', 'Memories'], ['parents', 'users', 'Эцэг эх', 'Parents'],
   ];
   function bottomNav() {
@@ -158,8 +158,10 @@
         h('div', { class: 'daily-e' }, dm.emoji),
         h('div', { class: 'daily-body' },
           h('small', null, L('Өнөөдрийн гэр бүлийн даалгавар', "Today's family mission")),
-          h('b', null, tx(dm.title)), h('p', null, tx(dm.desc))),
+          h('b', null, tx(dm.title)), h('p', null, tx(dm.desc)),
+          h('button', { class: 'daily-link', onclick: () => TG.go('missions') }, L('Бүх даалгавар', 'All missions'), ' →')),
         h('button', { class: 'btn ' + (done ? 'done' : 'primary'), disabled: done, onclick: () => completeMission(dm) }, done ? '✓' : L('Хийлээ!', 'Done!'))),
+      villageBanner(),
       satisBanner(ag),
       h('div', { class: 'section-head' }, h('h3', null, L('Тоглоомууд', 'Games')), h('span', { class: 'count' }, games.length)),
       ageTabs(ag, (a) => { homeAge = a; render(); }),
@@ -179,6 +181,20 @@
         h('div', { class: 'gc-title' }, tx(g.title)),
         h('div', { class: 'gc-desc' }, tx(g.desc)),
         h('div', { class: 'gc-tags' }, h('span', { class: 'tag' }, P.icon, ' ', tx(P.name)), h('span', { class: 'tag fam' }, '👨‍👩‍👧 ', L('Хамтдаа', 'Together')))));
+  }
+
+  // ---------------- "Нутаг" shared village ----------------
+  SCREENS.village = () => TG.villageScreen({ setCleanup: (fn) => { cleanupGame = fn; } });
+  function villageBanner() {
+    const vi = TG.villageInfo ? TG.villageInfo() : null;
+    return h('button', { class: 'village-banner', onclick: () => TG.go('village') },
+      h('div', { class: 'vb-scene', 'aria-hidden': 'true' }, TG.pixel.icon('ui:logo', 48)),
+      h('div', { class: 'vb-body' },
+        h('div', { class: 'eyebrow' }, L('Шинэ · Хамт тоглох', 'New · Play together')),
+        h('b', null, L('Нутаг: хамтын цэцэрлэг', 'Village: grow together')),
+        h('span', null, L('Найзуудтайгаа тарьж, загасчилж, хувцас, тэжээвэр аваарай', 'Plant, fish and dress up with friends')),
+        vi ? h('div', { class: 'vb-stats' }, h('span', null, `⭐ ${L('Түвшин', 'Level')} ${vi.l}`), h('span', null, `🪙 ${vi.coins}`)) : null),
+      h('span', { class: 'sb-go' }, TG.icon('chevronRight')));
   }
 
   // ---------------- "Цэгцлэе!" satisfying puzzles ----------------
@@ -229,6 +245,8 @@
     const close = TG.modal(body, { cls: 'launch' });
   }
 
+  TG.launchGame = launch;
+
   // ---------------- play / result ----------------
   SCREENS.play = ({ g, players, together }) => {
     const hud = h('div', { class: 'hud' }), stage = h('div', { class: 'stage' });
@@ -238,8 +256,8 @@
       finish(res) {
         if (done) return; done = true;
         const stars = Math.max(1, Math.min(3, res.stars || 1));
-        S.record({ gameId: g.id, pillar: g.pillar, stars, together, seconds: (Date.now() - t0) / 1000 });
-        TG.go('result', { g, players: res.players || players, together, res: { ...res, stars } });
+        const reward = S.record({ gameId: g.id, pillar: g.pillar, stars, together, seconds: (Date.now() - t0) / 1000 });
+        TG.go('result', { g, players: res.players || players, together, res: { ...res, stars, reward } });
       },
     };
     const el = h('div', { class: 'play-screen' },
@@ -277,6 +295,7 @@
       winner ? h('div', { class: 'winner' }, winner) : null,
       res.summary ? h('p', { class: 'muted' }, res.summary) : null,
       players.length > 1 && res.scores ? TG.scoreboard(players, res.scores, -1) : null,
+      res.reward ? rewardChip(res.reward) : null,
       h('p', { class: 'res-msg' }, together
         ? L(`Хамтдаа өнгөрүүлсэн мөч хамгийн том шагнал. Гэр бүлийн тэнгэрт +${res.stars} од гэрэлтлээ! ✨`, `Time together is the greatest prize. +${res.stars} stars now shine in your family sky! ✨`)
         : L('Дараагийн удаа гэр бүлтэйгээ хамт тоглоорой. Тэгвэл гэр бүлийн тэнгэрт од нэмэгдэнэ ✨', 'Next time play with your family to add stars to your family sky ✨')),
@@ -288,11 +307,17 @@
         h('button', { class: 'btn primary', onclick: () => TG.go('play', { g, players: players.filter((x) => !x.bot), together }) }, '↻ ', L('Дахин', 'Again'))));
   };
 
+  function rewardChip(r) {
+    return h('button', { class: 'reward-chip', onclick: () => TG.go('village') },
+      h('span', null, `🪙 +${r.coins}`), h('span', null, `⭐ +${r.xp} XP`), h('small', null, L('Нутагт ашиглах', 'Spend in the village'), ' →'));
+  }
+  TG.rewardChip = rewardChip;
+
   // ---------------- missions ----------------
   function completeMission(m) {
     if (S.missionDoneToday(m.id)) return;
-    S.completeMission(m.id); TG.sfx.win(); TG.confetti(50);
-    TG.toast(L('Гайхалтай! Гэр бүлийн тэнгэрт +3 од ⭐', 'Wonderful! +3 stars in your family sky ⭐'));
+    const r = S.completeMission(m.id); TG.sfx.win(); TG.confetti(50);
+    TG.toast(L('Гайхалтай! Гэр бүлийн тэнгэрт +3 од ⭐', 'Wonderful! +3 stars in your family sky ⭐') + (r ? ` · 🪙 +${r.coins}` : ''));
     render();
   }
   SCREENS.missions = () => {
@@ -472,6 +497,10 @@
       h('section', { class: 'card' },
         h('h3', null, '⚙️ ', L('Тохиргоо, хүртээмж', 'Settings & accessibility')),
         toggle('sound', L('🔊 Дуу', '🔊 Sound')),
+        TG.music && TG.music.available ? h('label', { class: 'switch-row' }, h('span', null, L('🎵 Арын хөгжим', '🎵 Background music')),
+          h('input', { type: 'checkbox', class: 'switch', checked: st.settings.music !== false, onchange: () => { TG.music.toggle(); render(); } })) : null,
+        TG.music && TG.music.available ? h('div', { class: 'range-row', style: { padding: '8px 0' } }, h('span', null, L('Хөгжмийн дуу', 'Music volume')),
+          h('input', { type: 'range', min: 0, max: 100, step: 5, value: Math.round((typeof st.settings.musicVolume === 'number' ? st.settings.musicVolume : 0.35) * 100), 'aria-label': 'music volume', oninput: (e) => TG.music.setVolume(e.target.value / 100) })) : null,
         toggle('bigText', L('🔠 Том үсэг', '🔠 Large text')),
         toggle('reduceMotion', L('🐢 Хөдөлгөөн багасгах', '🐢 Reduce motion')),
         h('label', { class: 'switch-row' }, h('span', null, '🌐 ', L('Хэл', 'Language')), h('button', { class: 'btn ghost sm', onclick: toggleLang }, S.state.lang === 'mn' ? 'Монгол → English' : 'English → Монгол'))),
@@ -558,11 +587,15 @@
       h('section', null,
         h('h2', null, L('Цаашдын төлөвлөгөө', 'Roadmap')),
         h('ol', { class: 'roadmap' },
-          h('li', null, h('b', null, L('Одоо', 'Now')), L('Прототип: 15 тоглоом, 48 түвшний "Цэгцлэе!" оньсого, 4 насны ангилал, офлайн PWA', 'Prototype: 15 games, 48 "Make it perfect" puzzle levels, 4 age groups, offline PWA')),
+          h('li', null, h('b', null, L('Одоо', 'Now')), L('Прототип: 15 тоглоом, 48 түвшний "Цэгцлэе!" оньсого, олон тоглогчтой "Нутаг" тосгон, офлайн PWA', 'Prototype: 15 games, 48 puzzle levels, the multiplayer "Village", offline PWA')),
           h('li', null, h('b', null, L('Дараа', 'Next')), L('Жинхэнэ багш, өвөө эмээгийн бичсэн монгол дуу хоолой; Монгол бичгийн модуль', 'Mongolian voice-over by real teachers and grandparents; traditional Mongol script module')),
           h('li', null, h('b', null, L('Удахгүй', 'Soon')), L('Казах хэл (Баян-Өлгий), дохионы хэл, хоёр утсаар холбогдон тоглох', 'Kazakh language (Bayan-Ölgii), sign language, two-phone local play')),
           h('li', null, h('b', null, L('Ирээдүй', 'Future')), L('Сургууль, сумтай хамтран ажиллах, QPay төлбөр', 'School and soum partnerships, QPay payments')))),
 
+      TG.music && TG.music.credits().length ? h('section', null,
+        h('h2', null, L('Хөгжмийн зохиогчид', 'Music credits')),
+        h('p', { class: 'center muted' }, L('Арын хөгжим бүгд CC0 (нийтийн өмч) лицензтэй, OpenGameArt.org-оос. Зохиогчдод баярлалаа!', 'All background music is CC0 (public domain) from OpenGameArt.org. Thank you to the composers!')),
+        h('ul', { class: 'credits' }, TG.music.credits().map((c) => h('li', null, h('b', null, c.title), ' — ', c.artist, ' · ', c.license, c.source ? [' · ', h('a', { href: c.source, target: '_blank', rel: 'noopener' }, 'OpenGameArt')] : null)))) : null,
       h('footer', { class: 'about-foot' }, L('Монгол хүүхэд бүрт ❤️ · Pinecone Academy · Pinequest', 'For every Mongolian child ❤️ · Pinecone Academy · Pinequest'),
         h('div', null, h('button', { class: 'btn primary', onclick: back }, L('Тоглож эхлэх ▶', 'Start playing ▶')))));
   };
@@ -596,7 +629,11 @@
 
   // ---------------- boot ----------------
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    // When a new version takes over, reload once so the player sees it right away.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {}));
   }
   render();
 })(window.TG);

@@ -29,7 +29,7 @@ jobs:
 
       - name: JavaScript syntax
         run: |
-          for f in $(find js -name '*.js') sw.js; do node --check "$f"; done
+          for f in $(find js -name '*.js') sw.js server.js; do node --check "$f"; done
           echo "All JavaScript files parse."
 
       - name: Every referenced file exists and is cached offline
@@ -39,6 +39,9 @@ jobs:
         run: |
           npm install --no-save --no-package-lock --silent puppeteer-core@22.15.0
           node tests/smoke.mjs
+
+      - name: Multiplayer test (two players in the village)
+        run: node tests/multiplayer.mjs
 
   pages-status:
     name: Is GitHub Pages enabled?

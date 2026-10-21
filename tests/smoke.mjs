@@ -78,6 +78,18 @@ try {
   const restored = await page.evaluate(() => document.activeElement === window.__before);
   if (!restored) errors.push('modal accessibility: focus was not restored after closing');
 
+  step = 'village (solo mode, no server)';
+  await page.evaluate(() => TG.go('village')); await sleep(900);
+  await check('village screen', '.village canvas');
+  const solo = await page.evaluate(() => { const L = TG._village.live(); return L && L.status; });
+  if (solo !== 'solo') errors.push(`village: expected solo mode without a server, got "${solo}"`);
+  await page.evaluate(() => { document.querySelectorAll('.modal-x').forEach((x) => x.click()); const v = TG.store.active().village; v.seeds.carrot = 2; TG._village.act('plant', 0, 'carrot'); });
+  await sleep(300);
+  if (!(await page.evaluate(() => { const p = TG.store.active().village.garden[0]; return p && p.c === 'carrot'; }))) errors.push('village: planting in solo mode did not work');
+  for (const btn of ['bag', 'talk', 'quests']) { await page.evaluate((b) => { document.querySelectorAll('.modal-x').forEach((x) => x.click()); document.querySelector(`.v-round[aria-label="${b}"]`).click(); }, btn); await sleep(300); await check(`village ${btn} panel`, '.modal'); }
+  await page.evaluate(() => { document.querySelectorAll('.modal-x').forEach((x) => x.click()); document.querySelector('.v-pills .v-pill').click(); }); await sleep(250); await check('village shop', '.v-shop');
+  await page.evaluate(() => document.querySelectorAll('.modal-x').forEach((x) => x.click())); await sleep(250);
+
   const games = await page.evaluate(() => TG.gameOrder.map((id) => ({ id, ages: TG.games[id].ages })));
   for (const g of games) {
     for (const together of [false, true]) {
@@ -134,7 +146,52 @@ try {
 
   await page.evaluate(() => TG.go('result', { g: TG.games.shagai, players: [{ name: 'A', emoji: '🐎', color: '#000' }, { name: 'B', emoji: '👩', color: '#111' }], together: true, res: { stars: 3, scores: [15, 9] } }));
   await sleep(250); await check('result screen', '.result');
-  console.log(`Checked 5 screens, ${games.length} games x 2 modes, ${count} puzzle levels.`);
+
+  // math duel: two-player mode used to award 3 stars no matter how badly it went
+  step = 'math duel star grading';
+  await page.evaluate(() => {
+    document.querySelectorAll('.modal-back,.timeout-back').forEach((m) => m.remove());
+    TG.store.active().age = 8;   // 7-10, so the questions use only + − ×
+    const players = [{ name: 'Тест', emoji: '🐎', color: TG.PCOLORS[0] }, { name: 'Ээж', emoji: '👩', color: TG.PCOLORS[1] }];
+    TG.go('play', { g: TG.games.mathduel, players, together: true });
+  });
+  await sleep(350);
+  const duel = await page.evaluate(async () => {
+    const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+    const value = (t) => {
+      const m = t.replace(' = ?', '').trim().match(/^(\d+)\s*(.+?)\s*(\d+)$/);
+      if (!m) return null;
+      const a = +m[1], op = m[2], b = +m[3];
+      if (op === '+') return a + b;
+      if (op === '×') return a * b;
+      if (op === '÷') return a / b;
+      return a - b;
+    };
+    for (let q = 0; q < 10; q++) {
+      // the two panels are rendered in the opposite order to the player list,
+      // so pick them by name rather than by position
+      const panels = [...document.querySelectorAll('.duel-panel')];
+      const child = panels.find((p) => p.querySelector('.dp-head').textContent.includes('Тест'));
+      const grown = panels.find((p) => p.querySelector('.dp-head').textContent.includes('Ээж'));
+      if (!child || !grown) return { error: 'could not find the two duel panels' };
+      const answer = value(child.querySelector('.dp-q').textContent);
+      if (answer == null) return { error: 'could not read the question' };
+      const wrong = [...child.querySelectorAll('.dp-btn')].find((o) => +o.textContent !== answer);
+      const right = [...grown.querySelectorAll('.dp-btn')].find((o) => +o.textContent === answer);
+      if (!wrong || !right) return { error: 'could not find the options' };
+      wrong.click();                 // the child answers wrong
+      await nap(30);
+      right.click();                 // the grown-up answers correctly
+      await nap(1150);               // the duel moves on 1s after a correct answer
+    }
+    await nap(500);
+    return { stars: document.querySelectorAll('.res-stars .on').length, onResult: !!document.querySelector('.result') };
+  });
+  if (duel.error) errors.push(`math duel star grading: ${duel.error}`);
+  else if (!duel.onResult) errors.push('math duel star grading: the duel never reached the result screen');
+  else if (duel.stars === 3) errors.push('math duel star grading: a run with no correct answers still got 3 stars');
+
+  console.log(`Checked 5 screens, the village, ${games.length} games x 2 modes, ${count} puzzle levels.`);
 } catch (e) {
   errors.push(`crashed during "${step}": ${e.message}`);
 }

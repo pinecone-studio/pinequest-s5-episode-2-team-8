@@ -43,7 +43,15 @@
       return { el, score, qEl, grid, frozen: false };
     });
     const next = () => {
-      if (qi >= total) return ctx.finish({ stars: 3, scores, players });
+      if (qi >= total) {
+        // grade the child (players[0]) on the questions they answered, like the solo mode
+        const r = scores[0] / total;
+        return ctx.finish({
+          stars: r >= 0.8 ? 3 : r >= 0.5 ? 2 : 1,
+          scores, players,
+          summary: L(`Тулаан: ${scores[0]} – ${scores[1]}`, `Duel: ${scores[0]} – ${scores[1]}`),
+        });
+      }
       q = genQ(ctx.ageGroup); locked = false; qi++;
       counter.textContent = `${L('Асуулт', 'Question')} ${qi}/${total}`;
       panels.forEach((pn, i) => {
