@@ -293,6 +293,9 @@ textarea.input { resize: vertical; font-weight: 600; }
 .sb-e { font-size: 1.15rem; }
 .sb-n { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-s { background: var(--pc); color: #fff; border-radius: 999px; min-width: 24px; text-align: center; padding: 1px 7px; font-size: .8rem; }
+/* together-mode games have no individual score, so show who took part instead */
+.together-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 14px 0 2px; }
+.together-row .tp { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 999px; font-weight: 700; font-size: .88rem; background: color-mix(in srgb, var(--pc) 12%, var(--surface)); border: 1.5px solid color-mix(in srgb, var(--pc) 38%, var(--line)); }
 .result .scoreboard { justify-content: center; flex-wrap: wrap; margin: 10px 0; }
 .turn-flash { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; pointer-events: none; animation: tf 1.2s ease both; }
 .turn-flash > div { background: var(--surface); border-radius: 28px; padding: 20px 36px; text-align: center; box-shadow: var(--sh-3), 0 0 0 4px var(--pc); }

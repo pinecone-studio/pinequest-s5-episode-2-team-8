@@ -21,11 +21,11 @@
       const life = TG.lifecycle();
       const list = TG.shuffle(MOVES).slice(0, 5);
       const secs = ctx.ageGroup === '3-6' ? 15 : 20;
-      let i = 0, left = secs, paused = false;
+      let i = 0, left = secs, paused = false, done = 0, moving = false;
       const card = h('div', { class: 'move-card pop' });
       const ring = h('div', { class: 'ring' });
       const pauseBtn = h('button', { class: 'btn ghost', onclick: () => { paused = !paused; pauseBtn.textContent = paused ? '▶ ' + L('Үргэлжлүүлэх', 'Resume') : '⏸ ' + L('Түр зогс', 'Pause'); } }, '⏸ ' + L('Түр зогс', 'Pause'));
-      const skipBtn = h('button', { class: 'btn ghost', onclick: () => nextMove() }, L('Алгасах ⏭', 'Skip ⏭'));
+      const skipBtn = h('button', { class: 'btn ghost', onclick: () => nextMove(true) }, L('Алгасах ⏭', 'Skip ⏭'));
       const show = () => {
         const m = list[i]; left = secs;
         card.replaceChildren(h('div', { class: 'move-e' }, m.e), h('h2', null, L(m.mn, m.en)), h('p', null, L(m.dmn, m.den)));
@@ -33,8 +33,22 @@
         drawRing(); TG.sfx.chime();
       };
       const drawRing = () => { ring.style.setProperty('--p', (left / secs) * 100); ring.textContent = left; };
-      const nextMove = () => { i++; if (i >= list.length) { life.stop(); ctx.finish({ stars: 3, summary: L(`${list.length} хөдөлгөөн хийлээ 💪`, `${list.length} moves done 💪`) }); } else show(); };
-      life.every(() => { if (paused) return; left--; drawRing(); if (left <= 3 && left > 0) TG.sfx.tick(); if (left <= 0) nextMove(); }, 1000);
+      // A move only counts when the child actually did it: skipping through all
+      // five must not earn the same stars as completing all five.
+      const nextMove = (skipped) => {
+        if (moving) return; moving = true;
+        if (!skipped) done++;
+        i++;
+        if (i >= list.length) {
+          life.stop();
+          const r = done / list.length;
+          ctx.finish({ stars: r >= 0.8 ? 3 : r >= 0.5 ? 2 : 1, summary: L(`${done}/${list.length} хөдөлгөөн хийлээ 💪`, `${done}/${list.length} moves done 💪`) });
+          return;
+        }
+        moving = false;
+        show();
+      };
+      life.every(() => { if (paused) return; left--; drawRing(); if (left <= 3 && left > 0) TG.sfx.tick(); if (left <= 0) nextMove(false); }, 1000);
       ctx.hud.replaceChildren(h('div', { class: 'hud-pill' }, ctx.together ? '🤝 ' + L('Бүгдээрээ!', 'Everyone!') : '💪'));
       ctx.root.replaceChildren(card, ring, h('div', { class: 'row-btns' }, pauseBtn, skipBtn));
       show();

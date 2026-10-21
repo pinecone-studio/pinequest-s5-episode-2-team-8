@@ -10,6 +10,11 @@
     start(ctx) {
       const life = TG.lifecycle();
       const young = ctx.ageGroup === '3-6' || ctx.ageGroup === '7-10';
+      // The team banner is replaced by the breathing circle, so keep who is
+      // breathing together visible in the HUD for the whole exercise.
+      ctx.hud.replaceChildren(h('div', { class: 'hud-pill' }, ctx.together
+        ? '🤝 ' + ctx.players.map((p) => p.emoji).join(' ') + ' ' + L('Бүгд хамт амьсгана', 'Everyone breathes together')
+        : '🌬️ ' + L('Амьсгал', 'Breathe')));
       const pattern = young ? [['in', 3], ['out', 4]] : [['in', 4], ['hold', 4], ['out', 4], ['hold', 3]];
       const cycles = 4;
       let before = null;

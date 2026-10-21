@@ -167,6 +167,47 @@ try {
     if (!rest.blocked) errors.push('screen time rest screen: a game could still be started after the limit was reached');
   }
 
+  // together mode: breathing must show who is breathing with you, the move
+  // break must not pay 3 stars for skipping everything, and collaborative
+  // games must still show who took part on the result screen.
+  step = 'together mode feedback';
+  const together = await page.evaluate(async () => {
+    const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+    const players = [{ name: 'Тест', emoji: '🐎', color: TG.PCOLORS[0] }, { name: 'Ээж', emoji: '👩', color: TG.PCOLORS[1] }];
+    const out = {};
+
+    // 1. breathing keeps the group visible in the HUD
+    document.querySelectorAll('.modal-back,.timeout-back').forEach((m) => m.remove());
+    TG.go('play', { g: TG.games.breathing, players, together: true });
+    await nap(300);
+    out.breathHud = (document.querySelector('.hud') || {}).textContent || '';
+    out.breathHudHasBoth = out.breathHud.includes('🐎') && out.breathHud.includes('👩');
+
+    // 2. skipping every move in the move break must not earn 3 stars
+    document.querySelectorAll('.modal-back,.timeout-back').forEach((m) => m.remove());
+    TG.go('play', { g: TG.games.move, players, together: true });
+    await nap(300);
+    for (let k = 0; k < 6; k++) {
+      const skip = [...document.querySelectorAll('.stage button')].find((b) => b.textContent.includes('⏭'));
+      if (skip) skip.click();
+      await nap(120);
+    }
+    await nap(400);
+    out.skipStars = document.querySelectorAll('.res-stars .on').length;
+    out.skipSummary = (document.querySelector('.result .muted') || {}).textContent || '';
+
+    // 3. a collaborative game shows the players on the result screen
+    document.querySelectorAll('.modal-back,.timeout-back').forEach((m) => m.remove());
+    TG.go('result', { g: TG.games.budget, players, together: true, res: { stars: 2, summary: 'test' } });
+    await nap(250);
+    out.participants = document.querySelectorAll('.together-row .tp').length;
+    return out;
+  });
+  if (!together.breathHudHasBoth) errors.push(`together mode feedback: the breathing HUD does not show both players (got "${together.breathHud}")`);
+  if (together.skipStars === 3) errors.push('together mode feedback: skipping every move in the move break still earned 3 stars');
+  if (!/0\//.test(together.skipSummary)) errors.push(`together mode feedback: the move break summary does not count the skipped moves (got "${together.skipSummary}")`);
+  if (together.participants !== 2) errors.push(`together mode feedback: the result screen shows ${together.participants} participants, expected 2`);
+
   // math duel: two-player mode used to award 3 stars no matter how badly it went
   step = 'math duel star grading';
   await page.evaluate(() => {

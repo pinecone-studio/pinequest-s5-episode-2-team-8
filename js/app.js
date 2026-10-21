@@ -12,7 +12,17 @@
   function transition(kind, update) {
     document.documentElement.dataset.vt = kind;
     if (calm()) return update();
-    if (document.startViewTransition) { try { document.startViewTransition(update); return; } catch (e) { /* fall through */ } }
+    if (document.startViewTransition) {
+      try {
+        const vt = document.startViewTransition(update);
+        // Tapping two screens quickly skips the older transition, and its ready/finished
+        // promises then reject with an AbortError. Nobody waits for them, so swallow the
+        // rejection: otherwise it shows up as an unhandled error in the console.
+        if (vt && vt.ready) vt.ready.catch(() => {});
+        if (vt && vt.finished) vt.finished.catch(() => {});
+        return;
+      } catch (e) { /* fall through */ }
+    }
     update();
     const el = document.getElementById('app').firstElementChild;
     if (el) { el.classList.remove('screen-in'); void el.offsetWidth; el.classList.add('screen-in'); }
@@ -323,7 +333,11 @@
       h('h1', null, res.stars === 3 ? L('Гайхалтай!', 'Amazing!') : res.stars === 2 ? L('Сайн байна!', 'Well done!') : L('Сайн оролдлого!', 'Nice try!')),
       winner ? h('div', { class: 'winner' }, winner) : null,
       res.summary ? h('p', { class: 'muted' }, res.summary) : null,
-      players.length > 1 && res.scores ? TG.scoreboard(players, res.scores, -1) : null,
+      players.length > 1
+        ? (res.scores ? TG.scoreboard(players, res.scores, -1)
+          : h('div', { class: 'together-row' }, players.map((p) => h('span', { class: 'tp', style: { '--pc': p.color } },
+            h('span', { class: 'sb-e' }, p.emoji), ' ', p.name))))
+        : null,
       res.reward ? rewardChip(res.reward) : null,
       h('p', { class: 'res-msg' }, together
         ? L(`Хамтдаа өнгөрүүлсэн мөч хамгийн том шагнал. Гэр бүлийн тэнгэрт +${res.stars} од гэрэлтлээ! ✨`, `Time together is the greatest prize. +${res.stars} stars now shine in your family sky! ✨`)
