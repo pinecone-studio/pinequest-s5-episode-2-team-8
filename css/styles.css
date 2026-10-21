@@ -583,6 +583,13 @@ blockquote { margin: 12px 0; padding: 14px 16px; background: var(--surface-2); b
 .timeout-back { position: fixed; inset: 0; z-index: 90; background: radial-gradient(600px 400px at 50% 0%, #FFE7B0, transparent 70%), linear-gradient(160deg, #FFF6E5, #DCEBFF); display: grid; place-items: center; padding: 20px; }
 .timeout { max-width: 440px; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 28px 22px; box-shadow: var(--sh-3); }
 .timeout .daily { text-align: left; }
+.timeout .btn { margin-top: 10px; }
+.timeout .btn[data-rest="mission"] { margin-top: 18px; }
+
+/* screen-time notice on the home screen */
+.rest-notice { background: linear-gradient(135deg, var(--sun-50), var(--blue-50)); border: 1px solid #FBD58A; border-radius: var(--r-lg); padding: 16px; margin-bottom: 12px; }
+.rest-notice b { display: block; font-family: var(--font-display); font-size: 1.05rem; margin-bottom: 4px; }
+.rest-notice p { font-weight: 600; color: var(--ink-2); font-size: .88rem; margin-bottom: 12px; }
 
 @media (min-width: 760px) {
   .page { padding: 28px 24px; }
