@@ -36,7 +36,8 @@
           a.c.classList.add('matched'); b.c.classList.add('matched'); T.add(1); matched++;
           TG.sfx.good(); TG.speak(it[1]); status.textContent = `✨ ${L(it[1], it[2])}!`;
           lock = false;
-          if (matched === pairs) life.later(end, 900);
+          if (matched === pairs) { life.later(end, 900); return; }
+          T.next(); // hand the turn over, like the other games do after every round
         } else {
           life.later(() => { a.c.classList.remove('flipped'); b.c.classList.remove('flipped'); lock = false; T.next(); status.textContent = L('Дахиад оролдоорой', 'Try again'); }, 950);
         }

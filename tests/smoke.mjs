@@ -112,6 +112,29 @@ try {
     }
   }
 
+  // memory: the turn must pass to the next player after every pair attempt,
+  // otherwise one player can take every pair and the others finish on 0.
+  step = 'memory turn rotation';
+  await page.evaluate(() => {
+    document.querySelectorAll('.modal-back,.timeout-back').forEach((m) => m.remove());
+    const players = [{ name: 'Тест', emoji: '🐎', color: TG.PCOLORS[0] }, { name: 'Ээж', emoji: '👩', color: TG.PCOLORS[1] }];
+    TG.go('play', { g: TG.games.memory, players, together: true });
+  });
+  await sleep(350);
+  const turn = await page.evaluate(async () => {
+    const cards = [...document.querySelectorAll('.mcard')];
+    const emojiOf = (c) => c.querySelector('.mc-e').textContent;
+    const mate = cards.findIndex((c, i) => i > 0 && emojiOf(c) === emojiOf(cards[0]));
+    const cur = () => [...document.querySelectorAll('.sb-p')].findIndex((p) => p.classList.contains('cur'));
+    const before = cur();
+    cards[0].click(); cards[mate].click();
+    await new Promise((r) => setTimeout(r, 400));
+    return { before, after: cur(), scores: [...document.querySelectorAll('.sb-s')].map((s) => s.textContent) };
+  });
+  if (turn.before !== 0) errors.push(`memory turn rotation: first player was not current (got ${turn.before})`);
+  if (turn.after !== 1) errors.push(`memory turn rotation: turn stayed on player ${turn.after}, expected it to pass to player 1`);
+  if (turn.scores[0] !== '1') errors.push(`memory turn rotation: the player who matched scored ${turn.scores[0]}, expected 1`);
+
   const levels = await page.evaluate(() => Object.fromEntries(Object.entries(TG.SATIS).map(([ag, l]) => [ag, l.length])));
   let count = 0;
   for (const [ag, n] of Object.entries(levels)) {
