@@ -5,7 +5,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else { root.TG = root.TG || {}; root.TG.vrules = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
-  const W = 36, H = 26, PLOTS = 24;
+  const W = 56, H = 40, PLOTS = 24, LOTS = 8, GER_PRICE = 200, GER_LEVEL = 2;
   const T = (mn, en) => ({ mn, en });
 
   // stage = seconds per growth stage. A crop needs water at each of its 3 stages.
@@ -43,7 +43,38 @@
 
   const SKINS = ['#F6D3B3', '#EDBB93', '#D9A06E', '#B97A4A'];
   const DEELS = { blue: '#2F6BFF', red: '#E8453C', green: '#12A05F', purple: '#7A5AF8', pink: '#F06CA8', gold: '#E0A21A' };
+  const TITLES = [
+    { id: 'nachin', name: T('Начин', 'Falcon'), need: 5, fact: T('Начин (шонхор) цол Улсын наадамд 5 давж авдаг.', 'The Nachin (falcon) title is earned by winning 5 rounds at the State Naadam.') },
+    { id: 'khartsaga', name: T('Харцага', 'Hawk'), need: 6, fact: T('Харцага (хартсага шувуу) цол 6 давсан бөхөд олгогддог.', 'The Khartsaga (hawk) title goes to a wrestler who wins 6 rounds.') },
+    { id: 'zaan', name: T('Заан', 'Elephant'), need: 7, fact: T('Заан цол 7 давсан, хүчирхэг бөхийн цол.', 'The Zaan (elephant) title is for winning 7 rounds.') },
+    { id: 'garid', name: T('Гарьд', 'Garuda'), need: 8, fact: T('Гарьд бол домгийн хүчит шувуу. 8 давсан бөхөд олгодог.', 'The Garid is a mighty mythical bird, for winning 8 rounds.') },
+    { id: 'arslan', name: T('Арслан', 'Lion'), need: 9, fact: T('Наадамд түрүүлсэн бөх Арслан цол хүртэнэ.', 'The wrestler who wins the whole Naadam becomes an Arslan (lion).') },
+    { id: 'avarga', name: T('Аварга', 'Titan'), need: 10, fact: T('Хоёр удаа түрүүлсэн Арслан Аварга цол хүртдэг. Монголын хамгийн дээд бөхийн цол!', 'An Arslan who wins twice becomes an Avarga (titan), the highest wrestling title in Mongolia!') },
+  ];
+  // wrestling moves: each beats one other (push > pull > hook > push); timing power can turn a bad match-up
+  const MOVES = [
+    { id: 'push', name: T('Түлхэх', 'Push'), beats: 'pull' },
+    { id: 'pull', name: T('Татах', 'Pull'), beats: 'hook' },
+    { id: 'hook', name: T('Дэгээдэх', 'Hook'), beats: 'push' },
+  ];
+  function exchange(ma, pa, mb, pb) {
+    const base = (x, y) => (x === y ? 0.3 : (MOVES.find((m) => m.id === x) || {}).beats === y ? 0.6 : 0);
+    const A = base(ma, mb) + 0.8 * Math.max(0, Math.min(1, pa || 0)), B = base(mb, ma) + 0.8 * Math.max(0, Math.min(1, pb || 0));
+    return Math.abs(A - B) < 0.04 ? 0 : A > B ? 1 : -1;
+  }
+  const titleFor = (wr) => { if (!wr) return null; let t = null; for (const x of TITLES) if ((x.id === 'avarga' ? (wr.champ || 0) >= 2 : (wr.best || 0) >= x.need)) t = x.id; return t; };
+  const ROOF = { blue: '#3f76db', red: '#e14b3d', green: '#2ea35f', purple: '#9466e0', orange: '#f39b2c', teal: '#1fa3a3' };
+  const DOOR = { red: '#e14b3d', blue: '#3f76db', green: '#2ea35f', gold: '#e9a91f' };
+  const FURNITURE = [
+    { id: 'tulga', price: 60, lvl: 1, name: T('Тулга (зуух)', 'Stove (tulga)'), fact: T('Гэрийн голд тулга буюу зуух байрладаг. Энэ бол гэр бүлийн галын голомт.', 'The stove sits in the center of the ger. It is the heart of the family hearth.') },
+    { id: 'shirdeg', price: 80, lvl: 1, name: T('Ширдэг', 'Felt rug (shirdeg)'), fact: T('Ширдэг бол хээ угалзаар оёсон эсгий хивс.', 'A shirdeg is a felt rug stitched with traditional patterns.') },
+    { id: 'or', price: 90, lvl: 2, name: T('Ор', 'Bed'), fact: T('Гэрийн ор ихэвчлэн баруун, зүүн хананы дагуу байдаг.', 'Ger beds usually stand along the side walls.') },
+    { id: 'avdar', price: 110, lvl: 2, name: T('Авдар', 'Chest (avdar)'), fact: T('Авдарт гэр бүлийн үнэт зүйлсийг хадгалдаг. Хойморт тавьдаг.', 'The avdar chest keeps family treasures. It stands at the back of the ger (khoimor).') },
+    { id: 'morinkhuur', price: 150, lvl: 3, name: T('Морин хуур', 'Horsehead fiddle'), fact: T('Морин хуурыг гэрийн хойморт хүндэтгэлтэй байршуулдаг.', 'The morin khuur is placed with honor at the back of the ger.') },
+    { id: 'shagai', price: 40, lvl: 1, name: T('Шагайн уут', 'Bag of shagai'), fact: T('Урт өвлийн оройгоор гэр бүлээрээ шагай тоглодог.', 'Families play shagai on long winter evenings.') },
+  ];
   const LOOKS = {
+    title: TITLES.map((t) => t.id),
     hat: ['mongol', 'flower', 'cap', 'loovuuz', 'crown'],
     face: ['glasses', 'sun'],
     neck: ['scarf', 'khadag', 'medal'],
@@ -131,5 +162,5 @@
     return out;
   }
 
-  return { W, H, PLOTS, CROPS, FISH, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, normalize, needsWater, mature, stageLeft, applyAction, level, cleanLook, now };
+  return { W, H, PLOTS, LOTS, GER_PRICE, GER_LEVEL, TITLES, MOVES, exchange, titleFor, ROOF, DOOR, FURNITURE, CROPS, FISH, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, normalize, needsWater, mature, stageLeft, applyAction, level, cleanLook, now };
 });

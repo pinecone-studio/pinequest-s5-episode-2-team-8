@@ -6,10 +6,24 @@
   let cleanupGame = null, screen = 'home', params = {}, homeAge = null, homePillar = 'all', parentUntil = 0;
 
   // ---------------- navigation ----------------
+  // smooth, direction-aware transitions between screens (View Transitions API with a CSS fallback)
+  const NAV_ORDER = ['home', 'village', 'satis', 'memories', 'parents'];
+  const calm = () => S.state.settings.reduceMotion || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function transition(kind, update) {
+    document.documentElement.dataset.vt = kind;
+    if (calm()) return update();
+    if (document.startViewTransition) { try { document.startViewTransition(update); return; } catch (e) { /* fall through */ } }
+    update();
+    const el = document.getElementById('app').firstElementChild;
+    if (el) { el.classList.remove('screen-in'); void el.offsetWidth; el.classList.add('screen-in'); }
+  }
   TG.go = function (name, p = {}) {
     if (cleanupGame) { try { cleanupGame(); } catch (e) { console.error(e); } cleanupGame = null; }
-    screen = name; params = p; render(); window.scrollTo(0, 0);
+    const a = NAV_ORDER.indexOf(screen), b = NAV_ORDER.indexOf(name);
+    screen = name; params = p;
+    transition(a >= 0 && b >= 0 && a !== b ? (b > a ? 'left' : 'right') : 'up', () => { render(); window.scrollTo(0, 0); });
   };
+  const soft = () => transition('fade', render); // tab / filter switches inside a screen
   function render() {
     const root = document.documentElement, st = S.state.settings;
     root.classList.toggle('big', !!st.bigText);
@@ -168,9 +182,9 @@
         h('p', null, L('Тоглоом зогсоод гэр бүлээрээ бодит амьдрал дээр хамт юм хийгээрэй. Том хүн нэмэлт цаг нэмж болно.', 'Stop playing and do something real together. A grown-up can add more time.')),
         h('button', { class: 'btn primary', onclick: () => TG.go('missions') }, L('Гэр бүлийн даалгавар үзэх', 'See the family mission'))) : null,
       h('div', { class: 'section-head' }, h('h3', null, L('Тоглоомууд', 'Games')), h('span', { class: 'count' }, games.length)),
-      ageTabs(ag, (a) => { homeAge = a; render(); }),
+      ageTabs(ag, (a) => { homeAge = a; soft(); }),
       h('div', { class: 'chips' }, [['all', '✨', { mn: 'Бүгд', en: 'All' }], ...Object.entries(TG.PILLARS).map(([k, v]) => [k, v.icon, v.name])].map(([k, icon, name]) =>
-        h('button', { class: 'chip' + (homePillar === k ? ' active' : ''), onclick: () => { homePillar = k; render(); } }, icon, ' ', tx(name)))),
+        h('button', { class: 'chip' + (homePillar === k ? ' active' : ''), onclick: () => { homePillar = k; soft(); } }, icon, ' ', tx(name)))),
       h('div', { class: 'grid' }, games.map(gameCard)),
       games.length ? null : h('p', { class: 'empty' }, L('Энэ ангилалд тоглоом алга. Өөр ангилал сонгоорой.', 'No games here yet. Try another filter.')),
     ]);
@@ -192,7 +206,7 @@
   function villageBanner() {
     const vi = TG.villageInfo ? TG.villageInfo() : null;
     return h('button', { class: 'village-banner', onclick: () => TG.go('village') },
-      h('div', { class: 'vb-scene', 'aria-hidden': 'true' }, h('span', null, '⛺'), h('span', null, '🌻'), h('span', null, '🐑'), h('span', null, '🥕')),
+      h('div', { class: 'vb-scene', 'aria-hidden': 'true' }, TG.pixel.icon('ui:logo', 48)),
       h('div', { class: 'vb-body' },
         h('div', { class: 'eyebrow' }, L('Шинэ · Хамт тоглох', 'New · Play together')),
         h('b', null, L('Нутаг: хамтын цэцэрлэг', 'Village: grow together')),
@@ -202,7 +216,7 @@
   }
 
   // ---------------- "Цэгцлэе!" satisfying puzzles ----------------
-  SCREENS.satis = () => TG.satisMap({ shell, ageTabs, ag: currentAge(), setAge: (a) => { homeAge = a; render(); }, rerender: render });
+  SCREENS.satis = () => TG.satisMap({ shell, ageTabs, ag: currentAge(), setAge: (a) => { homeAge = a; soft(); }, rerender: render });
   SCREENS.satisLevel = (p) => TG.satisLevel({ ...p, setCleanup: (fn) => { cleanupGame = fn; } });
   function satisBanner(ag) {
     const pr = TG.satisProgress(ag);
@@ -341,7 +355,7 @@
     return shell([
       h('h1', { class: 'page-title' }, L('Гэр бүлийн даалгавар', 'Family missions')),
       h('p', { class: 'lead' }, L('Дэлгэцээ унтраагаад, хамтдаа хий. Даалгавар бүр гэр бүлийн тэнгэрт +3 од нэмнэ.', 'Turn off the screen and do these together. Each mission adds +3 stars to your family sky.')),
-      ageTabs(ag, (a) => { homeAge = a; render(); }),
+      ageTabs(ag, (a) => { homeAge = a; soft(); }),
       h('div', { class: 'mission-list' }, list.map((m) => {
         const done = S.missionDoneToday(m.id), P = TG.PILLARS[m.pillar];
         return h('div', { class: 'mission-card' + (done ? ' done' : ''), style: { '--gc': P.color } },
@@ -512,6 +526,10 @@
       h('section', { class: 'card' },
         h('h3', null, '⚙️ ', L('Тохиргоо, хүртээмж', 'Settings & accessibility')),
         toggle('sound', L('🔊 Дуу', '🔊 Sound')),
+        TG.music && TG.music.available ? h('label', { class: 'switch-row' }, h('span', null, L('🎵 Арын хөгжим', '🎵 Background music')),
+          h('input', { type: 'checkbox', class: 'switch', checked: st.settings.music !== false, onchange: () => { TG.music.toggle(); render(); } })) : null,
+        TG.music && TG.music.available ? h('div', { class: 'range-row', style: { padding: '8px 0' } }, h('span', null, L('Хөгжмийн дуу', 'Music volume')),
+          h('input', { type: 'range', min: 0, max: 100, step: 5, value: Math.round((typeof st.settings.musicVolume === 'number' ? st.settings.musicVolume : 0.35) * 100), 'aria-label': 'music volume', oninput: (e) => TG.music.setVolume(e.target.value / 100) })) : null,
         toggle('bigText', L('🔠 Том үсэг', '🔠 Large text')),
         toggle('reduceMotion', L('🐢 Хөдөлгөөн багасгах', '🐢 Reduce motion')),
         h('label', { class: 'switch-row' }, h('span', null, '🌐 ', L('Хэл', 'Language')), h('button', { class: 'btn ghost sm', onclick: toggleLang }, S.state.lang === 'mn' ? 'Монгол → English' : 'English → Монгол'))),
@@ -603,6 +621,10 @@
           h('li', null, h('b', null, L('Удахгүй', 'Soon')), L('Казах хэл (Баян-Өлгий), дохионы хэл, хоёр утсаар холбогдон тоглох', 'Kazakh language (Bayan-Ölgii), sign language, two-phone local play')),
           h('li', null, h('b', null, L('Ирээдүй', 'Future')), L('Сургууль, сумтай хамтран ажиллах, QPay төлбөр', 'School and soum partnerships, QPay payments')))),
 
+      TG.music && TG.music.credits().length ? h('section', null,
+        h('h2', null, L('Хөгжмийн зохиогчид', 'Music credits')),
+        h('p', { class: 'center muted' }, L('Арын хөгжим бүгд CC0 (нийтийн өмч) лицензтэй, OpenGameArt.org-оос. Зохиогчдод баярлалаа!', 'All background music is CC0 (public domain) from OpenGameArt.org. Thank you to the composers!')),
+        h('ul', { class: 'credits' }, TG.music.credits().map((c) => h('li', null, h('b', null, c.title), ' — ', c.artist, ' · ', c.license, c.source ? [' · ', h('a', { href: c.source, target: '_blank', rel: 'noopener' }, 'OpenGameArt')] : null)))) : null,
       h('footer', { class: 'about-foot' }, L('Монгол хүүхэд бүрт ❤️ · Pinecone Academy · Pinequest', 'For every Mongolian child ❤️ · Pinecone Academy · Pinequest'),
         h('div', null, h('button', { class: 'btn primary', onclick: back }, L('Тоглож эхлэх ▶', 'Start playing ▶')))));
   };
@@ -650,4 +672,6 @@
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {}));
   }
   render();
+  // a shared invite link (…?room=CODE) opens the village directly once a child profile exists
+  if (new URLSearchParams(location.search).get('room') && S.state.profiles.length) TG.go('village');
 })(window.TG);
