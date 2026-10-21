@@ -18,6 +18,7 @@
     purple: ['#9466e0', '#6a42b5', '#c2a2f2'], pink: ['#f06ca8', '#c2427e', '#f8a8cc'], gold: ['#e9a91f', '#b07a10', '#f7d071'] };
   const SKIN = { '#F6D3B3': ['#f6d3b3', '#e0b18c'], '#EDBB93': ['#edbb93', '#d29a6e'], '#D9A06E': ['#d9a06e', '#b9824f'], '#B97A4A': ['#b97a4a', '#94592f'] };
 
+  const shade = (hex, f) => { const n = parseInt(hex.slice(1), 16); const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) => Math.max(0, Math.min(255, Math.round(f < 0 ? v * (1 + f) : v + (255 - v) * f)))); return '#' + c.map((v) => v.toString(16).padStart(2, '0')).join(''); };
   // ------------------------------------------------------------ pixel helpers (integer coordinates only)
   const hash = (x, y) => { let n = x * 374761393 + y * 668265263; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967295; };
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.imageSmoothingEnabled = false; return { c, x }; };
@@ -121,7 +122,7 @@
   };
   function glyph(x, X, Y, rows, map) { rows.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== '.' && map[ch]) P(x, X + i, Y + j, map[ch]); })); }
   function ger(x, o) {
-    const X = o.x * 16, Y = o.y * 16, acc = o.accent === '#7A5AF8' ? [K.purple, K.purpleD] : [K.blue, K.blueD];
+    const X = o.x * 16, Y = o.y * 16, acc = o.roof ? [o.roof, shade(o.roof, -0.3)] : o.accent === '#7A5AF8' ? [K.purple, K.purpleD] : [K.blue, K.blueD], dc = o.doorCol || K.red;
     ell(x, X + 24, Y + 46, 22, 2, 'rgba(20,40,10,.25)');
     R(x, X + 3, Y + 24, 42, 22, K.out); R(x, X + 4, Y + 25, 40, 20, K.felt); R(x, X + 36, Y + 25, 8, 20, K.feltD);
     R(x, X + 4, Y + 28, 40, 3, acc[0]); for (let i = 5; i < 44; i += 3) P(x, X + i, Y + 29, K.white);
@@ -129,9 +130,10 @@
     for (let i = 0; i < 6; i++) line(x, X + 24, Y + 9, X + 5 + i * 7.6 | 0, Y + 25, acc[0]);
     R(x, X + 1, Y + 25, 46, 1, K.out);
     blob(x, X + 24, Y + 8, 3, 1, '#e8a33d');
-    R(x, X + 19, Y + 32, 10, 14, K.out); R(x, X + 20, Y + 33, 8, 13, K.red); R(x, X + 21, Y + 34, 6, 11, K.redD); R(x, X + 22, Y + 35, 4, 9, K.red);
+    R(x, X + 19, Y + 32, 10, 14, K.out); R(x, X + 20, Y + 33, 8, 13, dc); R(x, X + 21, Y + 34, 6, 11, shade(dc, -0.3)); R(x, X + 22, Y + 35, 4, 9, dc);
     R(x, X + 21, Y + 34, 6, 1, K.gold); P(x, X + 26, Y + 40, K.gold);
-    glyph(x, X + 33, Y + 34, o.id === 'arcade' ? ICON7.pad : ICON7.heart, { x: K.red, k: K.out, w: K.white, g: K.gold });
+    if (o.id === 'arcade' || o.id === 'home') glyph(x, X + 33, Y + 34, o.id === 'arcade' ? ICON7.pad : ICON7.heart, { x: K.red, k: K.out, w: K.white, g: K.gold });
+    else { R(x, X + 33, Y + 33, 7, 5, K.out); R(x, X + 34, Y + 34, 5, 3, acc[0]); P(x, X + 36, Y + 35, K.gold); }
   }
   function shop(x, o) {
     const X = o.x * 16, Y = o.y * 16;
@@ -166,6 +168,90 @@
     R(x, X + 5, Y - 9, 6, 7, K.out); R(x, X + 6, Y - 8, 4, 5, K.gold); P(x, X + 6, Y - 8, K.white); R(x, X + 4, Y - 10, 8, 1, K.out);
   }
 
+  function sand(x, X, Y, tx, ty, nb) {
+    R(x, X, Y, 16, 16, '#e8c994');
+    for (let py = 0; py < 16; py++) for (let px = 0; px < 16; px++) { const n = hash(tx * 16 + px + 77, ty * 16 + py); if (n < 0.08) P(x, X + px, Y + py, '#d4ae72'); else if (n > 0.95) P(x, X + px, Y + py, '#f6e2b8'); }
+    const [up, down, left, right] = nb;
+    if (up) R(x, X, Y, 16, 2, '#b98a50'); if (down) R(x, X, Y + 14, 16, 2, '#b98a50'); if (left) R(x, X, Y, 2, 16, '#b98a50'); if (right) R(x, X + 14, Y, 2, 16, '#b98a50');
+  }
+  function lot(x, o) {
+    const X = o.x * 16, Y = o.y * 16;
+    R(x, X + 2, Y + 6, 44, 40, '#c8a06a'); for (let i = 0; i < 40; i++) P(x, X + 3 + Math.floor(hash(o.i, i) * 42), Y + 7 + Math.floor(hash(i, o.i) * 38), i % 2 ? '#b38a55' : '#d8b47e');
+    for (const [cx, cy] of [[2, 6], [44, 6], [2, 44], [44, 44]]) { R(x, X + cx, Y + cy - 4, 2, 6, K.woodD); }
+    R(x, X + 21, Y + 22, 2, 12, K.woodD); R(x, X + 14, Y + 16, 16, 8, K.out); R(x, X + 15, Y + 17, 14, 6, K.paper); glyph(x, X + 20, Y + 17, ICON7.coin, { y: K.gold, Y: K.goldD });
+  }
+  function bleachers(x, o) {
+    const X = o.x * 16, Y = o.y * 16 - 10;
+    R(x, X, Y, o.w * 16, 42, K.out); R(x, X + 1, Y + 1, o.w * 16 - 2, 40, K.woodD);
+    for (let row = 0; row < 3; row++) {
+      const ry = Y + 4 + row * 12; R(x, X + 2, ry + 8, o.w * 16 - 4, 3, K.wood); R(x, X + 2, ry + 8, o.w * 16 - 4, 1, K.woodL);
+      for (let i = 0; i < o.w * 2 - 1; i++) {
+        if (hash(i, row + 3) < 0.25) continue;
+        const sx = X + 6 + i * 8 + (row % 2) * 3, shirt = [K.red, K.blue, K.gold, K.crop, K.purple, K.white][Math.floor(hash(i * 3, row) * 6)];
+        R(x, sx - 2, ry + 4, 5, 4, shirt); R(x, sx - 1, ry + 1, 3, 3, hash(i, row) > 0.5 ? '#edbb93' : '#d9a06e'); R(x, sx - 1, ry, 3, 1, K.hair);
+      }
+    }
+    for (let i = 0; i < 6; i++) { const fx = X + 8 + i * 36; R(x, fx, Y - 10, 1, 11, K.woodD); for (let r = 0; r < 4; r++) R(x, fx + 1, Y - 10 + r, 4 - Math.abs(r - 1.5) * 1.5 | 0 || 1, 1, [K.red, K.blue, K.gold][i % 3]); }
+  }
+  function ovoo(x, o) {
+    const X = o.x * 16, Y = o.y * 16;
+    ell(x, X + 16, Y + 28, 14, 3, 'rgba(20,40,10,.25)');
+    for (let r = 0; r < 10; r++) { const w = 3 + r * 1.3 | 0; for (let i = -w; i <= w; i += 3) blob(x, X + 16 + i + (r % 2), Y + 6 + r * 2, 1, 1, [K.rock, K.rockL, K.rockD][(i + r + 9) % 3]); }
+    R(x, X + 15, Y - 10, 2, 18, K.woodD);
+    [[-8, 2, K.light], [6, 4, K.blue], [-4, -3, K.light], [3, -6, K.white]].forEach(([dx, dy, c]) => line(x, X + 16, Y - 8, X + 16 + dx, Y + dy + 4, c));
+    R(x, X + 13, Y - 12, 6, 2, K.blue);
+  }
+  function arenaFlags(x, A) {
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2, fx = Math.round((A.cx + Math.cos(a) * (A.rx + 0.6)) * 16), fy = Math.round((A.cy + Math.sin(a) * (A.ry + 0.6)) * 16);
+      R(x, fx, fy - 12, 1, 12, K.woodD); const col = [K.blue, K.red, K.gold, K.white][i % 4];
+      for (let r = 0; r < 4; r++) R(x, fx + 1, fy - 12 + r, 5 - Math.abs(r - 1.5) * 2 | 0 || 1, 1, col);
+    }
+  }
+  /** Player ger sprite (48×48), cached by colours. */
+  const gerCache = new Map();
+  function gerSprite(roof, door) {
+    const key = roof + door; if (gerCache.has(key)) return gerCache.get(key);
+    const m = mk(48, 50); m.x.translate(0, 2); ger(m.x, { x: 0, y: 0, roof, doorCol: door, id: 'own' }); gerCache.set(key, m.c); return m.c;
+  }
+  /** Ger interior for the home panel. Items appear when owned. */
+  function interior(canvas, roof, furn) {
+    const x = canvas.getContext('2d'); x.imageSmoothingEnabled = false; const W2 = canvas.width, H2 = canvas.height, cx = W2 / 2;
+    R(x, 0, 0, W2, H2, '#3a2a1e');
+    ell(x, cx, H2 / 2 + 6, W2 / 2 - 6, H2 / 2 - 10, '#8c6a46'); ell(x, cx, H2 / 2 + 6, W2 / 2 - 10, H2 / 2 - 14, '#e9dcc0');
+    for (let a = 0; a < 28; a++) { const t = (a / 28) * Math.PI * 2; line(x, cx, 22, Math.round(cx + Math.cos(t) * (W2 / 2 - 8)), Math.round(H2 / 2 + 6 + Math.sin(t) * (H2 / 2 - 12)), 'rgba(181,118,58,.35)'); }
+    ell(x, cx, H2 / 2 + 6, W2 / 2 - 6, H2 / 2 - 10, 'rgba(0,0,0,0)');
+    for (let i = 0; i < 40; i++) { const t = (i / 40) * Math.PI * 2, px = Math.round(cx + Math.cos(t) * (W2 / 2 - 8)), py = Math.round(H2 / 2 + 6 + Math.sin(t) * (H2 / 2 - 12)); R(x, px - 1, py - 1, 3, 3, roof); }
+    blob(x, cx, 22, 7, 4, '#e8a33d'); line(x, cx - 7, 22, cx + 7, 22, K.woodD); line(x, cx, 18, cx, 26, K.woodD);
+    R(x, cx - 9, H2 - 12, 18, 10, shade(roof, -0.2)); R(x, cx - 7, H2 - 10, 14, 8, K.red);
+    const has = (id) => furn.includes(id);
+    if (has('shirdeg')) { R(x, cx - 26, H2 / 2 + 12, 52, 22, K.out); R(x, cx - 25, H2 / 2 + 13, 50, 20, K.red); R(x, cx - 22, H2 / 2 + 16, 44, 14, K.gold); R(x, cx - 18, H2 / 2 + 19, 36, 8, K.blue); for (let i = 0; i < 5; i++) P(x, cx - 14 + i * 7, H2 / 2 + 22, K.white); }
+    if (has('tulga')) { R(x, cx - 8, H2 / 2 - 6, 16, 14, K.out); R(x, cx - 7, H2 / 2 - 5, 14, 12, '#5a5a66'); R(x, cx - 5, H2 / 2 + 1, 10, 4, K.orange); P(x, cx - 2, H2 / 2 + 2, K.gold); R(x, cx - 1, 26, 3, H2 / 2 - 32, '#4a4a55'); }
+    if (has('avdar')) { R(x, cx - 22, 30, 44, 16, K.out); R(x, cx - 21, 31, 42, 14, K.orange); R(x, cx - 21, 31, 42, 3, K.red); for (let i = 0; i < 4; i++) R(x, cx - 17 + i * 10, 36, 6, 6, K.blue); }
+    if (has('morinkhuur')) { R(x, cx + 26, 26, 4, 30, K.out); R(x, cx + 27, 27, 2, 28, K.wood); blob(x, cx + 28, 56, 4, 6, K.wood); R(x, cx + 25, 24, 6, 4, K.woodD); }
+    if (has('or')) { R(x, 18, H2 / 2 - 8, 22, 40, K.out); R(x, 19, H2 / 2 - 7, 20, 38, K.wood); R(x, 21, H2 / 2 - 5, 16, 34, K.white); R(x, 21, H2 / 2 - 5, 16, 8, K.light); R(x, W2 - 40, H2 / 2 - 8, 22, 40, K.out); R(x, W2 - 39, H2 / 2 - 7, 20, 38, K.wood); R(x, W2 - 37, H2 / 2 - 5, 16, 34, K.white); R(x, W2 - 37, H2 / 2 - 5, 16, 8, K.pink); }
+    if (has('shagai')) { blob(x, cx + 34, H2 - 26, 5, 4, K.woodL); P(x, cx + 32, H2 - 27, K.white); P(x, cx + 35, H2 - 25, K.white); }
+  }
+  /** Wrestler in zodog-shuudag (vest and briefs) with gutal boots, facing right. pose: grip | push | fall | dance */
+  function wrestler(col, skin, pose, frame) {
+    const key = ['w', col, skin, pose, frame].join(); if (cache.has(key)) return cache.get(key);
+    const { c, x } = mk(28, 32), D = shade(col, -0.3);
+    if (pose === 'fall') {
+      R(x, 2, 24, 24, 6, K.out); R(x, 3, 25, 6, 4, skin); R(x, 9, 25, 6, 4, col); R(x, 15, 25, 6, 4, skin); R(x, 21, 24, 5, 5, K.boot); blob(x, 4, 23, 3, 3, skin); P(x, 3, 22, K.hair);
+      cache.set(key, c); return c;
+    }
+    const lean = pose === 'push' ? 3 : pose === 'grip' ? 1 : 0, up = pose === 'dance' ? (frame ? -3 : 1) : 0;
+    R(x, 7, 26, 5, 5, K.out); R(x, 8, 27, 4, 4, '#8a4a22'); R(x, 15, 26, 6, 5, K.out); R(x, 16, 27, 5, 4, '#8a4a22'); P(x, 21, 27, '#8a4a22');
+    R(x, 8, 20, 3, 7, skin); R(x, 16, 20, 3, 7, skin);
+    R(x, 7 + lean, 17, 13, 5, K.out); R(x, 8 + lean, 18, 11, 3, col);
+    R(x, 8 + lean, 9, 11, 9, K.out); R(x, 9 + lean, 10, 9, 7, skin); R(x, 9 + lean, 10, 3, 7, col); R(x, 9 + lean, 10, 9, 2, col); R(x, 15 + lean, 12, 3, 4, shade(skin, -0.12));
+    if (pose === 'dance') { R(x, 1, 10 + up, 8, 3, col); R(x, 19, 10 + up, 8, 3, col); R(x, 0, 11 + up, 2, 2, skin); R(x, 26, 11 + up, 2, 2, skin); }
+    else { R(x, 17 + lean, 11, 8, 3, col); R(x, 24 + lean > 26 ? 25 : 24 + lean, 11, 3, 3, skin); R(x, 6 + lean, 11, 4, 5, D); }
+    blob(x, 13 + lean, 6, 3, 3, skin); R(x, 11 + lean, 2, 6, 2, K.hair); P(x, 15 + lean, 6, K.eye);
+    if (pose === 'dance') { R(x, 10, 0, 7, 2, K.red); R(x, 12, -1, 3, 2, K.gold); }
+    cache.set(key, c); return c;
+  }
+
   /** Static world layer at 1 pixel per art pixel (16 px tiles). */
   function renderStatic(W) {
     const { g, objects, trees } = W, w = W.W, h = W.H;
@@ -179,10 +265,12 @@
       else if (ch === 's' || (ch === 'B' && inPlaza)) plaza(x, X, Y, tx, ty);
       else if (ch === 'w' || ch === 'd') { water(x, X, Y, tx, ty, nb4.map((n) => n && n !== 'w' && n !== 'd')); if (ch === 'd') dock(x, X, Y); }
       else if (ch === 'o') soil(x, X, Y, tx, ty);
+      else if (ch === 'a') sand(x, X, Y, tx, ty, nb4.map((n) => n !== 'a'));
       else { grass(x, X, Y, tx, ty); if (ch === 'f') fence(x, X, Y, nb4.map((n) => n === 'f')); if (ch === 'r') rock(x, X, Y); }
     }
     for (let ty = 2; ty < h - 1; ty++) for (let tx = 1; tx < w - 1; tx++) if (g[ty][tx] === 'g' && hash(tx * 3, ty * 7) < 0.1) flower(x, tx * 16 + 4 + Math.floor(hash(tx, ty) * 8), ty * 16 + 5 + Math.floor(hash(ty, tx) * 7), [K.pink, K.gold, K.white, K.purple][Math.floor(hash(tx, ty * 5) * 4)]);
-    const draws = [...trees.map((t) => ({ y: t.y, f: () => tree(x, t.x, t.y, t.pine) })), ...objects.map((o) => ({ y: o.y + o.h - 1, f: () => ({ ger, shop, board, well, lantern })[o.kind](x, o) }))];
+    if (W.ARENA) arenaFlags(x, W.ARENA);
+    const draws = [...trees.map((t) => ({ y: t.y, f: () => tree(x, t.x, t.y, t.pine) })), ...objects.filter((o) => o.kind !== 'npc').map((o) => ({ y: o.y + o.h - 1, f: () => ({ ger, shop, board, well, lantern, lot, bleachers, ovoo })[o.kind](x, o) }))];
     draws.sort((a, b) => a.y - b.y).forEach((d) => d.f());
     return c;
   }
@@ -308,6 +396,15 @@
     } else if (kind === 'tool') {
       if (id.startsWith('can')) { const col = id === 'can-3' ? K.blue : id === 'can-2' ? '#5aa0e8' : K.rock; R(x, 3, 6, 9, 8, K.out); R(x, 4, 7, 7, 6, col); R(x, 11, 7, 4, 2, K.out); P(x, 14, 6, K.out); R(x, 5, 3, 5, 1, K.out); R(x, 4, 4, 1, 3, K.out); R(x, 10, 4, 1, 3, K.out); P(x, 5, 8, K.white); }
       else { line(x, 3, 14, 12, 2, K.woodD); line(x, 4, 14, 13, 2, K.wood); line(x, 13, 2, 14, 12, '#cfe8ff'); P(x, 14, 12, K.red); P(x, 14, 13, K.red); }
+    } else if (kind === 'furn') {
+      ({
+        tulga: () => { R(x, 3, 5, 10, 9, K.out); R(x, 4, 6, 8, 7, '#5a5a66'); R(x, 5, 9, 6, 3, K.orange); P(x, 7, 10, K.gold); R(x, 7, 1, 2, 5, '#4a4a55'); },
+        shirdeg: () => { R(x, 1, 4, 14, 9, K.out); R(x, 2, 5, 12, 7, K.red); R(x, 3, 6, 10, 5, K.gold); R(x, 5, 7, 6, 3, K.blue); P(x, 7, 8, K.white); P(x, 8, 8, K.white); },
+        or: () => { R(x, 1, 5, 14, 8, K.out); R(x, 2, 6, 12, 6, K.wood); R(x, 3, 6, 10, 4, K.white); R(x, 3, 6, 4, 4, K.light); R(x, 1, 12, 2, 3, K.woodD); R(x, 13, 12, 2, 3, K.woodD); },
+        avdar: () => { R(x, 2, 4, 12, 9, K.out); R(x, 3, 5, 10, 7, K.orange); R(x, 3, 5, 10, 2, K.red); R(x, 4, 8, 3, 3, K.blue); R(x, 9, 8, 3, 3, K.blue); P(x, 8, 7, K.gold); },
+        morinkhuur: () => { R(x, 7, 1, 2, 10, K.wood); R(x, 6, 0, 4, 2, K.woodD); P(x, 9, 1, K.woodD); blob(x, 8, 12, 3, 3, K.wood); line(x, 7, 2, 7, 12, K.white); },
+        shagai: () => { blob(x, 8, 9, 5, 4, K.woodL); R(x, 6, 3, 4, 3, K.woodD); [[6, 9], [9, 8], [8, 11]].forEach(([a, b]) => R(x, a, b, 2, 1, K.white)); },
+      })[id]();
     } else if (kind === 'ui') {
       ({
         coin: () => { blob(x, 8, 8, 5, 5, K.gold, K.goldD); ell(x, 8, 8, 3, 3, '#f9d76a'); R(x, 7, 5, 3, 1, K.goldD); R(x, 8, 5, 1, 6, K.goldD); R(x, 6, 7, 5, 1, K.goldD); P(x, 6, 5, K.white); },
@@ -323,6 +420,9 @@
         heart: () => { glyph(x, 4, 5, ICON7.heart, { x: K.red }); },
         fish: () => { const f = iconCanvas('fish:perch'); x.drawImage(f, 0, 0); },
         lock: () => { R(x, 4, 7, 8, 7, K.out); R(x, 5, 8, 6, 5, K.gold); R(x, 5, 3, 6, 5, K.out); R(x, 6, 4, 4, 4, 'rgba(0,0,0,0)'); x.clearRect(6, 4, 4, 3); P(x, 8, 10, K.out); },
+        ger: () => { const g = gerSprite(K.blue, K.red); x.drawImage(g, 0, 0, 48, 50, 0, 0, 16, 17); },
+        wrestle: () => { const w = wrestler('#e14b3d', '#edbb93', 'dance', 0); x.drawImage(w, 0, 0, 28, 32, 0, 1, 14, 16); const w2 = wrestler('#3f76db', '#d9a06e', 'grip', 0); x.save(); x.translate(16, 1); x.scale(-1, 1); x.drawImage(w2, 0, 0, 28, 32, 0, 0, 10, 12); x.restore(); },
+        ovoo: () => { for (let r = 0; r < 5; r++) for (let i = -r; i <= r; i++) R(x, 7 + i * 1.5 | 0, 7 + r * 2, 2, 2, [K.rock, K.rockL, K.rockD][(i + r + 6) % 3]); R(x, 7, 1, 1, 7, K.woodD); line(x, 7, 2, 3, 7, K.light); line(x, 8, 2, 12, 6, K.blue); },
         logo: () => { ell(x, 8, 15, 8, 3, K.grass); blob(x, 12, 3, 2, 2, K.gold, K.goldD); for (let c2 = 2; c2 < 14; c2++) { const dx = (c2 - 8) / 6; const top = 9 - Math.round(4 * Math.sqrt(Math.max(0, 1 - dx * dx))); R(x, c2, top, 1, 10 - top, K.white); P(x, c2, top - 1, K.out); } R(x, 3, 9, 10, 4, K.out); R(x, 4, 9, 8, 3, K.felt); R(x, 4, 9, 8, 1, K.blue); R(x, 7, 10, 2, 3, K.red); },
       })[id]();
     }
@@ -335,5 +435,5 @@
     return img;
   }
 
-  TG.pixel = { K, DEEL, hash, mk, R, P, ell, blob, line, renderStatic, crop, drop, char, animal, icon, iconCanvas };
+  TG.pixel = { K, DEEL, hash, mk, R, P, ell, blob, line, shade, renderStatic, crop, drop, char, animal, icon, iconCanvas, gerSprite, interior, wrestler };
 })(window.TG);

@@ -2,7 +2,7 @@
 (function (TG) {
   const { h, L, tx } = TG;
   const S = TG.store, R = TG.vrules, WD = TG.vworld, T = WD.T;
-  const SPEED = 4.6;
+  const SPEED = 4.3, ACCEL = 14, HW = 0.26, HH = 0.14; // tiles per second; feet hit-box half size
   const DIRS = [[0, 1], [-1, 0], [1, 0], [0, -1]]; // down, left, right, up
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const Tx = (mn, en) => ({ mn, en });
@@ -14,12 +14,16 @@
     const v = p.village || (p.village = {});
     const d = { id: 'u' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4), xp: 0, coins: 40, seeds: { carrot: 4, potato: 2 }, produce: {}, fish: {},
       owned: ['deel-blue'], look: { deel: 'blue', skin: R.SKINS[0], hat: null, face: null, neck: null, pet: null }, can: 5, water: 5, rod: 1, room: 'NUTAG',
-      garden: [], quests: { d: '', list: [] }, pets: {}, seen: {}, tips: false, pos: null };
+      garden: [], quests: { d: '', list: [] }, pets: {}, seen: {}, tips: false, pos: null,
+      lots: [], wr: { best: 0, champ: 0, wins: 0, losses: 0, pvpW: 0, pvpL: 0 }, ovoo: '' };
     for (const k in d) if (v[k] === undefined) v[k] = d[k];
     while (v.garden.length < R.PLOTS) v.garden.push(null);
+    while (v.lots.length < R.LOTS) v.lots.push(null);
     return v;
   }
   const garden = () => (live && live.online && live.plots ? live.plots : V().garden);
+  const lotsArr = () => (live && live.online && live.lots ? live.lots : V().lots);
+  const myLot = () => lotsArr().findIndex((l) => l && l.by === V().id);
   const now = () => Date.now() + (live && live.online ? live.offset : 0);
   const lvl = () => R.level(V().xp).l;
 
@@ -76,11 +80,12 @@
     return reward(Math.round(stars * 6 * m), Math.round(stars * 12 * m));
   };
   TG.onMissionDone = () => reward(15, 25);
-  TG._village = { live: () => live, act: (...a) => act(...a), goTo: (...a) => goTo(...a) }; // used by automated tests
+  TG._village = { live: () => live, act: (...a) => act(...a), goTo: (...a) => goTo(...a), lots: () => lotsArr(), buyLot: (i, roof, door) => net.send({ t: 'ger-buy', i, roof, door }), invite: (id) => net.send({ t: 'wr-invite', to: id }), context: () => contextAction(), arena: () => arenaModal(), tournament: (r) => tournament(r) }; // used by automated tests
   TG.villageInfo = () => { const v = V(); return v ? { coins: v.coins, ...R.level(v.xp) } : null; };
 
   // ================================================================ pixel art helpers
   const PX = TG.pixel;
+  const rc = (el, ...kids) => el.replaceChildren(...kids.flat(Infinity).filter((c) => c != null && c !== false)); // never print "null"
   const portraitCache = new Map();
   function portrait(look, size = 40) {
     const key = JSON.stringify(look);
@@ -92,6 +97,7 @@
   }
   const itemKey = (it) => (it.slot === 'deel' ? 'deel:' + it.val : it.cat === 'pet' ? 'pet:' + it.val : it.cat === 'tool' ? 'tool:' + it.id : 'wear:' + it.slot + '-' + it.val);
   const pic = (key, size = 32) => PX.icon(key, size);
+  const ZASUUL = { deel: 'gold', skin: '#D9A06E', hat: 'mongol', face: null, neck: 'khadag', pet: null };
   TG.drawAvatarPixel = (ctx, look, scale) => { ctx.imageSmoothingEnabled = false; ctx.drawImage(PX.char(look, 0, 0), 0, 0, 16 * scale, 28 * scale); };
 
   // ================================================================ multiplayer connection
@@ -101,7 +107,7 @@
       this.closed = false; setStatus('connecting');
       if (location.protocol === 'file:') return setStatus('solo');
       let ok = false;
-      try { const r = await fetch('api/hello', { cache: 'no-store' }); ok = r.ok && (await r.json()).naadamy === true; } catch (e) { ok = false; }
+      try { const r = await fetch('api/hello', { cache: 'no-store' }); const j = r.ok ? await r.json() : {}; ok = j.naadamy === true; if (live) live.urls = j.urls || []; } catch (e) { ok = false; }
       if (!live || this.closed) return;
       if (!ok) return setStatus('solo');
       this.open();
@@ -111,13 +117,13 @@
       const v = V(), url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + location.pathname.replace(/[^/]*$/, '') + 'ws';
       let ws; try { ws = new WebSocket(url); } catch (e) { return setStatus('solo'); }
       this.ws = ws;
-      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, name: live.name, look: v.look, lvl: lvl(), x: live.me.x, y: live.me.y, dir: live.me.dir })); };
+      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir })); };
       ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } if (live) handle(m); };
       ws.onclose = () => {
         if (this.ws !== ws) return;
         this.ws = null;
         if (!live) return;
-        live.online = false; live.others.clear(); live.plots = null;
+        live.online = false; live.others.clear(); live.plots = null; live.lots = null; endRemoteMatch();
         if (this.closed) return setStatus('solo');
         setStatus('reconnecting');
         this.timer = setTimeout(() => this.open(), Math.min(10000, 1500 * ++this.retry));
@@ -131,13 +137,15 @@
     const v = V();
     switch (m.t) {
       case 'welcome':
-        live.online = true; live.offset = m.now - Date.now(); live.plots = m.plots; live.room = m.room;
+        live.online = true; live.offset = m.now - Date.now(); live.plots = m.plots; live.lots = m.lots || new Array(R.LOTS).fill(null); live.room = m.room;
         live.others.clear(); (m.players || []).forEach(addOther);
         setStatus('online');
         TG.toast(`🟢 ${L('Нутагт холбогдлоо', 'Connected to village')} · ${m.room}` + (live.others.size ? ` · ${live.others.size} ${L('найз байна', 'friends here')}` : ''));
         break;
       case 'join': addOther(m.p); TG.toast(`👋 ${m.p.name} ${L('нутагт ирлээ', 'joined the village')}`); hud(); break;
       case 'leave': live.others.delete(m.id); hud(); break;
+      case 'lot': onLot(m); break;
+      case 'wr-invite': case 'wr-declined': case 'wr-start': case 'wr-wait': case 'wr-result': case 'wr-end': onWrestleMsg(m); break;
       case 'move': { const o = live.others.get(m.id); if (o) { o.x = m.x; o.y = m.y; o.dir = m.dir; } break; }
       case 'look': { const o = live.others.get(m.id); if (o) { o.look = m.look; o.lvl = m.lvl; } break; }
       case 'say': {
@@ -164,7 +172,7 @@
   }
   function deny(why) {
     TG.sfx.bad();
-    TG.toast({ taken: L('Энд аль хэдийн тарьчихсан байна.', 'Something is already planted here.'), 'no-need': L('Одоо услах шаардлагагүй.', 'No need to water right now.'), 'not-ready': L('Хараахан болоогүй байна.', 'Not ready yet.') }[why] || L('Болсонгүй.', "That didn't work."));
+    TG.toast({ taken: L('Энд аль хэдийн тарьчихсан байна.', 'Something is already planted here.'), 'no-need': L('Одоо услах шаардлагагүй.', 'No need to water right now.'), 'not-ready': L('Хараахан болоогүй байна.', 'Not ready yet.'), own: L('Танд аль хэдийн гэр байна.', 'You already have a ger.'), busy: L('Тэр хүн одоо завгүй байна.', 'That player is busy right now.') }[why] || L('Болсонгүй.', "That didn't work."));
   }
   function onPlot(m) {
     const v = V();
@@ -224,29 +232,34 @@
   function start(root, canvas, els, setCleanup) {
     if (!root.isConnected) return;
     const v = V(), prof = S.active();
-    const sp = v.pos && !WD.blocked(v.pos.x, v.pos.y) ? v.pos : { x: 17, y: 13 };
-    live = { root, canvas, els, ctx: canvas.getContext('2d'), name: prof.name, status: 'connecting', online: false, offset: 0, plots: null, room: v.room,
-      me: { x: sp.x, y: sp.y, px: sp.x, py: sp.y, path: [], dir: 0, moving: false, bubble: null, petPos: { x: sp.x, y: sp.y + 0.6 }, stepSent: null },
-      others: new Map(), held: null, pending: null, floaters: [], sheep: [[24, 20], [28, 22], [31, 20], [26, 23]].map(([x, y], i) => ({ i, x, y, px: x, py: y, next: 1 + i, flip: false })),
+    const qRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
+    if (R.ROOM_RE.test(qRoom) && v.room !== qRoom) { v.room = qRoom; S.save(); }
+    const sp = v.pos && !WD.blocked(Math.floor(v.pos.x + 0.5), Math.floor(v.pos.y + 0.82)) ? v.pos : { x: 17, y: 13 };
+    live = { root, canvas, els, ctx: canvas.getContext('2d'), name: prof.name, status: 'connecting', online: false, offset: 0, plots: null, lots: null, room: v.room,
+      me: { x: Math.floor(sp.x + 0.5), y: Math.floor(sp.y + 0.82), px: sp.x, py: sp.y, vx: 0, vy: 0, path: [], dir: 0, moving: false, bubble: null, petPos: { x: sp.x, y: sp.y + 0.6 }, sent: { x: sp.x, y: sp.y }, netT: 0, stuck: 0 },
+      cam: { x: sp.x, y: sp.y }, keys: new Set(), others: new Map(), pending: null, floaters: [], match: null,
+      sheep: [[24, 20], [28, 22], [31, 20], [26, 23]].map(([x, y], i) => ({ i, x, y, px: x, py: y, next: 1 + i, flip: false })),
       raf: 0, last: performance.now(), view: {}, terrain: WD.renderStatic(), buf: PX.mk(1, 1), ctxTimer: 0, sel: null };
     resize();
     document.fonts && document.fonts.load('10px Tiny5', 'Нутаг ӨҮ');
     window.addEventListener('resize', resize);
     canvas.addEventListener('pointerdown', onTap);
-    window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('keydown', onKey, true); window.addEventListener('keyup', onKeyUp, true); window.addEventListener('blur', clearKeys);
+    root.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); }); // HUD buttons never keep focus
     net.connect(); hud(); updateCtx();
     live.unMusic = TG.music ? TG.music.onChange(() => hud()) : null;
     live.raf = requestAnimationFrame(frame);
     if (!v.tips) tips();
     setCleanup(stop);
   }
+  const clearKeys = () => { if (live) live.keys.clear(); };
   function stop() {
     if (!live) return;
     cancelAnimationFrame(live.raf);
-    window.removeEventListener('resize', resize); window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('resize', resize); window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); window.removeEventListener('blur', clearKeys);
     net.close();
     if (live.unMusic) live.unMusic();
-    const v = V(); if (v) { v.pos = { x: live.me.x, y: live.me.y }; S.save(); }
+    const v = V(); if (v) { v.pos = { x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2) }; S.save(); }
     live = null;
   }
   function resize() {
@@ -257,41 +270,46 @@
     let k = Math.max(1, Math.round(devW / ((cssW < 640 ? 11 : 24) * T)));
     k = Math.max(k, Math.ceil(devW / (WD.W * T)), Math.ceil(devH / (WD.H * T)));
     const bw = Math.ceil(devW / k), bh = Math.ceil(devH / k);
-    live.buf.c.width = bw; live.buf.c.height = bh; live.buf.x.imageSmoothingEnabled = false;
+    live.buf.c.width = bw + 1; live.buf.c.height = bh + 1; live.buf.x.imageSmoothingEnabled = false; // +1 px so sub-pixel scrolling never shows an edge
     live.view = { devW, devH, dpr, k, bw, bh, cssW };
   }
+  /** Camera in art pixels, NOT rounded: rounding here made the view jump a whole art pixel (4–6 screen pixels). */
   function cam() {
     const { bw, bh } = live.view;
-    return { x: clamp(Math.round(live.me.px * T + 8 - bw / 2), 0, WD.W * T - bw), y: clamp(Math.round(live.me.py * T + 4 - bh / 2), 0, WD.H * T - bh) };
+    return { x: clamp(live.cam.x * T + 8 - bw / 2, 0, WD.W * T - bw), y: clamp(live.cam.y * T + 4 - bh / 2, 0, WD.H * T - bh) };
   }
 
   // ---------------------------------------------------------------- HUD
   function hud() {
     if (!live) return;
     const v = V(), L1 = R.level(v.xp), e = live.els;
-    e.me.replaceChildren(portrait(v.look, 30), h('span', { class: 'v-me-body' }, h('b', null, live.name), h('span', { class: 'v-lvl-row' }, h('span', { class: 'v-lvl' }, `${L('ТҮВ', 'LV')} ${L1.l}`), h('span', { class: 'v-xp' }, h('i', { style: { width: (L1.cur / L1.need) * 100 + '%' } })))));
-    e.coins.replaceChildren(pic('ui:coin', 20), h('span', null, v.coins));
-    e.water.replaceChildren(pic('ui:drop', 20), h('span', null, `${v.water}/${v.can}`));
+    rc(e.me, portrait(v.look, 30), h('span', { class: 'v-me-body' }, h('b', null, live.name), h('span', { class: 'v-lvl-row' }, h('span', { class: 'v-lvl' }, `${L('ТҮВ', 'LV')} ${L1.l}`), h('span', { class: 'v-xp' }, h('i', { style: { width: (L1.cur / L1.need) * 100 + '%' } })))));
+    rc(e.coins, pic('ui:coin', 20), h('span', null, v.coins));
+    rc(e.water, pic('ui:drop', 20), h('span', null, `${v.water}/${v.can}`));
     const n = live.others.size + 1;
     e.net.className = 'v-pill px-frame v-net ' + live.status;
     e.net.textContent = live.status === 'online' ? `● ${n} · ${live.room}` : live.status === 'solo' ? `○ ${L('Ганцаараа', 'Solo')}` : `◌ ${L('Холбогдож…', 'Connecting…')}`;
     hotbar();
-    if (TG.music) { e.music.classList.toggle('hidden', !TG.music.available); e.music.textContent = TG.music.playing ? '♪' : '♪̸'; e.music.classList.toggle('off', !TG.music.playing); e.music.title = TG.music.title; }
+    if (TG.music) { e.music.classList.toggle('hidden', !TG.music.available); e.music.textContent = '♪'; e.music.classList.toggle('off', !TG.music.playing); e.music.title = TG.music.title; }
   }
   function hotbar() {
     const v = V(), owned = Object.keys(R.CROPS).filter((k) => v.seeds[k] > 0);
     if (live.sel && !(v.seeds[live.sel] > 0)) live.sel = null;
-    live.els.hotbar.replaceChildren(...(owned.length ? owned.map((k) => h('button', { class: 'v-slot-btn' + (live.sel === k ? ' sel' : ''), title: tx(R.CROPS[k].name), 'aria-pressed': live.sel === k ? 'true' : 'false',
+    rc(live.els.hotbar, ...(owned.length ? owned.map((k) => h('button', { class: 'v-slot-btn' + (live.sel === k ? ' sel' : ''), title: tx(R.CROPS[k].name), 'aria-pressed': live.sel === k ? 'true' : 'false',
       onclick: () => { live.sel = live.sel === k ? null : k; TG.sfx.tap(); hotbar(); updateCtx(); } }, pic('crop:' + k, 28), h('small', null, v.seeds[k])))
       : [h('button', { class: 'v-slot-btn empty', onclick: () => shopModal('seeds') }, pic('ui:seed', 28), h('small', null, '+'))]));
   }
   function contextAction() {
-    if (!live) return null;
-    const m = live.me; if (m.path.length) return null;
+    if (!live || live.me.path.length) return null;
+    const m = live.me, fx = m.px + 0.5, fy = m.py + 0.82;
     const pi = WD.plotAt(m.x, m.y); if (pi >= 0) return { type: 'plot', i: pi };
-    for (const o of WD.objects) if (o.door && o.door.x === m.x && o.door.y === m.y) return { type: o.id };
-    if (m.x === WD.DOCK.x && m.y === WD.DOCK.y) return { type: 'fish' };
-    const sh = live.sheep.find((q) => Math.abs(q.x - m.x) <= 1 && Math.abs(q.y - m.y) <= 1); if (sh) return { type: 'sheep', s: sh };
+    let best = null, bd = 1.05;
+    const consider = (d, a) => { if (d < bd) { bd = d; best = a; } };
+    for (const o of WD.objects) if (o.door) consider(Math.hypot(fx - (o.door.x + 0.5), fy - (o.door.y + 0.7)), o.kind === 'lot' ? { type: 'lot', i: o.i } : o.kind === 'npc' ? { type: 'zasuul' } : { type: o.id });
+    consider(Math.hypot(fx - (WD.DOCK.x + 0.5), fy - (WD.DOCK.y + 0.7)), { type: 'fish' });
+    for (const q of live.sheep) consider(Math.hypot(fx - (q.px + 0.5), fy - (q.py + 0.7)) - 0.35, { type: 'sheep', s: q });
+    if (best) return best;
+    if ((WD.g[m.y] || [])[m.x] === 'a') return { type: 'arena' };
     return null;
   }
   function labelFor(a) {
@@ -310,6 +328,9 @@
       case 'well': return ['ui:drop', L('Ус авах', 'Get water')];
       case 'fish': return ['ui:fish', L('Загасчлах', 'Fish')];
       case 'sheep': return ['ui:heart', L('Илбэх', 'Pet')];
+      case 'lot': { const l = lotsArr()[a.i]; return ['ui:ger', !l ? L('Гэр авах', 'Buy ger') : l.by === V().id ? L('Миний гэр', 'My ger') : L('Зочлох', 'Visit')]; }
+      case 'zasuul': case 'arena': return ['ui:wrestle', L('Барилдах', 'Wrestle')];
+      case 'ovoo': return ['ui:ovoo', L('Овоо тахих', 'Visit ovoo')];
     }
     return ['ui:star', ''];
   }
@@ -317,7 +338,7 @@
     if (!live) return;
     const a = contextAction(), b = live.els.ctx;
     b.classList.toggle('hidden', !a);
-    if (a) { const [k, t] = labelFor(a); b.replaceChildren(pic(k, 36), h('span', null, t)); }
+    if (a) { const [k, t] = labelFor(a); rc(b, pic(k, 36), h('span', null, t)); }
   }
   function doAction(a) {
     if (!a || !live) return;
@@ -330,6 +351,9 @@
       case 'well': { const v = V(); v.water = v.can; S.save(); TG.sfx.pour(0.7); floatAt(live.me, `${v.water}/${v.can}`, '#93d4f6'); hud(); return; }
       case 'fish': return fishing();
       case 'sheep': return petSheep(a.s);
+      case 'lot': return lotAction(a.i);
+      case 'zasuul': case 'arena': return arenaModal();
+      case 'ovoo': return ovooAction();
     }
   }
 
@@ -344,31 +368,40 @@
     const sh = live.sheep.find((q) => Math.abs(q.px + 0.5 - wx) < 0.7 && Math.abs(q.py + 0.5 - wy) < 0.7);
     if (sh) { const n = WD.nearestOpen(sh.x, sh.y, live.me.x, live.me.y); return n ? goTo(n, { type: 'sheep', s: sh }) : null; }
     const pi = WD.plotAt(tx0, ty0); if (pi >= 0) return goTo({ x: tx0, y: ty0 }, { type: 'plot', i: pi });
-    const o = WD.occ[tx0 + ',' + ty0]; if (o && o.door) return goTo(o.door, { type: o.id });
+    const o = WD.occ[tx0 + ',' + ty0]; if (o && o.door) return goTo(o.door, o.kind === 'lot' ? { type: 'lot', i: o.i } : o.kind === 'npc' ? { type: 'zasuul' } : { type: o.id });
     if (tx0 === WD.DOCK.x && ty0 === WD.DOCK.y) return goTo(WD.DOCK, { type: 'fish' });
     if (!WD.blocked(tx0, ty0)) return goTo({ x: tx0, y: ty0 }, null);
     const n = WD.nearestOpen(tx0, ty0, live.me.x, live.me.y); if (n) goTo(n, null);
   }
+  const freeAt = (fx, fy) => !WD.blocked(Math.floor(fx - HW), Math.floor(fy - HH)) && !WD.blocked(Math.floor(fx + HW), Math.floor(fy - HH)) && !WD.blocked(Math.floor(fx - HW), Math.floor(fy + HH)) && !WD.blocked(Math.floor(fx + HW), Math.floor(fy + HH));
+  function los(ax, ay, bx, by) { const n = Math.ceil(Math.hypot(bx - ax, by - ay) / 0.2); for (let i = 1; i <= n; i++) { const q = i / n; if (!freeAt(ax + (bx - ax) * q, ay + (by - ay) * q)) return false; } return true; }
   function goTo(t, action) {
-    const m = live.me, from = m.path.length ? m.path[0] : { x: m.x, y: m.y };
-    const path = WD.findPath(from.x, from.y, t.x, t.y);
+    const m = live.me, path = WD.findPath(m.x, m.y, t.x, t.y);
     if (!path) return TG.toast(L('Тийшээ очих зам алга.', "Can't get there."));
-    m.path = m.path.length ? [m.path[0], ...path] : path;
-    live.pending = action; live.held = null;
+    // string-pull the tile path into a few straight, smooth segments
+    const out = []; let cur = { x: m.px, y: m.py }, i = 0;
+    while (i < path.length) { let j = path.length - 1; while (j > i && !los(cur.x + 0.5, cur.y + 0.82, path[j].x + 0.5, path[j].y + 0.82)) j--; out.push({ x: path[j].x, y: path[j].y }); cur = path[j]; i = j + 1; }
+    if (!out.length) out.push({ x: t.x, y: t.y });
+    m.path = out; m.stuck = 0; live.pending = action;
     live.floaters.push({ x: t.x, y: t.y, ring: true, t0: performance.now() });
-    if (!m.path.length && action) doAction(action);
     updateCtx();
   }
-  const KEYS = { ArrowDown: 0, KeyS: 0, ArrowLeft: 1, KeyA: 1, ArrowRight: 2, KeyD: 2, ArrowUp: 3, KeyW: 3 };
+  const KEYS = { ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowUp: 'u', KeyW: 'u' };
   function onKey(e) {
-    if (!live || document.querySelector('.modal-back') || /INPUT|TEXTAREA/.test((e.target || {}).tagName || '')) return;
-    if (e.code in KEYS) { e.preventDefault(); live.held = KEYS[e.code]; live.pending = null; }
-    else if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') {
-      if (e.code !== 'KeyE' && document.activeElement && document.activeElement.tagName === 'BUTTON') return; // a focused button handles its own Enter/Space
-      e.preventDefault(); const a = contextAction(); if (a) doAction(a);
+    if (!live || document.querySelector('.modal-back') || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) return;
+    if (KEYS[e.code]) { e.preventDefault(); live.keys.add(KEYS[e.code]); return; }
+    if (e.code === 'Space' || e.code === 'KeyE') {
+      // Space is only ever the action button: it never re-presses a focused HUD button
+      e.preventDefault(); e.stopPropagation();
+      if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+      if (!e.repeat) { const a = contextAction(); if (a) doAction(a); }
     }
   }
-  function onKeyUp(e) { if (live && e.code in KEYS && live.held === KEYS[e.code]) live.held = null; }
+  function onKeyUp(e) {
+    if (!live) return;
+    if (KEYS[e.code]) live.keys.delete(KEYS[e.code]);
+    if (e.code === 'Space' && !document.querySelector('.modal-back')) { e.preventDefault(); e.stopPropagation(); }
+  }
 
   // ---------------------------------------------------------------- update + draw
   function frame(ts) {
@@ -379,28 +412,44 @@
   }
   const follow = (p, x, y, dt) => { p.x += (x - p.x) * Math.min(1, dt * 4); p.y += (y - p.y) * Math.min(1, dt * 4); };
   function update(dt) {
-    const m = live.me;
-    if (!m.path.length && live.held != null) {
-      const [dx, dy] = DIRS[live.held]; m.dir = live.held;
-      if (!WD.blocked(m.x + dx, m.y + dy)) m.path = [{ x: m.x + dx, y: m.y + dy }];
+    const m = live.me, k = live.keys;
+    let ix = (k.has('r') ? 1 : 0) - (k.has('l') ? 1 : 0), iy = (k.has('d') ? 1 : 0) - (k.has('u') ? 1 : 0), tvx = 0, tvy = 0;
+    if (ix || iy) { m.path = []; live.pending = null; const n = Math.hypot(ix, iy); tvx = (ix / n) * SPEED; tvy = (iy / n) * SPEED; }
+    else if (m.path.length) {
+      const wp = m.path[0], dx = wp.x - m.px, dy = wp.y - m.py, d = Math.hypot(dx, dy);
+      if (d < Math.max(0.06, SPEED * dt * 1.1)) {
+        m.px = wp.x; m.py = wp.y; m.path.shift();
+        if (!m.path.length) { m.vx = m.vy = 0; const a = live.pending; live.pending = null; m.x = Math.floor(m.px + 0.5); m.y = Math.floor(m.py + 0.82); if (a) doAction(a); updateCtx(); }
+      } else {
+        const sp = m.path.length === 1 && d < 0.6 ? SPEED * Math.max(0.45, d / 0.6) : SPEED;
+        tvx = (dx / d) * sp; tvy = (dy / d) * sp;
+      }
     }
-    if (m.path.length) {
-      const t = m.path[0];
-      if (m.stepSent !== t) { m.stepSent = t; const dx = t.x - m.x, dy = t.y - m.y; m.dir = dy > 0 ? 0 : dy < 0 ? 3 : dx < 0 ? 1 : 2; net.send({ t: 'move', x: t.x, y: t.y, dir: m.dir }); }
-      const dx = t.x - m.px, dy = t.y - m.py, d = Math.hypot(dx, dy), step = SPEED * dt;
-      m.moving = true;
-      if (d <= step) {
-        m.px = m.x = t.x; m.py = m.y = t.y; m.path.shift();
-        if (!m.path.length) { m.moving = false; const a = live.pending; live.pending = null; if (a) doAction(a); }
-        updateCtx();
-      } else { m.px += (dx / d) * step; m.py += (dy / d) * step; }
-    } else m.moving = false;
+    const a = Math.min(1, dt * (ix || iy || m.path.length ? ACCEL : ACCEL * 1.4));
+    m.vx += (tvx - m.vx) * a; m.vy += (tvy - m.vy) * a;
+    if (Math.abs(m.vx) < 0.01) m.vx = 0; if (Math.abs(m.vy) < 0.01) m.vy = 0;
+    // move with collision, sliding along walls
+    const ox = m.px, oy = m.py;
+    if (m.vx && freeAt(m.px + 0.5 + m.vx * dt, m.py + 0.82)) m.px += m.vx * dt; else m.vx = 0;
+    if (m.vy && freeAt(m.px + 0.5, m.py + 0.82 + m.vy * dt)) m.py += m.vy * dt; else m.vy = 0;
+    const speed = Math.hypot(m.vx, m.vy);
+    m.moving = speed > 0.3;
+    if (speed > 0.3) m.dir = Math.abs(m.vx) > Math.abs(m.vy) * 0.9 ? (m.vx < 0 ? 1 : 2) : (m.vy < 0 ? 3 : 0);
+    if (m.path.length) { m.stuck = Math.hypot(m.px - ox, m.py - oy) < 0.002 ? m.stuck + dt : 0; if (m.stuck > 0.5) { m.path = []; live.pending = null; } }
+    const tx = Math.floor(m.px + 0.5), ty = Math.floor(m.py + 0.82);
+    if (tx !== m.x || ty !== m.y) { m.x = tx; m.y = ty; updateCtx(); }
+    // share position about 10 times a second while moving, plus a final update when stopping
+    m.netT += dt;
+    const movedSince = Math.hypot(m.px - m.sent.x, m.py - m.sent.y);
+    if ((m.netT > 0.1 && movedSince > 0.03) || (!m.moving && movedSince > 0.001)) { m.netT = 0; m.sent = { x: m.px, y: m.py }; net.send({ t: 'move', x: +m.px.toFixed(2), y: +m.py.toFixed(2), dir: m.dir }); }
+    // smooth camera
+    const ca = Math.min(1, dt * 7); live.cam.x += (m.px - live.cam.x) * ca; live.cam.y += (m.py - live.cam.y) * ca;
     follow(m.petPos, m.px - 0.45, m.py + 0.25, dt);
     for (const o of live.others.values()) {
       const dx = o.x - o.px, dy = o.y - o.py, d = Math.hypot(dx, dy);
-      if (d > 4) { o.px = o.x; o.py = o.y; o.moving = false; }
-      else if (d > 0.01) { const s = Math.min(d, SPEED * dt); o.px += (dx / d) * s; o.py += (dy / d) * s; o.moving = true; }
-      else o.moving = false;
+      if (d > 5) { o.px = o.x; o.py = o.y; }
+      else { const q = Math.min(1, dt * 9); o.px += dx * q; o.py += dy * q; }
+      o.moving = d > 0.04;
       follow(o.petPos, o.px - 0.45, o.py + 0.25, dt);
     }
     for (const q of live.sheep) {
@@ -408,54 +457,66 @@
       if (q.next <= 0) { q.next = 2 + Math.random() * 4; const [dx, dy] = DIRS[Math.floor(Math.random() * 4)], nx = q.x + dx, ny = q.y + dy; if (nx >= 23 && nx <= 32 && ny >= 19 && ny <= 23) { q.x = nx; q.y = ny; if (dx) q.flip = dx > 0; } }
       q.px += (q.x - q.px) * Math.min(1, dt * 2.5); q.py += (q.y - q.py) * Math.min(1, dt * 2.5);
     }
-    live.ctxTimer -= dt; if (live.ctxTimer <= 0) { live.ctxTimer = 0.5; updateCtx(); }
+    live.ctxTimer -= dt; if (live.ctxTimer <= 0) { live.ctxTimer = 0.4; updateCtx(); }
   }
 
   function draw(t) {
-    const ctx = live.ctx, b = live.buf.x, { devW, devH, dpr, k, bw, bh } = live.view, c = cam(), nowMs = now(), pn = performance.now();
-    b.clearRect(0, 0, bw, bh);
+    const ctx = live.ctx, b = live.buf.x, { devW, devH, dpr, k, bw, bh } = live.view, cf = cam(), nowMs = now(), pn = performance.now();
+    // 1) static world + crops into the low-res buffer at a whole-pixel camera…
+    const c = { x: Math.floor(cf.x), y: Math.floor(cf.y) };
+    b.fillStyle = '#76b947'; b.fillRect(0, 0, bw + 1, bh + 1);
     b.drawImage(live.terrain, -c.x, -c.y);
     const x0 = Math.max(0, Math.floor(c.x / T)), x1 = Math.min(WD.W - 1, Math.ceil((c.x + bw) / T)), y0 = Math.max(0, Math.floor(c.y / T)), y1 = Math.min(WD.H - 1, Math.ceil((c.y + bh) / T));
-    // water sparkle (2 frames, pixel accurate)
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       if (WD.g[y][x] !== 'w') continue;
       const ph = (t * 0.9 + WD.hash(x, y) * 7) % 3; if (ph > 1.2) continue;
       const X = x * T - c.x + 3 + Math.floor(WD.hash(y, x) * 9), Y = y * T - c.y + 4 + Math.floor(WD.hash(x + 1, y) * 9);
       PX.R(b, X, Y, ph < 0.6 ? 3 : 2, 1, ph < 0.6 ? PX.K.foam : PX.K.waterL);
     }
-    // crops
     const gd = garden();
     for (let i = 0; i < R.PLOTS; i++) {
       const p = R.normalize(gd[i], nowMs); if (!p) continue;
       const { x, y } = WD.plots[i], X = x * T - c.x, Y = y * T - c.y;
-      if (X < -16 || Y < -16 || X > bw || Y > bh) continue;
+      if (X < -16 || Y < -16 || X > bw + 1 || Y > bh + 1) continue;
       PX.crop(b, X, Y, p.c, p.s, !!p.w, R.mature(p) && ((t * 1.6 + i * 0.37) % 2) < 0.35);
       if (R.needsWater(p)) PX.drop(b, X + 11, Y - 5 + (Math.floor(t * 3 + i) % 2));
     }
-    // characters, depth sorted
+    // 2) …then upscale it, shifted by the camera's fractional part in real screen pixels (smooth scrolling)
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(live.buf.c, -Math.round((cf.x - c.x) * k), -Math.round((cf.y - c.y) * k), (bw + 1) * k, (bh + 1) * k);
+    // 3) characters straight onto the screen at screen-pixel precision (no art-pixel snapping = no shaking)
+    const SX = (wx) => Math.round((wx - cf.x) * k), SY = (wy) => Math.round((wy - cf.y) * k);
+    const sprite = (img, wx, wy, flip) => {
+      const X = SX(wx), Y = SY(wy), w = img.width * k, hh = img.height * k;
+      if (X > devW || Y > devH || X + w < 0 || Y + hh < 0) return;
+      if (flip) { ctx.save(); ctx.translate(X + w, Y); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0, w, hh); ctx.restore(); } else ctx.drawImage(img, X, Y, w, hh);
+    };
+    const shadow = (wx, wy) => { const X = SX(wx), Y = SY(wy); ctx.fillStyle = 'rgba(30,20,10,.25)'; ctx.fillRect(X + 4 * k, Y + 13 * k, 9 * k, k); ctx.fillRect(X + 3 * k, Y + 14 * k, 11 * k, k); ctx.fillRect(X + 4 * k, Y + 15 * k, 9 * k, k); };
     const ents = [], frame = (o) => (o.moving ? 1 + (Math.floor(t * 8) % 2) : 0);
-    const shadow = (X, Y) => PX.ell(b, X + 8, Y + 14, 5, 1, 'rgba(30,20,10,.25)');
-    live.sheep.forEach((q) => ents.push({ y: q.py, f: () => { const X = Math.round(q.px * T) - c.x, Y = Math.round(q.py * T) - c.y; shadow(X, Y); blit(b, PX.animal('sheep', Math.floor(t * 2 + q.i) % 2), X, Y + 2, q.flip); } }));
+    live.sheep.forEach((q) => ents.push({ y: q.py, f: () => { shadow(q.px * T, q.py * T); sprite(PX.animal('sheep', Math.floor(t * 2 + q.i) % 2), q.px * T, q.py * T + 2, q.flip); } }));
     const person = (o) => {
-      if (o.look.pet) ents.push({ y: o.petPos.y, f: () => { const X = Math.round(o.petPos.x * T) - c.x, Y = Math.round(o.petPos.y * T) - c.y, a = PX.animal(o.look.pet, frame(o)); shadow(X - 2, Y - 1); blit(b, a, X + 2, Y + 16 - a.height, o.px > o.petPos.x + 0.05); } });
-      ents.push({ y: o.py, f: () => { const X = Math.round(o.px * T) - c.x, Y = Math.round(o.py * T) - c.y; shadow(X, Y); b.drawImage(PX.char(o.look, o.dir, frame(o)), X, Y - 12); } });
+      if (o.look.pet) ents.push({ y: o.petPos.y, f: () => { const a = PX.animal(o.look.pet, frame(o)); shadow(o.petPos.x * T - 2, o.petPos.y * T - 1); sprite(a, o.petPos.x * T + 2, o.petPos.y * T + 16 - a.height, o.px > o.petPos.x + 0.05); } });
+      ents.push({ y: o.py, f: () => { shadow(o.px * T, o.py * T); sprite(PX.char(o.look, o.dir, frame(o)), o.px * T, o.py * T - 12); } });
     };
     for (const o of live.others.values()) person(o);
     const v = V(); person({ ...live.me, look: v.look });
+    lotsArr().forEach((l, i) => { if (!l) return; const o = WD.lots[i]; ents.push({ y: o.y + 2, f: () => sprite(PX.gerSprite(R.ROOF[l.roof] || R.ROOF.blue, R.DOOR[l.door] || R.DOOR.red), o.x * T, o.y * T - 2) }); });
+    const zs = WD.objects.find((q) => q.kind === 'npc');
+    if (zs) ents.push({ y: zs.y, f: () => { shadow(zs.x * T, zs.y * T); sprite(PX.char(ZASUUL, Math.floor(t / 2.5) % 4 === 3 ? 2 : 0, 0), zs.x * T, zs.y * T - 12); } });
     ents.sort((a2, b2) => a2.y - b2.y).forEach((e) => e.f());
-    // evening: dark tint + stepped lantern glow
+    // 4) evening: dark tint + stepped lantern glow
     const hr = new Date().getHours();
     if (hr >= 19 || hr < 6) {
-      b.fillStyle = 'rgba(18,22,70,.38)'; b.fillRect(0, 0, bw, bh);
-      b.globalCompositeOperation = 'lighter';
-      for (const o of WD.objects.filter((q) => q.kind === 'lantern')) { const X = o.x * T + 8 - c.x, Y = o.y * T - 6 - c.y; PX.ell(b, X, Y, 26, 20, 'rgba(255,200,110,.10)'); PX.ell(b, X, Y, 15, 12, 'rgba(255,200,110,.14)'); PX.ell(b, X, Y, 6, 5, 'rgba(255,220,140,.2)'); }
-      b.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(18,22,70,.38)'; ctx.fillRect(0, 0, devW, devH);
+      ctx.globalCompositeOperation = 'lighter';
+      const glow = (cx, cy, rx, ry, col) => { ctx.fillStyle = col; for (let dy = -ry; dy <= ry; dy++) { const hw = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy * dy) / ((ry + 0.5) * (ry + 0.5))))); ctx.fillRect(SX(cx - hw), SY(cy + dy), (hw * 2 + 1) * k, k); } };
+      for (const o of WD.objects.filter((q) => q.kind === 'lantern')) { const X = o.x * T + 8, Y = o.y * T - 6; glow(X, Y, 26, 20, 'rgba(255,200,110,.10)'); glow(X, Y, 15, 12, 'rgba(255,200,110,.14)'); glow(X, Y, 6, 5, 'rgba(255,220,140,.2)'); }
+      ctx.globalCompositeOperation = 'source-over';
     }
-    // upscale with crisp pixels
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(live.buf.c, 0, 0, bw * k, bh * k);
-    // text layer (pixel font, screen space)
-    const S = (wx, wy) => [(wx - c.x) * k, (wy - c.y) * k];
+    // 5) text layer (pixel font)
+    const S = (wx, wy) => [(wx - cf.x) * k, (wy - cf.y) * k];
+    lotsArr().forEach((l, i) => { if (!l) return; const o = WD.lots[i], [sx, sy] = S(o.x * T + 24, o.y * T - 4); pixelText(ctx, l.n, sx, sy, textSize(), l.by === v.id ? '#f7c646' : '#ffffff'); });
+    if (zs) { const [sx, sy] = S(zs.x * T + 8, zs.y * T - 16); pixelText(ctx, L('Засуул', 'Herald'), sx, sy, textSize(), '#f7c646'); }
     for (const o of live.others.values()) labels(ctx, o, o.name, o.lvl, false, pn, S, dpr);
     labels(ctx, live.me, live.name, R.level(v.xp).l, true, pn, S, dpr);
     live.floaters = live.floaters.filter((f) => pn - f.t0 < 1400);
@@ -476,16 +537,25 @@
   function labels(ctx, o, name, level, isMe, pn, S, dpr) {
     const [x, y] = S(o.px * T + 8, o.py * T - 16), fs = textSize(), u = Math.max(1, Math.round(fs / 10));
     ctx.font = `${fs}px Tiny5, monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const text = `${level} ${name}`, tw = Math.ceil(ctx.measureText(text).width) + fs, th = fs + u * 4, X = Math.round(x - tw / 2), Y = Math.round(y - th / 2);
-    ctx.fillStyle = '#2b1e2e'; ctx.fillRect(X - u, Y - u, tw + u * 2, th + u * 2);
-    ctx.fillStyle = isMe ? '#3f76db' : '#5a3a22'; ctx.fillRect(X, Y, tw, th);
-    ctx.fillStyle = isMe ? '#7fa6ee' : '#8a5a33'; ctx.fillRect(X, Y, tw, u);
-    ctx.fillStyle = '#ffffff'; ctx.fillText(text, Math.round(x), Math.round(y + u / 2));
+    const pad = Math.round(fs * 0.45), th = fs + u * 4, gap = u * 3;
+    const lvT = String(level), lvW = Math.ceil(ctx.measureText(lvT).width) + pad * 2, nmW = Math.ceil(ctx.measureText(name).width) + pad * 2;
+    const X0 = Math.round(x - (lvW + gap + nmW) / 2), Y = Math.round(y - th / 2);
+    const box = (bx, w, bg, top, fg, text) => {
+      ctx.fillStyle = '#2b1e2e'; ctx.fillRect(bx - u, Y - u, w + u * 2, th + u * 2);
+      ctx.fillStyle = bg; ctx.fillRect(bx, Y, w, th); ctx.fillStyle = top; ctx.fillRect(bx, Y, w, u);
+      ctx.fillStyle = fg; ctx.fillText(text, Math.round(bx + w / 2), Math.round(Y + th / 2 + u / 2));
+    };
+    box(X0, lvW, '#f7c646', '#ffe58f', '#3a2600', lvT);                                   // level: its own gold box
+    box(X0 + lvW + gap, nmW, isMe ? '#3f76db' : '#5a3a22', isMe ? '#7fa6ee' : '#8a5a33', '#ffffff', name); // name
+    let top = Y;
+    const look = isMe ? V().look : o.look, title = look && look.title && R.TITLES.find((q) => q.id === look.title);
+    if (title) { top = Y - th - u * 2; pixelText(ctx, '★ ' + tx(title.name), x, top + th / 2, fs, '#f7c646'); }          // title above
     if (!o.bubble) return;
     const age = (pn - o.bubble.t0) / 1000;
     if (age > 4.5) { o.bubble = null; return; }
     ctx.save(); ctx.globalAlpha = age > 3.9 ? (4.5 - age) / 0.6 : 1;
-    const bw2 = Math.ceil(ctx.measureText(o.bubble.text).width) + fs * 1.4, bh2 = fs + u * 8, BX = Math.round(x - bw2 / 2), BY = Math.round(Y - bh2 - u * 8);
+    ctx.font = `${fs}px Tiny5, monospace`;
+    const bw2 = Math.ceil(ctx.measureText(o.bubble.text).width) + fs * 1.4, bh2 = fs + u * 8, BX = Math.round(x - bw2 / 2), BY = Math.round(top - bh2 - u * 8);
     ctx.fillStyle = '#2b1e2e'; ctx.fillRect(BX - u, BY - u, bw2 + u * 2, bh2 + u * 2); ctx.fillRect(Math.round(x - u * 3), BY + bh2, u * 6, u * 3); ctx.fillRect(Math.round(x - u), BY + bh2 + u * 3, u * 2, u * 2);
     ctx.fillStyle = '#fff8e6'; ctx.fillRect(BX, BY, bw2, bh2); ctx.fillRect(Math.round(x - u * 2), BY + bh2, u * 4, u * 2);
     ctx.fillStyle = '#2b1e2e'; ctx.fillText(o.bubble.text, Math.round(x), Math.round(BY + bh2 / 2 + u / 2));
@@ -547,7 +617,7 @@
                 TG.toast(`${tx(it.name)}: ${L('худалдаж авлаа!', 'purchased!')}`); save();
               } }, `${it.price}`, pic('ui:coin', 14)));
       });
-      body.replaceChildren(
+      rc(body, 
         h('div', { class: 'v-shop-head' }, h('h2', null, L('Наадмын дэлгүүр', 'Naadam Shop')), h('span', { class: 'v-pill dark' }, pic('ui:coin', 18), ` ${v.coins}`)),
         h('div', { class: 'chips v-tabs' }, TABS.map(([k, e, t]) => h('button', { class: 'chip' + (cur === k ? ' active' : ''), onclick: () => { cur = k; draw(); } }, pic(e, 18), ' ', t))),
         h('div', { class: 'v-list' }, list));
@@ -577,7 +647,7 @@
       items.map((it) => h('button', { class: 'v-chip' + (v.look[s] === it.val ? ' active' : ''), title: tx(it.name), onclick: () => equip(s, it.val, draw) }, pic(itemKey(it), 30)))));
     const draw = () => {
       const mine = (s) => R.ITEMS.filter((it) => it.slot === s && v.owned.includes(it.id));
-      body.replaceChildren(h('h2', null, L('Миний хувцас', 'My wardrobe')), cv,
+      rc(body, h('h2', null, L('Миний хувцас', 'My wardrobe')), cv,
         h('div', { class: 'v-slot' }, h('div', { class: 'label' }, L('Арьсны өнгө', 'Skin tone')), h('div', { class: 'v-chips' }, R.SKINS.map((sk) => h('button', { class: 'v-chip v-skin' + (v.look.skin === sk ? ' active' : ''), style: { background: sk }, 'aria-label': 'skin', onclick: () => equip('skin', sk, draw) })))),
         slot(L('Дээл', 'Deel'), 'deel', mine('deel')), slot(L('Малгай', 'Hat'), 'hat', mine('hat')), slot(L('Нүүр', 'Face'), 'face', mine('face')),
         slot(L('Хүзүү', 'Neck'), 'neck', mine('neck')), slot(L('Тэжээвэр', 'Pet'), 'pet', mine('pet')),
@@ -600,7 +670,7 @@
 
   function questModal() {
     const v = V(), body = h('div');
-    const draw = () => body.replaceChildren(h('h2', null, L('Өнөөдрийн даалгавар', "Today's quests")),
+    const draw = () => rc(body, h('h2', null, L('Өнөөдрийн даалгавар', "Today's quests")),
       h('p', { class: 'muted' }, L('Даалгавар өдөр бүр шинэчлэгдэнэ.', 'Quests refresh every day.')),
       h('div', { class: 'v-list' }, quests().map((q) => {
         const d = QUESTS[q.k], ready = q.p >= d.n && !q.done;
@@ -650,7 +720,16 @@
       if (live.status !== 'solo') net.rejoin(); else TG.toast(L('Сервертэй холбогдоогүй тул ганцаараа горимд байна.', 'No server connection, so you are in solo mode.'));
     };
     const others = live ? [...live.others.values()] : [];
-    body.append(h('h2', null, L('Хамт тоглох өрөө', 'Play-together room')),
+    const local = /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname);
+    const base = local && live.urls && live.urls[0] ? live.urls[0] : location.origin + location.pathname.replace(/[^/]*$/, '');
+    const share = `${base}?room=${live.room || v.room}`;
+    const qr = h('canvas', { class: 'v-qr', 'aria-label': 'QR' });
+    try { TG.qr.toCanvas(qr, share, 6); } catch (e) { /* too long */ }
+    const invite = live.status === 'online' ? h('div', { class: 'v-invite' },
+      h('div', { class: 'label' }, L('Найзаа урих: утасны камераар уншуулаарай', 'Invite friends: scan with a phone camera')), qr,
+      h('div', { class: 'v-url' }, share),
+      h('p', { class: 'privacy' }, L('Найзууд чинь яг ижил Wi-Fi-д холбогдсон байх ёстой. Сургууль, зочны Wi-Fi төхөөрөмжүүдийг хооронд нь холбохгүй байж болно. Тэгвэл утасны hotspot ашиглаарай.', 'Friends must be on the same Wi-Fi. Some school or guest Wi-Fi blocks devices from seeing each other; if so, use a phone hotspot.'))) : null;
+    body.append(h('h2', null, L('Хамт тоглох өрөө', 'Play-together room')), invite,
       live.status === 'online'
         ? h('div', null, h('p', { class: 'muted' }, L(`"${live.room}" өрөөнд ${others.length + 1} хүн байна. Ижил кодтой хүмүүс нэг нутагт тоглож, нэг цэцэрлэгт тарина.`, `${others.length + 1} people in room "${live.room}". Everyone with the same code shares one village and garden.`)),
           h('div', { class: 'v-chips' }, h('span', { class: 'v-chip wide active' }, portrait(V().look, 22), ' ', live.name, ` (${L('та', 'you')})`), others.map((o) => h('span', { class: 'v-chip wide' }, portrait(o.look, 22), ' ', o.name, ` · ${o.lvl}`))))
@@ -692,11 +771,11 @@
     const cleanup = () => { over = true; cancelAnimationFrame(raf); window.removeEventListener('keydown', key2); window.removeEventListener('keyup', key2); };
     const end = (win) => {
       cleanup();
-      if (!win) { TG.sfx.bad(); wrap.replaceChildren(h('div', { class: 'center' }, h('div', { class: 'v-fact-e' }, '💨'), h('h2', null, L('Загас зугтлаа!', 'The fish got away!')), h('div', { class: 'row-btns' }, h('button', { class: 'btn', onclick: () => close() }, L('Хаах', 'Close')), h('button', { class: 'btn primary', onclick: () => { close(); fishing(); } }, L('Дахин', 'Again'))))); return; }
+      if (!win) { TG.sfx.bad(); rc(wrap, h('div', { class: 'center' }, h('div', { class: 'v-fact-e' }, '💨'), h('h2', null, L('Загас зугтлаа!', 'The fish got away!')), h('div', { class: 'row-btns' }, h('button', { class: 'btn', onclick: () => close() }, L('Хаах', 'Close')), h('button', { class: 'btn primary', onclick: () => { close(); fishing(); } }, L('Дахин', 'Again'))))); return; }
       quest('fish'); TG.sfx.win();
       if (f.release) reward(f.coins, f.xp); else { v.fish[key] = (v.fish[key] || 0) + 1; reward(0, f.xp); }
       S.save(); hud();
-      wrap.replaceChildren(h('div', { class: 'center' }, h('div', { class: 'v-fact-e' }, pic('fish:' + key, 72)), h('div', { class: 'eyebrow' }, L('Барьлаа!', 'Caught!')), h('h2', null, tx(f.name)),
+      rc(wrap, h('div', { class: 'center' }, h('div', { class: 'v-fact-e' }, pic('fish:' + key, 72)), h('div', { class: 'eyebrow' }, L('Барьлаа!', 'Caught!')), h('h2', null, tx(f.name)),
         h('div', { class: 'teach' }, h('b', null, '💡 ', L('Мэдсэн үү?', 'Did you know?')), h('p', null, tx(f.fact))),
         h('p', { class: 'muted', style: { marginTop: '10px' } }, f.release ? `${L('Буцааж тавилаа. Байгаль хамгаалсны шагнал', 'Released! Nature-protector reward')}: +${f.coins} ${L('зоос', 'coins')}, +${f.xp} XP` : `+${f.xp} XP · ${L('Дэлгүүрт', 'Sells for')} ${f.sell} ${L('зоос', 'coins')}`),
         h('div', { class: 'row-btns' }, h('button', { class: 'btn', onclick: () => close() }, L('Хаах', 'Close')), h('button', { class: 'btn primary', onclick: () => { close(); fishing(); } }, L('Дахин', 'Again')))));
@@ -721,6 +800,244 @@
     const close = TG.modal(wrap, { cls: 'v-modal', onClose: cleanup });
     raf = requestAnimationFrame(loop);
   }
+
+  // ================================================================ own ger (housing)
+  function lotAction(i) {
+    const l = lotsArr()[i];
+    if (!l) return myLot() >= 0 ? TG.toast(L('Танд аль хэдийн гэр байна!', 'You already have a ger!')) : buyGer(i);
+    if (l.by === V().id) return homeModal(i);
+    visitGer(l);
+  }
+  function gerPreview(roof, door, scale) {
+    const c = h('canvas', { class: 'v-gerprev', width: 48 * scale, height: 50 * scale }), x = c.getContext('2d');
+    x.imageSmoothingEnabled = false; x.drawImage(PX.gerSprite(R.ROOF[roof], R.DOOR[door]), 0, 0, 48 * scale, 50 * scale);
+    return c;
+  }
+  const swatches = (map, cur, onPick, cls = '') => h('div', { class: 'v-chips' }, Object.entries(map).map(([k, c]) => h('button', { class: 'v-chip v-swatch ' + cls + (cur === k ? ' active' : ''), style: { background: c }, 'aria-label': k, onclick: () => onPick(k) })));
+  function buyGer(i) {
+    const v = V(), body = h('div'); let roof = 'blue', door = 'red';
+    const buy = () => {
+      if (lvl() < R.GER_LEVEL) return TG.toast(L(`${R.GER_LEVEL}-р түвшинд хүрээрэй.`, `Reach level ${R.GER_LEVEL} first.`));
+      if (v.coins < R.GER_PRICE) return TG.toast(L('Зоос хүрэлцэхгүй байна. Тоглож, ургац зарж цуглуулаарай!', 'Not enough coins. Play games or sell crops to earn more!'));
+      close();
+      if (live.online) net.send({ t: 'ger-buy', i, roof, door });
+      else { const lot = { by: v.id, n: live.name, roof, door, furn: [] }; onLot({ act: 'buy', i, lot, by: v.id }); }
+    };
+    const draw = () => rc(body, 
+      h('h2', null, L('Өөрийн гэр барих', 'Build your own ger')),
+      h('p', { class: 'muted' }, L('Гэр хороололд өөрийн монгол гэртэй болж, өнгийг нь сонгоод, тавилгаар чимээрэй. Найзууд чинь зочилж болно!', 'Get your own Mongolian ger, pick its colours and furnish it. Friends can come and visit!')),
+      h('div', { class: 'v-gerbox' }, gerPreview(roof, door, 3)),
+      h('div', { class: 'label' }, L('Дээврийн хээ', 'Roof band')), swatches(R.ROOF, roof, (k) => { roof = k; draw(); }),
+      h('div', { class: 'label', style: { marginTop: '10px' } }, L('Хаалга', 'Door')), swatches(R.DOOR, door, (k) => { door = k; draw(); }, 'door'),
+      lvl() < R.GER_LEVEL ? h('div', { class: 'hint', style: { marginTop: '12px' } }, L(`Гэр барихад ${R.GER_LEVEL}-р түвшин хэрэгтэй.`, `You need level ${R.GER_LEVEL} to build a ger.`)) : null,
+      h('button', { class: 'btn primary big block', style: { marginTop: '14px' }, disabled: lvl() < R.GER_LEVEL, onclick: buy }, L('Гэр барих', 'Build ger'), ` · ${R.GER_PRICE} `, pic('ui:coin', 16)));
+    draw();
+    const close = TG.modal(body, { cls: 'v-modal' });
+  }
+  function onLot(m) {
+    const v = V();
+    lotsArr()[m.i] = m.lot;
+    if (m.by === v.id && m.act === 'buy') {
+      v.coins = Math.max(0, v.coins - R.GER_PRICE); reward(0, 30); TG.sfx.win(); TG.confetti(70);
+      factCard('ui:ger', L('Шинэ гэр!', 'Your new ger!'), L('Монгол гэрийг нэг цагийн дотор барьж, нүүж болдог. Хаалга нь ихэвчлэн урд зүг рүү харсан байдаг.', 'A Mongolian ger can be put up in about an hour and moved anywhere. Its door traditionally faces south.'), '+30 XP');
+    } else if (m.act === 'buy') TG.toast(`🏠 ${m.lot.n} ${L('гэр барилаа!', 'built a ger!')}`);
+    S.save(); if (live) { hud(); updateCtx(); }
+  }
+  function saveLot(i, patch) {
+    const l = lotsArr()[i]; Object.assign(l, patch);
+    if (live.online) net.send({ t: 'ger-style', roof: l.roof, door: l.door, furn: l.furn });
+    S.save();
+  }
+  function homeModal(i) {
+    const v = V(), l = lotsArr()[i], body = h('div'), cv = h('canvas', { class: 'v-interior', width: 240, height: 170 });
+    const draw = () => {
+      PX.interior(cv, R.ROOF[l.roof] || R.ROOF.blue, l.furn || []);
+      const today = S.dkey(), rested = v.rest === today;
+      rc(body, h('h2', null, L('Миний гэр', 'My ger')), cv,
+        h('div', { class: 'row-btns' },
+          h('button', { class: 'btn', onclick: () => { close(); wardrobe(); } }, L('Хувцас', 'Wardrobe')),
+          h('button', { class: 'btn primary', disabled: rested, onclick: () => { v.rest = today; v.water = v.can; S.save(); reward(5, 10); TG.sfx.chime(); TG.toast(L('Гэртээ амарлаа: +10 XP, усны сав дүүрлээ.', 'You rested at home: +10 XP, water refilled.')); draw(); } }, rested ? L('Өнөөдөр амарсан', 'Rested today') : L('Амрах', 'Rest'))),
+        h('div', { class: 'label', style: { marginTop: '12px' } }, L('Тавилга', 'Furniture')),
+        h('div', { class: 'v-list' }, R.FURNITURE.map((f) => {
+          const owned = (l.furn || []).includes(f.id), locked = lvl() < f.lvl;
+          return h('div', { class: 'v-row' + (locked && !owned ? ' locked' : '') }, icon('furn:' + f.id), h('div', { class: 'v-row-b' }, h('b', null, tx(f.name)), h('small', null, tx(f.fact))),
+            owned ? h('span', { class: 'v-owned' }, '✓') : locked ? h('span', { class: 'v-lock' }, L('Түвшин', 'Lv'), ' ', f.lvl)
+              : h('button', { class: 'btn sm primary', onclick: () => {
+                if (v.coins < f.price) { TG.sfx.bad(); return TG.toast(L('Зоос хүрэлцэхгүй байна.', 'Not enough coins.')); }
+                v.coins -= f.price; saveLot(i, { furn: [...(l.furn || []), f.id] }); TG.sfx.chime(); hud(); draw();
+              } }, `${f.price} `, pic('ui:coin', 14)));
+        })),
+        h('div', { class: 'label', style: { marginTop: '12px' } }, L('Өнгө солих (үнэгүй)', 'Change colours (free)')),
+        swatches(R.ROOF, l.roof, (k) => { saveLot(i, { roof: k }); draw(); }),
+        h('div', { style: { height: '6px' } }), swatches(R.DOOR, l.door, (k) => { saveLot(i, { door: k }); draw(); }, 'door'));
+    };
+    draw();
+    const close = TG.modal(body, { cls: 'v-modal' });
+  }
+  function visitGer(l) {
+    const cv = h('canvas', { class: 'v-interior', width: 240, height: 170 }); PX.interior(cv, R.ROOF[l.roof] || R.ROOF.blue, l.furn || []);
+    const close = TG.modal(h('div', { class: 'center' }, h('h2', null, `${l.n} · ${L('гэр', 'ger')}`), cv,
+      h('p', { class: 'muted' }, L('Найзынхаа гэрт зочиллоо!', "You are visiting a friend's ger!")),
+      h('div', { class: 'row-btns' }, h('button', { class: 'btn primary', onclick: () => { if (live.online) net.send({ t: 'say', k: 'p', i: 0 }); else live.me.bubble = { text: tx(R.PHRASES[0]), t0: performance.now() }; close(); } }, L('Мэндлэх', 'Say hi')))), { cls: 'v-modal' });
+  }
+  function ovooAction() {
+    const v = V(), d = S.dkey(), first = v.ovoo !== d;
+    if (first) { v.ovoo = d; reward(0, 5); }
+    TG.sfx.chime();
+    factCard('ui:ovoo', L('Овоо', 'Ovoo'), L('Монголчууд овоог нар зөв гурав тойрч, чулуу нэмж, хадаг уяж, хүслээ шивнэдэг. Овоо бол байгаль, нутгаа хүндэтгэх бэлгэдэл.', 'Mongolians walk clockwise around an ovoo three times, add a stone, tie a blue khadag and make a wish. It is a way of honouring nature and the homeland.'), first ? '+5 XP' : null);
+  }
+
+  // ================================================================ wrestling (бөх)
+  const WR_NAMES = ['Ховдын Батбаяр', 'Увсын Ганзориг', 'Архангайн Тэмүүлэн', 'Дорнодын Энхбат', 'Говь-Алтайн Сүхбат', 'Сэлэнгийн Мөнх-Эрдэнэ', 'Баян-Өлгийн Ержан', 'Хэнтийн Төмөрбаатар', 'Завханы Оюунболд', 'Өвөрхангайн Даваадорж', 'Булганы Цогтбаатар', 'Сүхбаатарын Ууганбаяр'];
+  const WR_FACTS = [
+    Tx('Бөхчүүд барилдааны өмнө, дараа бүргэд мэт дэвж хөдөлдөг. Үүнийг "дэвээ" гэнэ.', 'Wrestlers do an eagle dance (devee) before and after each bout.'),
+    Tx('Засуул бөхийн цолыг дуудаж, магтаал хэлдэг бөгөөд барилдааны үеэр бөхийн малгайг барьж зогсоно.', 'The zasuul (herald) sings the wrestler\'s titles and holds his hat during the bout.'),
+    Tx('Монгол бөхөд жингийн ангилал байдаггүй. Жижиг бөх ч том бөхийг мэхээрээ дийлж болно.', 'Mongolian wrestling has no weight classes. A small wrestler can beat a big one with good technique.'),
+    Tx('Тохой, өвдөг, нуруу эсвэл толгой газарт хүрвэл унасанд тооцогдоно.', 'A wrestler loses when an elbow, knee, back or head touches the ground.'),
+    Tx('Бөхийн хувцас нь зодог (энгэрээ задгай цамц), шуудаг (богино өмд), гутал гурав.', 'The wrestling outfit is the zodog (open-chest jacket), the shuudag (briefs) and gutal boots.'),
+    Tx('Улсын наадамд 512 эсвэл 1024 бөх барилддаг.', 'At the State Naadam, 512 or 1024 wrestlers compete.'),
+  ];
+  const titleObj = (id) => R.TITLES.find((q) => q.id === id);
+  function updateTitle() {
+    const v = V(), t = R.titleFor(v.wr);
+    if (t && v.look.title !== t) { v.look.title = t; S.save(); sendLook(); return t; }
+    return null;
+  }
+  function wrestlerPic(pose, col, size = 56) { const c = h('canvas', { class: 'px-icon', width: 28, height: 32, style: { width: size + 'px', height: Math.round(size * 32 / 28) + 'px' } }); c.getContext('2d').drawImage(PX.wrestler(col, R.SKINS.includes(V().look.skin) ? V().look.skin : R.SKINS[0], pose, 0), 0, 0); return c; }
+  function arenaModal() {
+    const v = V(), wr = v.wr, t = titleObj(R.titleFor(wr));
+    const next = R.TITLES.find((q) => (q.id === 'avarga' ? (wr.champ || 0) < 2 : (wr.best || 0) < q.need));
+    const others = live.online ? [...live.others.values()] : [];
+    const stat = (k, n) => h('div', { class: 'stat' }, h('small', null, k), h('b', null, n));
+    const close = TG.modal(h('div', null,
+      h('div', { class: 'v-wr-head' }, wrestlerPic('dance', '#e14b3d'), h('div', null, h('h2', null, L('Бөхийн барилдаан', 'Mongolian wrestling')), h('p', { class: 'muted' }, t ? `★ ${tx(t.name)}` : L('Цолгүй бөх', 'No title yet')))),
+      h('div', { class: 'stat-cards' }, stat(L('Шилдэг давлага', 'Best rounds'), wr.best || 0), stat(L('Түрүү', 'Wins'), wr.champ || 0), stat(L('Ялалт', 'Victories'), (wr.wins || 0) + (wr.pvpW || 0))),
+      h('p', { class: 'hint' }, !next ? L('Та хамгийн дээд цол Аварга хүртсэн! 🏆', 'You hold the highest title, Avarga! 🏆')
+        : next.id === 'avarga' ? L('Наадамд дахин түрүүлбэл Аварга цол хүртэнэ!', 'Win the Naadam once more to become an Avarga!')
+          : L(`Наадамд ${next.need} давбал «${tx(next.name)}» цол хүртэнэ.`, `Win ${next.need} rounds at the Naadam to earn the "${tx(next.name)}" title.`)),
+      h('button', { class: 'btn primary big block', onclick: () => { close(); tournament(1); } }, L('Наадамд барилдах (9 даваа)', 'Wrestle in the Naadam (9 rounds)')),
+      live.online ? h('div', { style: { marginTop: '12px' } }, h('div', { class: 'label' }, L('Найзтайгаа барилдах', 'Wrestle a friend')),
+        others.length ? h('div', { class: 'v-list' }, others.map((o) => h('div', { class: 'v-row' }, portrait(o.look, 28), h('div', { class: 'v-row-b' }, h('b', null, o.name), h('small', null, `${L('Түвшин', 'Level')} ${o.lvl}`)),
+          h('button', { class: 'btn sm primary', onclick: () => { net.send({ t: 'wr-invite', to: o.id }); TG.toast(L('Урилга илгээлээ…', 'Invitation sent…')); close(); } }, L('Урих', 'Invite')))))
+          : h('p', { class: 'muted' }, L('Одоогоор өрөөнд өөр хүн алга.', 'Nobody else is in the room yet.'))) : null,
+      h('div', { class: 'teach', style: { marginTop: '12px' } }, h('b', null, '💡 ', L('Мэдсэн үү?', 'Did you know?')), h('p', null, tx(TG.pick(WR_FACTS))))), { cls: 'v-modal' });
+  }
+  function tournament(round) {
+    const opp = { name: WR_NAMES[(round * 5 + Math.floor(Math.random() * 4)) % WR_NAMES.length], skill: 0.18 + round * 0.075, skin: TG.pick(R.SKINS) };
+    wrestleMatch({ ai: true, round, opp }, (won) => {
+      const v = V(), wr = v.wr;
+      if (won) { wr.wins = (wr.wins || 0) + 1; reward(8 + round * 2, 10 + round * 3); } else { wr.losses = (wr.losses || 0) + 1; reward(0, 5); }
+      const reached = won ? round : round - 1;
+      if (won && round === 9) wr.champ = (wr.champ || 0) + 1;
+      if (reached > (wr.best || 0)) wr.best = reached;
+      S.save();
+      return { newTitle: updateTitle(), champion: won && round === 9 };
+    });
+  }
+  function wrestleMatch(cfg, onEnd) {
+    const v = V(), mySkin = R.SKINS.includes(v.look.skin) ? v.look.skin : R.SKINS[0];
+    const st = { a: 0, b: 0, phase: 'choose', move: null, lastPlayer: null, off: 0, target: 0, pose: ['grip', 'grip'], over: false, t0: performance.now(), marker: 0 };
+    const cv = h('canvas', { class: 'v-wr-canvas', width: 160, height: 84 }), cx = cv.getContext('2d');
+    const score = h('div', { class: 'v-wr-score' }), msg = h('div', { class: 'v-wr-msg' }, L('Мэхээ сонго!', 'Choose your move!'));
+    const moves = h('div', { class: 'v-wr-moves' }), marker = h('i', { class: 'v-wr-marker' });
+    const goBtn = h('button', { class: 'btn primary big block' }, L('Хүч! (Space)', 'Power! (Space)'));
+    const timing = h('div', { class: 'v-wr-timing hidden' }, h('div', { class: 'v-wr-bar' }, h('i', { class: 'v-wr-zone' }), marker), goBtn);
+    const tail = h('div');
+    const body = h('div', { class: 'v-wrestle' }, h('div', { class: 'eyebrow' }, cfg.ai ? `${L('Наадам', 'Naadam')} · ${L('Даваа', 'Round')} ${cfg.round}/9` : L('Найзтай барилдаан', 'Friendly match')),
+      h('h2', null, `${live.name} · ${cfg.opp.name}`), cv, score, msg, moves, timing, tail);
+    const drawScore = () => rc(score, h('span', { class: 'me' }, live.name, ' ', '●'.repeat(st.a) + '○'.repeat(2 - st.a)), h('span', { class: 'them' }, '●'.repeat(st.b) + '○'.repeat(2 - st.b), ' ', cfg.opp.name));
+    const moveLabel = (id) => tx(R.MOVES.find((m) => m.id === id).name);
+    const setPhase = (p) => {
+      st.phase = p;
+      moves.classList.toggle('hidden', p !== 'choose'); timing.classList.toggle('hidden', p !== 'timing');
+      if (p === 'choose') rc(moves, ...R.MOVES.map((m) => h('button', { class: 'btn', onclick: () => { st.move = m.id; st.t0 = performance.now(); setPhase('timing'); msg.textContent = L('Ногоон хэсэгт хүрэхэд дар!', 'Press when the marker is in the green!'); } },
+        h('b', null, tx(m.name)), h('small', null, `> ${moveLabel(m.beats)}`))));
+    };
+    let raf = 0, lastT = performance.now();
+    const loop = (ts) => {
+      const dt = Math.min(0.05, (ts - lastT) / 1000); lastT = ts;
+      st.off += (st.target - st.off) * Math.min(1, dt * 8);
+      if (st.phase === 'timing') { st.marker = (Math.sin(((ts - st.t0) / 1000) * (cfg.ai ? 3.2 + cfg.round * 0.12 : 3.6)) + 1) / 2; marker.style.left = st.marker * 100 + '%'; if (ts - st.t0 > 5000) lock(); }
+      // pixel scene
+      cx.imageSmoothingEnabled = false; cx.fillStyle = '#e8c994'; cx.fillRect(0, 0, 160, 84);
+      for (let i = 0; i < 60; i++) { cx.fillStyle = i % 2 ? '#d4ae72' : '#f6e2b8'; cx.fillRect((i * 37) % 160, 30 + ((i * 53) % 54), 1, 1); }
+      cx.fillStyle = '#6b4220'; cx.fillRect(0, 0, 160, 22); for (let i = 0; i < 26; i++) { cx.fillStyle = ['#e14b3d', '#3f76db', '#f7c646', '#2ea35f', '#ffffff'][i % 5]; cx.fillRect(4 + i * 6, 12 + (i % 2) * 4, 4, 4); cx.fillStyle = i % 3 ? '#edbb93' : '#d9a06e'; cx.fillRect(5 + i * 6, 9 + (i % 2) * 4, 2, 3); }
+      const f = Math.floor(ts / 250) % 2, o = Math.round(st.off);
+      const A = PX.wrestler('#e14b3d', mySkin, st.pose[0], f), B = PX.wrestler('#3f76db', cfg.opp.skin || '#D9A06E', st.pose[1], f);
+      const ax = 80 - 26 + o + (st.pose[0] === 'dance' ? -10 : 0), bx = 80 - 2 + o + (st.pose[1] === 'dance' ? 10 : 0);
+      cx.fillStyle = 'rgba(40,20,0,.25)'; cx.fillRect(ax + 6, 78, 18, 2); cx.fillRect(bx + 4, 78, 18, 2);
+      cx.drawImage(A, ax, 48);
+      cx.save(); cx.translate(bx + 28, 48); cx.scale(-1, 1); cx.drawImage(B, 0, 0); cx.restore();
+      raf = requestAnimationFrame(loop);
+    };
+    function lock() {
+      if (st.phase !== 'timing') return;
+      const power = Math.max(0, 1 - Math.abs(st.marker - 0.5) * 2);
+      setPhase('wait');
+      if (cfg.ai) {
+        const counter = { push: 'hook', pull: 'push', hook: 'pull' };
+        const smart = st.lastPlayer && Math.random() < (cfg.opp.skill - 0.3) * 0.7;
+        const om = smart ? counter[st.lastPlayer] : TG.pick(R.MOVES).id;
+        const op = clamp(cfg.opp.skill + (Math.random() - 0.5) * 0.45, 0.05, 1);
+        apply(R.exchange(st.move, power, om, op), st.move, power, om, op);
+      } else { cfg.remote.mine = { m: st.move, p: power }; net.send({ t: 'wr-move', m: st.move, p: +power.toFixed(2) }); msg.textContent = L('Өрсөлдөгчийг хүлээж байна…', 'Waiting for your opponent…'); }
+    }
+    function apply(r, mm, mp, om, op) {
+      st.lastPlayer = mm;
+      if (r > 0) { st.a++; TG.sfx.good(); } else if (r < 0) { st.b++; TG.sfx.bad(); } else TG.sfx.tap();
+      st.target = clamp((st.a - st.b) * 12, -26, 26) + (r > 0 ? 6 : r < 0 ? -6 : 0);
+      setTimeout(() => { st.target = clamp((st.a - st.b) * 12, -26, 26); }, 260);
+      msg.textContent = `${moveLabel(mm)} ${Math.round(mp * 100)}%  ·  ${moveLabel(om)} ${Math.round(op * 100)}%  →  ` + (r > 0 ? L('Та давууллаа!', 'You gain the upper hand!') : r < 0 ? L('Өрсөлдөгч давууллаа!', 'Your opponent gains!') : L('Тэнцлээ!', 'Even!'));
+      drawScore();
+      if (cfg.ai) { if (st.a >= 2 || st.b >= 2) setTimeout(() => finish(st.a > st.b), 900); else setTimeout(() => { if (!st.over) { setPhase('choose'); } }, 1100); }
+      else if (!(st.a >= 2 || st.b >= 2)) setTimeout(() => { if (!st.over) setPhase('choose'); }, 1100);
+    }
+    function finish(won, reason) {
+      if (st.over) return; st.over = true; setPhase('done');
+      st.pose = won ? ['dance', 'fall'] : ['fall', 'dance']; st.target = won ? 18 : -18;
+      if (won) { TG.sfx.win(); TG.confetti(60); } else TG.sfx.bad();
+      const res = onEnd ? onEnd(won) || {} : {};
+      const t = res.newTitle && titleObj(res.newTitle);
+      msg.textContent = reason === 'left' ? L('Өрсөлдөгч гарчихлаа. Та яллаа!', 'Your opponent left. You win!') : won ? L('Та яллаа! Бүргэд шиг дэвээрэй! 🦅', 'You won! Do the eagle dance! 🦅') : L('Уналаа… Дараагийн удаа заавал ялна!', 'You fell… you will win next time!');
+      rc(tail, 
+        t ? h('div', { class: 'v-zasuul' }, h('b', null, '📣 ', L('Засуул', 'Herald'), ': '), L(`«Хүчит бөх ${live.name} ${tx(t.name)} цол хүртлээ!»`, `"The mighty wrestler ${live.name} earns the ${tx(t.name)} title!"`), h('p', null, tx(t.fact))) : null,
+        res.champion ? h('div', { class: 'v-zasuul' }, '🏆 ', L('Та Наадамд түрүүллээ!', 'You won the whole Naadam!')) : null,
+        h('div', { class: 'row-btns' },
+          h('button', { class: 'btn', onclick: () => close() }, L('Хаах', 'Close')),
+          cfg.ai ? (won && cfg.round < 9 ? h('button', { class: 'btn primary', onclick: () => { close(); tournament(cfg.round + 1); } }, L('Дараагийн даваа', 'Next round'), ' ▶')
+            : h('button', { class: 'btn primary', onclick: () => { close(); tournament(1); } }, L('Шинэ Наадам', 'New Naadam'))) : null));
+      if (cfg.remote && live) live.match = null;
+    }
+    const key = (e) => { if (e.code === 'Space') { e.preventDefault(); e.stopPropagation(); if (e.type === 'keydown' && !e.repeat) lock(); } };
+    window.addEventListener('keydown', key, true); window.addEventListener('keyup', key, true);
+    goBtn.addEventListener('click', lock);
+    if (cfg.remote) cfg.remote.ui = (m) => {
+      if (m.t === 'wr-wait' && st.phase !== 'wait') msg.textContent = L('Өрсөлдөгч бэлэн боллоо!', 'Your opponent is ready!');
+      if (m.t === 'wr-result') { const mineA = cfg.remote.side === 'a'; apply(mineA ? m.r : -m.r, mineA ? m.ma : m.mb, mineA ? m.pa : m.pb, mineA ? m.mb : m.ma, mineA ? m.pb : m.pa); }
+      if (m.t === 'wr-end') setTimeout(() => finish(m.winner === v.id, m.reason), m.reason ? 0 : 900);
+    };
+    drawScore(); setPhase('choose');
+    const close = TG.modal(body, { cls: 'v-modal', onClose: () => { cancelAnimationFrame(raf); window.removeEventListener('keydown', key, true); window.removeEventListener('keyup', key, true); if (cfg.remote && !st.over) { net.send({ t: 'wr-quit' }); if (live) live.match = null; } } });
+    raf = requestAnimationFrame(loop);
+  }
+  function onWrestleMsg(m) {
+    const v = V();
+    if (m.t === 'wr-invite') {
+      const close = TG.modal(h('div', { class: 'center' }, wrestlerPic('dance', '#3f76db', 64), h('h2', null, L('Барилдах урилга!', 'Wrestling challenge!')),
+        h('p', null, `${m.name} ${L('тантай барилдахыг хүсэж байна.', 'wants to wrestle you.')}`),
+        h('div', { class: 'row-btns' }, h('button', { class: 'btn', onclick: () => { net.send({ t: 'wr-decline', from: m.from }); close(); } }, L('Дараа', 'Not now')),
+          h('button', { class: 'btn primary', onclick: () => { net.send({ t: 'wr-accept', from: m.from }); close(); } }, L('Барилдъя!', "Let's wrestle!")))), { cls: 'v-modal' });
+    } else if (m.t === 'wr-declined') TG.toast(`${m.name} ${L('одоохондоо барилдахгүй гэлээ.', 'declined for now.')}`);
+    else if (m.t === 'wr-start') {
+      document.querySelectorAll('.modal-back .modal-x').forEach((x) => x.click());
+      const side = m.a.id === v.id ? 'a' : 'b', opp = side === 'a' ? m.b : m.a;
+      live.match = { id: m.id, side };
+      setTimeout(() => wrestleMatch({ ai: false, opp: { name: opp.name, skin: opp.look && opp.look.skin }, remote: live.match }, (won) => {
+        const wr = V().wr; if (won) { wr.pvpW = (wr.pvpW || 0) + 1; reward(25, 30); } else { wr.pvpL = (wr.pvpL || 0) + 1; reward(0, 10); } S.save(); return {};
+      }), 250);
+    } else if (live.match && live.match.ui) live.match.ui(m);
+  }
+  function endRemoteMatch() { if (live && live.match && live.match.ui) live.match.ui({ t: 'wr-end', winner: null, reason: 'disconnected' }); if (live) live.match = null; }
 
   function tips() {
     const close = TG.modal(h('div', null, h('div', { class: 'v-fact-e' }, pic('ui:logo', 72)), h('h2', null, L('Нутагт тавтай морил!', 'Welcome to the village!')),

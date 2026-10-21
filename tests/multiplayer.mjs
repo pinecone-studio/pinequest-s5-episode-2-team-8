@@ -31,7 +31,7 @@ async function player(name, look) {
     localStorage.clear();
     const p = TG.store.addProfile({ name, age: 9, avatar: '🐎' });
     TG.store.state.settings.screenLimit = 999; TG.store.state.settings.sound = false;
-    p.village = { tips: true, look, seeds: { carrot: 5 } };
+    p.village = { tips: true, look, seeds: { carrot: 5 }, xp: 200, coins: 600 };
     TG.go('village');
   }, name, look);
   await until(() => page.evaluate(() => TG._village.live() && TG._village.live().online), `${name} online`);
@@ -48,7 +48,7 @@ try {
   ok('players see each other (names and outfits)');
 
   await a.evaluate(() => TG._village.goTo({ x: 15, y: 13 }, null));
-  await until(() => b.evaluate(() => { const o = [...TG._village.live().others.values()][0]; return o && o.x === 15 && o.y === 13; }), 'B sees A move');
+  await until(() => b.evaluate(() => { const o = [...TG._village.live().others.values()][0]; return o && Math.abs(o.x - 15) < 0.01 && Math.abs(o.y - 13) < 0.01; }), 'B sees A move', 12000);
   ok('movement is shared live');
 
   await a.evaluate(() => TG._village.act('plant', 0, 'carrot'));
@@ -72,6 +72,38 @@ try {
   await a.evaluate(() => document.querySelector('.v-phrases .v-chip').click());
   await until(() => b.evaluate(() => { const o = [...TG._village.live().others.values()][0]; return o && o.bubble && /Сайн уу/.test(o.bubble.text); }), 'B sees A say hi');
   ok('preset phrases appear as speech bubbles');
+
+  await a.evaluate(() => TG._village.buyLot(2, 'red', 'gold'));
+  await until(() => b.evaluate(() => { const l = TG._village.lots()[2]; return l && l.n === 'Бат' && l.roof === 'red'; }), 'B sees A\'s new ger');
+  if ((await a.evaluate(() => TG.store.active().village.coins)) !== 400) throw new Error('buying a ger did not cost 200 coins');
+  await b.evaluate(() => TG._village.buyLot(2, 'blue', 'red'));
+  await sleep(400);
+  if ((await b.evaluate(() => TG._village.lots()[2].n)) !== 'Бат') throw new Error('a taken lot was overwritten');
+  ok('owning a ger syncs to everyone; taken lots are protected');
+
+  // live wrestling: A invites B, B accepts, both play exchanges until someone wins
+  const bId = await b.evaluate(() => TG.store.active().village.id);
+  await a.evaluate((id) => TG._village.invite(id), bId);
+  await until(() => b.evaluate(() => [...document.querySelectorAll('.modal .btn.primary')].some((x) => /Барилдъя/.test(x.textContent))), 'B gets the invitation');
+  await b.evaluate(() => [...document.querySelectorAll('.modal .btn.primary')].find((x) => /Барилдъя/.test(x.textContent)).click());
+  await until(() => a.evaluate(() => !!document.querySelector('.v-wrestle')) && b.evaluate(() => !!document.querySelector('.v-wrestle')), 'both see the match');
+  for (let round = 0; round < 15; round++) {
+    const over = await a.evaluate(() => !!document.querySelector('.v-wrestle .v-zasuul, .v-wrestle .row-btns'));
+    if (over) break;
+    for (const [pg, k] of [[a, 0], [b, 1]]) {
+      await until(() => pg.evaluate(() => { const m = document.querySelector('.v-wr-moves'); return (m && !m.classList.contains('hidden')) || !!document.querySelector('.v-wrestle .row-btns'); }), 'move buttons', 6000);
+      await pg.evaluate((k) => { const btns = document.querySelectorAll('.v-wr-moves .btn'); if (btns.length && !document.querySelector('.v-wrestle .row-btns')) { btns[(k + Math.floor(Math.random() * 3)) % 3].click(); setTimeout(() => { const go = document.querySelector('.v-wr-timing .btn'); if (go) go.click(); }, 120 + Math.random() * 300); } }, k);
+    }
+    await sleep(1600);
+  }
+  await until(() => a.evaluate(() => !!document.querySelector('.v-wrestle .row-btns')) && b.evaluate(() => !!document.querySelector('.v-wrestle .row-btns')), 'match finishes for both', 10000);
+  const recs = [await a.evaluate(() => TG.store.active().village.wr), await b.evaluate(() => TG.store.active().village.wr)];
+  if ((recs[0].pvpW + recs[1].pvpW) !== 1 || (recs[0].pvpL + recs[1].pvpL) !== 1) throw new Error('wrestling result not recorded exactly once: ' + JSON.stringify(recs));
+  ok('live wrestling match: invite, exchanges, one winner, records saved');
+  await a.screenshot({ path: join(process.env.SHOT_DIR || tmpdir(), 'village-wrestle.png') });
+  await a.evaluate(() => document.querySelectorAll('.modal-x').forEach((x) => x.click()));
+  await b.evaluate(() => document.querySelectorAll('.modal-x').forEach((x) => x.click()));
+  await sleep(300);
 
   await a.screenshot({ path: join(process.env.SHOT_DIR || tmpdir(), 'village-two-players.png') });
 

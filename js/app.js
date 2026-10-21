@@ -6,10 +6,24 @@
   let cleanupGame = null, screen = 'home', params = {}, homeAge = null, homePillar = 'all', parentUntil = 0;
 
   // ---------------- navigation ----------------
+  // smooth, direction-aware transitions between screens (View Transitions API with a CSS fallback)
+  const NAV_ORDER = ['home', 'village', 'satis', 'memories', 'parents'];
+  const calm = () => S.state.settings.reduceMotion || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function transition(kind, update) {
+    document.documentElement.dataset.vt = kind;
+    if (calm()) return update();
+    if (document.startViewTransition) { try { document.startViewTransition(update); return; } catch (e) { /* fall through */ } }
+    update();
+    const el = document.getElementById('app').firstElementChild;
+    if (el) { el.classList.remove('screen-in'); void el.offsetWidth; el.classList.add('screen-in'); }
+  }
   TG.go = function (name, p = {}) {
     if (cleanupGame) { try { cleanupGame(); } catch (e) { console.error(e); } cleanupGame = null; }
-    screen = name; params = p; render(); window.scrollTo(0, 0);
+    const a = NAV_ORDER.indexOf(screen), b = NAV_ORDER.indexOf(name);
+    screen = name; params = p;
+    transition(a >= 0 && b >= 0 && a !== b ? (b > a ? 'left' : 'right') : 'up', () => { render(); window.scrollTo(0, 0); });
   };
+  const soft = () => transition('fade', render); // tab / filter switches inside a screen
   function render() {
     const root = document.documentElement, st = S.state.settings;
     root.classList.toggle('big', !!st.bigText);
@@ -164,9 +178,9 @@
       villageBanner(),
       satisBanner(ag),
       h('div', { class: 'section-head' }, h('h3', null, L('Тоглоомууд', 'Games')), h('span', { class: 'count' }, games.length)),
-      ageTabs(ag, (a) => { homeAge = a; render(); }),
+      ageTabs(ag, (a) => { homeAge = a; soft(); }),
       h('div', { class: 'chips' }, [['all', '✨', { mn: 'Бүгд', en: 'All' }], ...Object.entries(TG.PILLARS).map(([k, v]) => [k, v.icon, v.name])].map(([k, icon, name]) =>
-        h('button', { class: 'chip' + (homePillar === k ? ' active' : ''), onclick: () => { homePillar = k; render(); } }, icon, ' ', tx(name)))),
+        h('button', { class: 'chip' + (homePillar === k ? ' active' : ''), onclick: () => { homePillar = k; soft(); } }, icon, ' ', tx(name)))),
       h('div', { class: 'grid' }, games.map(gameCard)),
       games.length ? null : h('p', { class: 'empty' }, L('Энэ ангилалд тоглоом алга. Өөр ангилал сонгоорой.', 'No games here yet. Try another filter.')),
     ]);
@@ -198,7 +212,7 @@
   }
 
   // ---------------- "Цэгцлэе!" satisfying puzzles ----------------
-  SCREENS.satis = () => TG.satisMap({ shell, ageTabs, ag: currentAge(), setAge: (a) => { homeAge = a; render(); }, rerender: render });
+  SCREENS.satis = () => TG.satisMap({ shell, ageTabs, ag: currentAge(), setAge: (a) => { homeAge = a; soft(); }, rerender: render });
   SCREENS.satisLevel = (p) => TG.satisLevel({ ...p, setCleanup: (fn) => { cleanupGame = fn; } });
   function satisBanner(ag) {
     const pr = TG.satisProgress(ag);
@@ -326,7 +340,7 @@
     return shell([
       h('h1', { class: 'page-title' }, L('Гэр бүлийн даалгавар', 'Family missions')),
       h('p', { class: 'lead' }, L('Дэлгэцээ унтраагаад, хамтдаа хий. Даалгавар бүр гэр бүлийн тэнгэрт +3 од нэмнэ.', 'Turn off the screen and do these together. Each mission adds +3 stars to your family sky.')),
-      ageTabs(ag, (a) => { homeAge = a; render(); }),
+      ageTabs(ag, (a) => { homeAge = a; soft(); }),
       h('div', { class: 'mission-list' }, list.map((m) => {
         const done = S.missionDoneToday(m.id), P = TG.PILLARS[m.pillar];
         return h('div', { class: 'mission-card' + (done ? ' done' : ''), style: { '--gc': P.color } },
@@ -636,4 +650,6 @@
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {}));
   }
   render();
+  // a shared invite link (…?room=CODE) opens the village directly once a child profile exists
+  if (new URLSearchParams(location.search).get('room') && S.state.profiles.length) TG.go('village');
 })(window.TG);
