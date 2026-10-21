@@ -163,6 +163,10 @@
         h('button', { class: 'btn ' + (done ? 'done' : 'primary'), disabled: done, onclick: () => completeMission(dm) }, done ? '✓' : L('Хийлээ!', 'Done!'))),
       villageBanner(),
       satisBanner(ag),
+      limitReached() ? h('section', { class: 'rest-notice' },
+        h('b', null, '🌞 ', L('Өнөөдрийн дэлгэцийн цаг дуучилаа', 'Today\'s screen time is over')),
+        h('p', null, L('Тоглоом зогсоод гэр бүлээрээ бодит амьдрал дээр хамт юм хийгээрэй. Том хүн нэмэлт цаг нэмж болно.', 'Stop playing and do something real together. A grown-up can add more time.')),
+        h('button', { class: 'btn primary', onclick: () => TG.go('missions') }, L('Гэр бүлийн даалгавар үзэх', 'See the family mission'))) : null,
       h('div', { class: 'section-head' }, h('h3', null, L('Тоглоомууд', 'Games')), h('span', { class: 'count' }, games.length)),
       ageTabs(ag, (a) => { homeAge = a; render(); }),
       h('div', { class: 'chips' }, [['all', '✨', { mn: 'Бүгд', en: 'All' }], ...Object.entries(TG.PILLARS).map(([k, v]) => [k, v.icon, v.name])].map(([k, icon, name]) =>
@@ -212,7 +216,13 @@
   }
 
   // ---------------- launcher ----------------
+  // The daily screen-time limit blocks *playing*, not the whole app: a child who
+  // has hit the limit is sent to the family mission instead of being locked out.
+  const limitReached = () => S.usageToday() >= S.state.settings.screenLimit * 60 + S.extraToday();
+  const restShownToday = () => S.state.restShown === S.dkey();
+
   function launch(g) {
+    if (limitReached()) { showTimeout(); return; }
     const p = S.active(), max = (g.maxPlayers || 4) - 1;
     let together = true; const picked = [];
     const body = h('div');
@@ -249,6 +259,11 @@
 
   // ---------------- play / result ----------------
   SCREENS.play = ({ g, players, together }) => {
+    if (limitReached()) {
+      setTimeout(showTimeout, 0);
+      return h('div', { class: 'play-screen' }, h('div', { class: 'stage' },
+        h('p', { class: 'prompt' }, L('Өнөөдрийн дэлгэцийн цаг дуучилаа. Гэр бүлээрээ бодит амьдрал дээр хамт хугацаа өнөөрөг!', 'Today\'s screen time is over. Spend time together in real life!'))));
+    }
     const hud = h('div', { class: 'hud' }), stage = h('div', { class: 'stage' });
     const t0 = Date.now(); let done = false;
     const ctx = {
@@ -597,12 +612,19 @@
   function showTimeout() {
     if (document.querySelector('.timeout-back')) return;
     const ag = currentAge(), m = TG.dailyMission(ag);
+    // Remember that the rest screen was seen today so a reload cannot trap the
+    // child on it again. The limit itself is still enforced when starting a game.
+    const ack = () => { S.state.restShown = S.dkey(); S.save(); el.remove(); };
     const el = h('div', { class: 'timeout-back' }, h('div', { class: 'timeout' },
       h('div', { class: 'big-emoji' }, '🌞'),
       h('h2', null, L('Дэлгэцээ амраах цаг боллоо!', 'Time for a screen break!')),
       h('p', null, L(`Өнөөдөр ${Math.round(S.usageToday() / 60)} минут тогллоо. Одоо нүдээ амрааж, гэр бүлтэйгээ бодит амьдрал дээр хамт юм хийцгээе.`, `You played ${Math.round(S.usageToday() / 60)} minutes today. Rest your eyes and do something real with your family.`)),
       h('div', { class: 'daily' }, h('div', { class: 'daily-e' }, m.emoji), h('div', { class: 'daily-body' }, h('b', null, tx(m.title)), h('p', null, tx(m.desc)))),
-      h('button', { class: 'btn ghost block', onclick: () => TG.parentGate(() => {
+      h('button', { class: 'btn primary block', 'data-rest': 'mission', onclick: () => { ack(); TG.go('missions'); } },
+        L('Гэр бүлээрээ хийе 🌿', 'Do it with my family 🌿')),
+      h('button', { class: 'btn ghost block', 'data-rest': 'close', onclick: () => { ack(); TG.go('home'); } },
+        L('Хаах', 'Close')),
+      h('button', { class: 'btn ghost block', 'data-rest': 'more', onclick: () => TG.parentGate(() => {
         S.state.extend = { d: S.dkey(), sec: S.extraToday() + 15 * 60 }; S.save(); el.remove(); TG.toast(L('+15 минут нэмэгдлээ', '+15 minutes added'));
       }) }, '🔒 ', L('Том хүн: +15 минут', 'Grown-up: +15 minutes'))));
     document.body.appendChild(el);
@@ -611,7 +633,7 @@
     if (document.visibilityState !== 'visible' || !S.state.profiles.length || document.querySelector('.timeout-back')) return;
     S.tick(5);
     const used = S.usageToday();
-    if (used >= S.state.settings.screenLimit * 60 + S.extraToday()) return showTimeout();
+    if (limitReached()) { if (!restShownToday()) showTimeout(); return; }
     if (used - lastNudge >= 20 * 60 && used > 60) {
       lastNudge = used;
       TG.toast(L('👀 20 минут боллоо. 20 секунд цонхоор хол харж нүдээ амраагаарай!', '👀 20 minutes! Look out the window for 20 seconds to rest your eyes.'));

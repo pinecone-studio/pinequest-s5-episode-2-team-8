@@ -123,6 +123,48 @@ try {
 
   await page.evaluate(() => TG.go('result', { g: TG.games.shagai, players: [{ name: 'A', emoji: '🐎', color: '#000' }, { name: 'B', emoji: '👩', color: '#111' }], together: true, res: { stars: 3, scores: [15, 9] } }));
   await sleep(250); await check('result screen', '.result');
+
+  // screen-time guardian: the rest screen must be dismissible, and the daily
+  // limit must still stop a new game from starting.
+  step = 'screen time rest screen';
+  const rest = await page.evaluate(async () => {
+    const nap = (ms) => new Promise((r) => setTimeout(r, ms));
+    TG.store.state.settings.screenLimit = 1;
+    TG.store.state.usage[TG.store.dkey()] = 999999;   // far past the limit
+    TG.go('home');
+    await nap(250);
+    const card = document.querySelector('.game-card');
+    if (!card) return { error: 'no game card on the home screen' };
+    card.click();
+    await nap(350);
+    const shown = !!document.querySelector('.timeout-back');
+    const close = document.querySelector('.timeout-back [data-rest="close"]');
+    const hasClose = !!close;
+    if (close) close.click();
+    await nap(350);
+    const dismissed = !document.querySelector('.timeout-back');
+    const onHome = !!document.querySelector('.shell');
+    // and the limit must still be enforced after dismissing
+    const card2 = document.querySelector('.game-card');
+    if (card2) card2.click();
+    await nap(350);
+    const blocked = !!document.querySelector('.timeout-back');
+    // clean up: remove the overlay and restore the limit
+    const el = document.querySelector('.timeout-back');
+    if (el) el.remove();
+    TG.store.state.settings.screenLimit = 999;
+    TG.store.state.usage[TG.store.dkey()] = 0;
+    return { shown, hasClose, dismissed, onHome, blocked };
+  });
+  if (rest.error) errors.push(`screen time rest screen: ${rest.error}`);
+  else {
+    if (!rest.shown) errors.push('screen time rest screen: the rest screen did not appear when the limit was reached');
+    if (!rest.hasClose) errors.push('screen time rest screen: the rest screen has no way to close it');
+    if (!rest.dismissed) errors.push('screen time rest screen: the rest screen could not be dismissed');
+    if (!rest.onHome) errors.push('screen time rest screen: dismissing the rest screen did not return to the home screen');
+    if (!rest.blocked) errors.push('screen time rest screen: a game could still be started after the limit was reached');
+  }
+
   console.log(`Checked 5 screens, the village, ${games.length} games x 2 modes, ${count} puzzle levels.`);
 } catch (e) {
   errors.push(`crashed during "${step}": ${e.message}`);
