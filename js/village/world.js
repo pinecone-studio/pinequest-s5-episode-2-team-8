@@ -17,12 +17,19 @@
   rect(15, 10, 20, 15, 's');
   rect(19, 5, 24, 5, 'p'); rect(25, 5, 26, 5, 'd');
   rect(4, 6, 4, 11, 'p'); rect(11, 6, 11, 11, 'p'); rect(22, 11, 23, 11, 'p');
-  // garden (fenced) with 24 shared plots
-  for (let x = 3; x <= 14; x++) { set(x, 15, 'f'); set(x, 23, 'f'); }
-  for (let y = 15; y <= 23; y++) { set(3, y, 'f'); set(14, y, 'f'); }
-  rect(9, 14, 10, 15, 'p');
+  // garden (fenced) with 36 shared plots in three blocks (52 with the south meadow)
+  for (let x = 3; x <= 14; x++) { set(x, 15, 'f'); set(x, 26, 'f'); }
+  for (let y = 15; y <= 26; y++) { set(3, y, 'f'); set(14, y, 'f'); }
+  rect(9, 14, 10, 15, 'p'); rect(9, 26, 10, 27, 'p'); // north gate to the main road, south gate to the ger lane
   const plots = [];
   for (const y of [17, 18, 20, 21]) for (let x = 5; x <= 10; x++) { set(x, y, 'o'); plots.push({ x, y }); }
+  // second field (south meadow) with 16 more plots, gate on the ger lane
+  for (let x = 3; x <= 14; x++) { set(x, 33, 'f'); set(x, 38, 'f'); }
+  for (let y = 33; y <= 38; y++) { set(3, y, 'f'); set(14, y, 'f'); }
+  rect(9, 33, 10, 33, 'p');
+  for (const y of [35, 36]) for (let x = 5; x <= 12; x++) { set(x, y, 'o'); plots.push({ x, y }); }
+  // garden's third block: pushed last so older plot numbers stay the same
+  for (const y of [23, 24]) for (let x = 5; x <= 10; x++) { set(x, y, 'o'); plots.push({ x, y }); }
   // sheep pasture
   for (let x = 22; x <= 33; x++) { set(x, 18, 'f'); set(x, 24, 'f'); }
   for (let y = 18; y <= 24; y++) { set(22, y, 'f'); set(33, y, 'f'); }
@@ -80,7 +87,7 @@
   const trees = [], flowers = [];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (g[y][x] === 'T') trees.push({ x, y, pine: hash(x, y) > 0.7 });
   const clearAround = (x, y) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const c = (g[y + dy] || [])[x + dx]; if (c && c !== 'g' && c !== 'T') return false; } return true; };
-  const reserved = (x, y) => (x >= 13 && x <= 22 && y >= 9 && y <= 16) || (y >= 2 && y <= 7 && x >= 2 && x <= 14) || (x >= 22 && x <= 33 && y >= 18 && y <= 25) || (x >= 3 && x <= 14 && y >= 14 && y <= 24) || (x >= 38 && y >= 3 && y <= 19) || (x >= 1 && x <= 41 && y >= 26 && y <= 33) || (x >= 43 && x <= 50 && y >= 22 && y <= 28) || (x >= 43 && x <= 54 && y >= 30 && y <= 37);
+  const reserved = (x, y) => (x >= 13 && x <= 22 && y >= 9 && y <= 16) || (y >= 2 && y <= 7 && x >= 2 && x <= 14) || (x >= 22 && x <= 33 && y >= 18 && y <= 25) || (x >= 3 && x <= 14 && y >= 14 && y <= 27) || (x >= 2 && x <= 15 && y >= 33 && y <= 38) || (x >= 38 && y >= 3 && y <= 19) || (x >= 1 && x <= 41 && y >= 26 && y <= 33) || (x >= 43 && x <= 50 && y >= 22 && y <= 28) || (x >= 43 && x <= 54 && y >= 30 && y <= 37);
   for (let y = 2; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
     if (g[y][x] !== 'g' || reserved(x, y) || !clearAround(x, y)) continue;
     const r = rnd();

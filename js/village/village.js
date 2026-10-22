@@ -314,12 +314,14 @@
       mini: h('canvas', { class: 'v-mini px-frame', width: WD.W * 3, height: WD.H * 3, 'aria-label': L('Газрын зураг', 'Map'), title: L('Газрын зураг: дарж томруулна', 'Map: tap to enlarge') }),
       run: h('button', { class: 'v-run px-frame', 'aria-label': L('Гүйх', 'Run'), 'aria-pressed': 'false', title: L('Гүйх (Shift)', 'Run (Shift)'), onclick: () => { if (!live) return; live.runLock = !live.runLock; live.els.run.classList.toggle('on', live.runLock); live.els.run.setAttribute('aria-pressed', String(live.runLock)); TG.sfx.tap(); } }, '🏃'),
       jump: h('button', { class: 'v-jump px-frame', 'aria-label': L('Үсрэх', 'Jump'), title: L('Үсрэх (Space)', 'Jump (Space)'), onclick: () => jump() }, '⤒'),
+      zoomIn: h('button', { class: 'v-zbtn px-frame', 'aria-label': L('Томруулах', 'Zoom in'), title: L('Томруулах (+)', 'Zoom in (+)'), onclick: () => zoom(1) }, '+'),
+      zoomOut: h('button', { class: 'v-zbtn px-frame', 'aria-label': L('Жижигрүүлэх', 'Zoom out'), title: L('Жижигрүүлэх (−)', 'Zoom out (−)'), onclick: () => zoom(-1) }, '−'),
       music: h('button', { class: 'v-round px-frame v-music hidden', 'aria-label': L('Хөгжим', 'Music'), onclick: () => { TG.music.toggle(); } }),
     };
     const root = h('div', { class: 'village' }, canvas,
       h('div', { class: 'v-top' },
         h('button', { class: 'v-back px-frame', 'aria-label': L('Цэс', 'Menu'), onclick: () => TG.openMenu() }, pic('ui:menu', 26)),
-        h('div', { class: 'v-mecol' }, els.me, els.loc, els.mini), h('div', { class: 'v-pills' }, els.coins, els.energy, els.water, els.season, els.net)),
+        h('div', { class: 'v-mecol' }, els.me, els.loc, els.mini, h('div', { class: 'v-zoom' }, els.zoomOut, els.zoomIn)), h('div', { class: 'v-pills' }, els.coins, els.energy, els.water, els.season, els.net)),
       els.race,
       h('div', { class: 'v-bottom' },
         h('div', { class: 'v-tools' },
@@ -346,11 +348,13 @@
       me: { x: Math.floor(sp.x + 0.5), y: Math.floor(sp.y + 0.82), px: sp.x, py: sp.y, vx: 0, vy: 0, path: [], dir: 0, moving: false, bubble: null, petPos: { x: sp.x, y: sp.y + 0.6 }, sent: { x: sp.x, y: sp.y }, netT: 0, stuck: 0 },
       season: TG.seasons.current().id, fx: [], cam: { x: sp.x, y: sp.y }, dog: { x: sp.x + 0.7, y: sp.y + 0.2, moving: false, flip: false, idle: 0, bubble: null, nextFact: performance.now() + 25000 }, keys: new Set(), others: new Map(), pending: null, floaters: [], match: null,
       sheep: [[24, 20], [28, 22], [31, 20], [26, 23]].map(([x, y], i) => ({ i, x, y, px: x, py: y, next: 1 + i, flip: false })),
-      raf: 0, last: performance.now(), view: {}, terrain: WD.renderStatic(), buf: PX.mk(1, 1), ctxTimer: 0, sel: null };
+      raf: 0, last: performance.now(), view: {}, zoom: v.zoom || 0, ptrs: new Map(), pinch: null, terrain: WD.renderStatic(), buf: PX.mk(1, 1), ctxTimer: 0, sel: null };
     resize();
     document.fonts && document.fonts.load('10px Tiny5', 'Нутаг ӨҮ');
     window.addEventListener('resize', resize);
     canvas.addEventListener('pointerdown', onTap);
+    canvas.addEventListener('pointermove', onPinch); ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) => canvas.addEventListener(ev, onPtrUp));
+    canvas.addEventListener('wheel', onWheel, { passive: false });
     window.addEventListener('keydown', onKey, true); window.addEventListener('keyup', onKeyUp, true); window.addEventListener('blur', clearKeys);
     root.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); }); // HUD buttons never keep focus
     live.miniBase = miniBase();
@@ -377,12 +381,38 @@
     const cssW = live.root.clientWidth || innerWidth, cssH = live.root.clientHeight || innerHeight, dpr = Math.min(3, devicePixelRatio || 1);
     const devW = Math.round(cssW * dpr), devH = Math.round(cssH * dpr);
     live.canvas.width = devW; live.canvas.height = devH;
-    let k = Math.max(1, Math.round(devW / ((cssW < 640 ? 11 : 24) * T)));
-    k = Math.max(k, Math.ceil(devW / (WD.W * T)), Math.ceil(devH / (WD.H * T)));
+    const base = Math.max(1, Math.round(devW / ((cssW < 640 ? 11 : 24) * T)));
+    // zoom = whole steps of the pixel scale (keeps the art crisp); never so far out that the map stops filling the screen
+    const minK = Math.max(1, Math.ceil(devW / (WD.W * T)), Math.ceil(devH / (WD.H * T))), maxK = Math.max(minK, base * 2);
+    const k = clamp(base + live.zoom, minK, maxK);
+    live.zoom = k - base;
+    live.els.zoomIn.disabled = k >= maxK; live.els.zoomOut.disabled = k <= minK;
     const bw = Math.ceil(devW / k), bh = Math.ceil(devH / k);
     live.buf.c.width = bw + 1; live.buf.c.height = bh + 1; live.buf.x.imageSmoothingEnabled = false; // +1 px so sub-pixel scrolling never shows an edge
     live.view = { devW, devH, dpr, k, bw, bh, cssW };
   }
+  function zoom(d) {
+    if (!live) return;
+    const k0 = live.view.k; live.zoom += d; resize();
+    if (live.view.k === k0) return;
+    V().zoom = live.zoom; S.save(); TG.sfx.tap();
+  }
+  function onWheel(e) {
+    e.preventDefault();
+    if (!live || Math.abs(e.deltaY) < 1) return;
+    const n = performance.now(); if (n - (live.wheelT || 0) < 120) return; // one step per wheel notch, not per trackpad tick
+    live.wheelT = n; zoom(e.deltaY < 0 ? 1 : -1);
+  }
+  // two-finger pinch on touch screens
+  const ptrDist = () => { const [a, b] = [...live.ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+  function onPinch(e) {
+    if (!live || !live.ptrs.has(e.pointerId)) return;
+    live.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!live.pinch || live.ptrs.size < 2) return;
+    const r = ptrDist() / live.pinch;
+    if (r > 1.25 || r < 0.8) { zoom(r > 1 ? 1 : -1); live.pinch = ptrDist(); }
+  }
+  function onPtrUp(e) { if (!live) return; live.ptrs.delete(e.pointerId); if (live.ptrs.size < 2) live.pinch = null; }
   /** Camera in art pixels, NOT rounded: rounding here made the view jump a whole art pixel (4–6 screen pixels). */
   function cam() {
     const { bw, bh } = live.view;
@@ -489,6 +519,10 @@
   function onTap(e) {
     if (!live) return;
     e.preventDefault();
+    if (e.pointerType === 'touch') {
+      live.ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (live.ptrs.size >= 2) { live.pinch = ptrDist(); live.me.path = []; live.pending = null; return; } // second finger: pinch, don't walk
+    }
     if (live.els.mini.classList.contains('big')) { live.els.mini.classList.remove('big'); return; }
     const r = live.canvas.getBoundingClientRect(), c = cam(), { k, devW } = live.view, sc = devW / r.width;
     const ax = ((e.clientX - r.left) * sc) / k + c.x, ay = ((e.clientY - r.top) * sc) / k + c.y;
@@ -523,6 +557,7 @@
     if (!live || document.querySelector('.modal-back') || (TG.scene && TG.scene.active()) || /INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '')) return;
     if (KEYS[e.code]) { e.preventDefault(); live.keys.add(KEYS[e.code]); return; }
     if (e.code === 'KeyB' && !e.repeat) { e.preventDefault(); openBasar(); return; }
+    if (['Equal', 'NumpadAdd', 'Minus', 'NumpadSubtract'].includes(e.code)) { e.preventDefault(); zoom(/Equal|Add/.test(e.code) ? 1 : -1); return; }
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { live.run = true; if (live.race) live.race.sprint = true; return; } // hold Shift to run (in a race: the horse's sprint)
     if (e.code === 'Space' || e.code === 'KeyE') {
       // Space jumps, E uses what is next to you; neither ever re-presses a focused HUD button
@@ -616,6 +651,11 @@
     m.vx += (tvx - m.vx) * a; m.vy += (tvy - m.vy) * a;
     if (Math.abs(m.vx) < 0.01) m.vx = 0; if (Math.abs(m.vy) < 0.01) m.vy = 0;
     // move with collision, sliding along walls; in the air you clear rocks, and walking into one hops over it
+    // feet overlapping a fence or wall (e.g. the map changed under a saved spot) would block every move: step back onto open ground
+    if (!freeAt(m.px + 0.5, m.py + 0.82, true)) {
+      const n = !WD.blocked(m.x, m.y) && freeAt(m.x + 0.5, m.y + 0.82, true) ? { x: m.x, y: m.y } : WD.nearestOpen(m.x, m.y, m.x, m.y);
+      if (n) { m.px = n.x; m.py = n.y; m.x = n.x; m.y = n.y; m.vx = m.vy = 0; }
+    }
     const ox = m.px, oy = m.py, pn = performance.now();
     let over = pn - (m.jt || -1e9) < JUMP_MS || !freeAt(m.px + 0.5, m.py + 0.82);
     const rockAhead = (nx, ny) => !over && (ix || iy) && !freeAt(nx, ny) && freeAt(nx, ny, true);

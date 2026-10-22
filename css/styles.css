@@ -1400,6 +1400,10 @@ html.rm ::view-transition-old(root), html.rm ::view-transition-new(root) { anima
 .v-jump { width: 56px; height: 56px; flex: none; display: grid; place-items: center; font-size: 24px; align-self: flex-end; }
 .v-key { position: absolute; top: 4px; right: 6px; font-family: 'Tiny5', monospace; font-size: 11px; color: #fff; background: #8a4b1f; padding: 0 4px; }
 .v-act { position: relative; }
+.v-zoom { display: flex; gap: 6px; align-self: flex-start; }
+.v-zbtn { width: 36px; height: 36px; display: grid; place-items: center; font: 800 22px/1 var(--font); color: var(--ink); transition: transform .1s; }
+.v-zbtn:active { transform: translateY(2px); }
+.v-zbtn:disabled { opacity: .45; cursor: default; transform: none; }
 @media (max-width: 480px) { .v-mini { width: 96px; } }
 
 .bichig { display: flex; flex-direction: column; gap: 14px; }

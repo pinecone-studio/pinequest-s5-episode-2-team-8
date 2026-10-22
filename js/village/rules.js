@@ -5,7 +5,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else { root.TG = root.TG || {}; root.TG.vrules = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
-  const W = 56, H = 40, PLOTS = 24, LOTS = 8, GER_PRICE = 200, GER_LEVEL = 2;
+  const W = 56, H = 40, PLOTS = 52, LOTS = 8, GER_PRICE = 200, GER_LEVEL = 2;
   const T = (mn, en) => ({ mn, en });
 
   // stage = seconds per growth stage. A crop needs water at each of its 3 stages.
