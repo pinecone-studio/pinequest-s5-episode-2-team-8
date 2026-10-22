@@ -387,6 +387,32 @@ try {
     await check(`screen ${screen}`, screen === 'about' ? '.about' : '.shell');
   }
 
+  // layout: the app must never scroll sideways. A 320px phone or a long profile
+  // name used to widen the top bar, and the music credit link was a 19px sliver.
+  step = 'layout: no sideways scrolling';
+  const sideways = async (where) => {
+    const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    if (over > 1) errors.push(`${where}: the page is ${over}px wider than the screen`);
+  };
+  await page.setViewport({ width: 320, height: 568 });
+  await page.evaluate(() => TG.go('village')); await sleep(250);
+  await sideways('layout on a 320px phone (Нутаг)');
+  await page.evaluate(() => { TG.store.active().name = 'Анандбаярын Эрдэнэчулуун'; TG.go('village'); });
+  await sleep(250);
+  await sideways('layout with a long profile name (Нутаг)');
+  for (const s of ['learn', 'achievements', 'passport', 'about']) {
+    await page.evaluate((s) => TG.go(s), s); await sleep(250);
+    await sideways(`layout on "${s}" at 320px`);
+  }
+  await page.setViewport({ width: 390, height: 844 });
+  await page.evaluate(() => { TG.store.active().name = 'Тест'; });
+  const creditLink = await page.evaluate(() => {
+    const a = document.querySelector('.about .credits a');
+    return a ? Math.round(a.getBoundingClientRect().height) : null;
+  });
+  if (creditLink === null) errors.push('layout: the about screen has no music credit source link');
+  else if (creditLink < 24) errors.push(`layout: the music credit link is only ${creditLink}px tall, expected at least 24px (WCAG 2.5.8)`);
+
   step = 'log out and log in with the picture password';
   await page.evaluate(() => { TG.store.state.loggedIn = false; TG.go('auth', { tab: 'login' }); }); await sleep(300);
   await page.evaluate(() => document.querySelector('.auth-prof').click()); await sleep(200);

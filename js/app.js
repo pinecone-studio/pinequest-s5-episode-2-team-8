@@ -26,12 +26,40 @@
     const el = document.getElementById('app').firstElementChild;
     if (el) { el.classList.remove('screen-in'); void el.offsetWidth; el.classList.add('screen-in'); }
   }
+  // The URL never changes, so nothing tells a screen reader that another screen
+  // opened. Name every screen, announce it politely and land the focus at the top
+  // of the new screen instead of leaving it on the button that was pressed.
+  const SCREEN_NAMES = {
+    auth: ['Нэвтрэх', 'Log in'], village: ['Нутаг', 'Nutag'], learn: ['Өв соёлын сургууль', 'Heritage school'],
+    lesson: ['Хичээл', 'Lesson'], bichig: ['Монгол бичгийн академи', 'Mongol script academy'],
+    passport: ['Аймгийн паспорт', 'Aimag passport'], aimag: ['Аймгийн аялал', 'Province journey'],
+    tree: ['Ургийн мод', 'Family tree'], achievements: ['Миний амжилтууд', 'My achievements'],
+    family: ['Эцэг эхийн самбар', 'Parent dashboard'], parents: ['Эцэг эхийн самбар', 'Parent dashboard'],
+    memories: ['Гэр бүлийн дурсамж', 'Family memory book'], about: ['Төслийн тухай', 'About the project'],
+    create: ['Дүр бүтээх', 'Create your character'],
+  };
+  let liveRegion = null;
+  function announceScreen() {
+    const pair = SCREEN_NAMES[screen];
+    if (!pair) return;                                   // screens that own their own focus stay quiet
+    if (!liveRegion) { liveRegion = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' }); document.body.appendChild(liveRegion); }
+    const text = L(pair[0], pair[1]);
+    liveRegion.textContent = '';
+    setTimeout(() => { liveRegion.textContent = text; }, 50);
+  }
+  function focusScreen() {
+    const main = document.getElementById('main');
+    if (!main) return;                                   // the auth screen owns its own focus
+    try { main.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  }
   TG.go = function (name, p = {}) {
     if (cleanup) { try { cleanup(); } catch (e) { console.error(e); } cleanup = null; }
     if (name === 'home') name = 'village';
     const a = NAV_ORDER.indexOf(screen), b = NAV_ORDER.indexOf(name);
     screen = name; params = p;
-    transition(a >= 0 && b >= 0 && a !== b ? (b > a ? 'left' : 'right') : 'up', () => { render(); window.scrollTo(0, 0); });
+    transition(a >= 0 && b >= 0 && a !== b ? (b > a ? 'left' : 'right') : 'up', () => {
+      render(); window.scrollTo(0, 0); announceScreen(); focusScreen();
+    });
   };
   const setCleanup = (fn) => { cleanup = fn; };
   const loggedIn = () => S.state.profiles.length && S.state.loggedIn && S.active();
@@ -52,23 +80,28 @@
   function topbar() {
     const p = S.active();
     return h('header', { class: 'topbar' },
-      h('button', { class: 'brand', onclick: () => TG.go('village'), 'aria-label': 'Нутаг' }, h('span', { class: 'logo', html: LOGO }), h('span', null, 'Naadamy')),
+      h('button', { class: 'brand', onclick: () => TG.go('village'), 'aria-label': L('Нутаг', 'Nutag') }, h('span', { class: 'logo', html: LOGO }), h('span', { class: 'bn' }, 'Naadamy')),
       h('div', { class: 'top-actions' },
-        h('button', { class: 'lang-btn', onclick: toggleLang, 'aria-label': 'language' }, TG.icon('globe'), S.state.lang === 'mn' ? 'EN' : 'МН'),
-        p && h('button', { class: 'profile-chip', onclick: () => TG.openMenu() }, h('span', { class: 'av' }, p.avatar), h('span', { class: 'pn' }, p.name))));
+        h('button', { class: 'lang-btn', onclick: toggleLang, 'aria-label': L('Хэл солих', 'Switch language') }, TG.icon('globe'), S.state.lang === 'mn' ? 'EN' : 'МН'),
+        p && h('button', { class: 'profile-chip', onclick: () => TG.openMenu(), 'aria-label': L(`${p.name}-н профайл`, `${p.name}'s profile`) }, h('span', { class: 'av' }, p.avatar), h('span', { class: 'pn' }, p.name))));
   }
   const NAV = [['village', 'sprout', 'Нутаг', 'Nutag'], ['learn', 'book', 'Сурах', 'Learn'], ['basar', 'heart', 'Басар', 'Basar'], ['achievements', 'sparkles', 'Амжилт', 'Badges'], ['family', 'users', 'Гэр бүл', 'Family']];
   function bottomNav() {
-    return h('nav', { class: 'bottom-nav' }, NAV.map(([id, icon, mn, en]) => h('button', {
-      class: 'nav-btn' + (screen === id || (id === 'learn' && (screen === 'lesson' || screen === 'bichig')) ? ' active' : ''),
-      onclick: () => (id === 'family' ? openFamily() : id === 'basar' ? TG.basar.open() : TG.go(id)),
-    }, id === 'basar' ? TG.basar.face(0, 26) : TG.icon(icon, 'ni'), h('span', null, L(mn, en)))));
+    return h('nav', { class: 'bottom-nav', 'aria-label': L('Үндсэн цэс', 'Main menu') }, NAV.map(([id, icon, mn, en]) => {
+      const on = screen === id || (id === 'learn' && (screen === 'lesson' || screen === 'bichig'));
+      return h('button', {
+        class: 'nav-btn' + (on ? ' active' : ''), 'aria-current': on ? 'page' : null,
+        onclick: () => (id === 'family' ? openFamily() : id === 'basar' ? TG.basar.open() : TG.go(id)),
+      }, id === 'basar' ? TG.basar.face(0, 26) : TG.icon(icon, 'ni'), h('span', null, L(mn, en)));
+    }));
   }
   function openFamily() {
     if (Date.now() < parentUntil) return TG.go('family');
     TG.parentGate(() => { parentUntil = Date.now() + 10 * 60 * 1000; TG.go('family'); });
   }
-  const shell = (children) => h('div', { class: 'shell' }, topbar(), h('main', { class: 'page' }, children), bottomNav());
+  const shell = (children) => h('div', { class: 'shell' },
+    h('a', { class: 'skip-link', href: '#main' }, L('Үндсэн хэсэг рүү очих', 'Skip to content')),
+    topbar(), h('main', { class: 'page', id: 'main', tabindex: '-1' }, children), bottomNav());
 
   /** Main menu (village ☰ button and the profile chip). */
   TG.openMenu = () => {
@@ -183,7 +216,7 @@
     }
     tab === 'login' && S.state.profiles.length ? login() : register();
     return h('div', { class: 'auth' }, authScene(),
-      h('button', { class: 'lang-btn corner', onclick: toggleLang }, S.state.lang === 'mn' ? 'EN' : 'МН'),
+      h('button', { class: 'lang-btn corner', onclick: toggleLang, 'aria-label': L('Хэл солих', 'Switch language') }, S.state.lang === 'mn' ? 'EN' : 'МН'),
       h('div', { class: 'auth-wrap' },
         h('div', { class: 'auth-brand' }, h('div', { class: 'ob-logo', html: LOGO }), h('h1', null, 'Naadamy'),
           h('p', null, L('Монгол өв соёлоо гэр бүл, найзуудтайгаа хамт сурцгаая', 'Learn Mongolian heritage together with family and friends'))),
@@ -342,7 +375,7 @@
     const close = TG.modal(h('div', { class: 'form' },
       h('h2', null, '🎙️ ', L('Шинэ дурсамж', 'New memory')),
       h('label', null, L('Асуулт', 'Question')),
-      h('div', { class: 'prompt-row' }, promptEl, h('button', { class: 'icon-btn', 'aria-label': 'another question', onclick: () => { pi = (pi + 1) % TG.STORY_PROMPTS.length; drawPrompt(); } }, '🎲')),
+      h('div', { class: 'prompt-row' }, promptEl, h('button', { class: 'icon-btn', 'aria-label': L('Өөр асуулт', 'Another question'), onclick: () => { pi = (pi + 1) % TG.STORY_PROMPTS.length; drawPrompt(); } }, '🎲')),
       h('label', null, L('Хэн ярьж байна?', 'Who is telling?')), whoRow,
       canRec ? h('div', null, h('label', null, L('Дуу хоолой', 'Voice')), h('div', { class: 'rec-row' }, recBtn, recStatus), preview) : null,
       h('label', null, L('Тэмдэглэл', 'Notes')), text,
@@ -397,14 +430,14 @@
         TG.music && TG.music.available ? h('label', { class: 'switch-row' }, h('span', null, L('🎵 Арын хөгжим', '🎵 Background music')),
           h('input', { type: 'checkbox', class: 'switch', checked: st.settings.music !== false, onchange: () => { TG.music.toggle(); render(); } })) : null,
         TG.music && TG.music.available ? h('div', { class: 'range-row', style: { padding: '8px 0' } }, h('span', null, L('Хөгжмийн дуу', 'Music volume')),
-          h('input', { type: 'range', min: 0, max: 100, step: 5, value: Math.round((typeof st.settings.musicVolume === 'number' ? st.settings.musicVolume : 0.35) * 100), 'aria-label': 'music volume', oninput: (e) => TG.music.setVolume(e.target.value / 100) })) : null,
+          h('input', { type: 'range', min: 0, max: 100, step: 5, value: Math.round((typeof st.settings.musicVolume === 'number' ? st.settings.musicVolume : 0.35) * 100), 'aria-label': L('Хөгжмийн дууны хэмжээ', 'Music volume'), oninput: (e) => TG.music.setVolume(e.target.value / 100) })) : null,
         toggle('bigText', L('🔠 Том үсэг', '🔠 Large text')),
         toggle('reduceMotion', L('🐢 Хөдөлгөөн багасгах', '🐢 Reduce motion')),
         h('label', { class: 'switch-row' }, h('span', null, '🌐 ', L('Хэл', 'Language')), h('button', { class: 'btn ghost sm', onclick: toggleLang }, S.state.lang === 'mn' ? 'Монгол → English' : 'English → Монгол'))),
       h('section', { class: 'card' },
         h('h3', null, '👨‍👩‍👧‍👦 ', L('Гэр бүлийн гишүүд', 'Family members')),
         h('div', { class: 'fam-chips' }, st.family.map((f) => h('span', { class: 'fam-chip static' }, f.emoji, ' ', famName(f),
-          st.family.length > 1 ? h('button', { class: 'x', 'aria-label': 'remove', onclick: () => { st.family = st.family.filter((x) => x !== f); S.save(); render(); } }, '×') : null))),
+          st.family.length > 1 ? h('button', { class: 'x', 'aria-label': L(`${famName(f)}-г хасах`, `Remove ${famName(f)}`), onclick: () => { st.family = st.family.filter((x) => x !== f); S.save(); render(); } }, '×') : null))),
         h('div', { class: 'add-fam' }, emojiRow, h('div', { class: 'inline' }, famName2, h('button', { class: 'btn primary', onclick: () => {
           const n = famName2.value.trim(); if (!n) return;
           st.family.push({ id: 'f' + Date.now(), name: n, emoji: famEmoji }); S.save(); render();
@@ -431,7 +464,7 @@
     const P = (icon, color, title, items) => h('div', { class: 'pillar-card', style: { '--c': color } }, h('div', { class: 'pc-icon' }, icon), h('h3', null, title), h('ul', null, items.map((i) => h('li', null, i))));
     const price = (name, amount, per, items, cls, note) => h('div', { class: 'price-card ' + (cls || '') }, h('h3', null, name), h('div', { class: 'amount' }, amount, h('small', null, per)), h('ul', null, items.map((i) => h('li', null, '✓ ', i))), note ? h('p', { class: 'pnote' }, note) : null);
     return h('div', { class: 'about' },
-      h('button', { class: 'icon-btn back-fixed', onclick: back, 'aria-label': 'back' }, TG.icon('arrowLeft')),
+      h('button', { class: 'icon-btn back-fixed', onclick: back, 'aria-label': L('Буцах', 'Back') }, TG.icon('arrowLeft')),
       h('header', { class: 'about-hero' },
         h('div', { class: 'badge-pill light' }, 'Pinequest · Fine-Tune for the Future'),
         h('h1', null, 'Naadamy'),
@@ -471,8 +504,7 @@
         h('div', { class: 'price-grid' },
           price(L('Үнэгүй', 'Free'), '0₮', L(' / үүрд', ' / forever'), [L('Нутаг, бүх хичээл', 'Nutag and every lesson'), L('Басарын офлайн мэдлэг', 'Basar’s offline knowledge'), L('Дурсамжийн ном', 'Memory book')]),
           price(L('Гэр бүл', 'Family'), '3,900₮', L(' / сар', ' / month'), [L('Басар AI ухаалаг горим', 'Basar smart AI mode'), L('Сар бүр шинэ өв соёлын хичээл', 'New heritage lessons every month'), L('Хэвлэх гэр бүлийн картууд', 'Printable family activity cards')], 'featured',
-            L('💛 Нэг гэр бүлийн төлбөр = хөдөөгийн нэг хүүхдэд үнэгүй эрх', '💛 One family plan = free access for one rural child')),
-          price(L('Сургууль, сум', 'Schools & soums'), '0₮', L(' / үнэгүй', ' / free'), [L('Төрийн сургууль, цэцэрлэг', 'Public schools & kindergartens'), L('Багшийн самбар', 'Teacher dashboard'), L('Ангиараа Нутагт хамт тоглох', 'Whole class plays together in Nutag')]))),
+            L('💛 Нэг гэр бүлийн төлбөр = хөдөөгийн нэг хүүхдэд үнэгүй эрх', '💛 One family plan = free access for one rural child')))),
       h('section', null,
         h('h2', null, L('Цаашдын төлөвлөгөө', 'Roadmap')),
         h('ol', { class: 'roadmap' },
