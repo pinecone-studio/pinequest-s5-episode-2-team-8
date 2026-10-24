@@ -177,6 +177,24 @@ try {
   await d.close();
   ok('a profile with a wrong pass can start fresh with a new id');
 
+  // parent backup code: only with the child's pass, 8 pictures, a new one replaces the old
+  const backup = (body) => fetch(`http://127.0.0.1:${port}/api/backup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+  if ((await backup({ id: 'pass-test-1' })).ok) throw new Error('a backup code was given without a pass');
+  const code1 = await backup({ id: 'pass-test-1', pass: first.pass, name: 'P' });
+  if (!code1.ok || !/^\d{4}$/.test(code1.code)) throw new Error('bad backup code: ' + JSON.stringify(code1));
+  await a.evaluate(() => TG.go('family'));
+  await until(() => a.evaluate(() => !!document.querySelector('.gate-q')), 'grown-up check');
+  await a.evaluate(() => { const [x, y] = document.querySelector('.gate-q').textContent.match(/\d+/g).map(Number); document.querySelector('.gate-input').value = x * y; document.querySelector('.gate .btn.primary').click(); });
+  await until(() => a.evaluate(() => [...document.querySelectorAll('.child-row .link-btn')].some((x) => /Нөөц код/.test(x.textContent))), 'A sees the backup code button');
+  await a.evaluate(() => [...document.querySelectorAll('.child-row .link-btn')].find((x) => /Нөөц код/.test(x.textContent)).click());
+  const makeBtn = () => [...document.querySelectorAll('.modal .btn.primary')].find((x) => /Код гаргах/.test(x.textContent));
+  await until(() => a.evaluate(`!!(${makeBtn})()`), 'backup window');
+  await a.evaluate(`(${makeBtn})().click()`);
+  await until(() => a.evaluate(() => document.querySelectorAll('.modal .backup-code span').length === 4 && /^\d{4}$/.test((TG.store.active().village.backup || {}).code) && TG.store.active().village.backup.name === 'Бат'), 'A gets a 4-digit code with the name, kept with the profile');
+  await a.evaluate(() => { document.querySelectorAll('.modal-x').forEach((x) => x.click()); TG.go('village'); });
+  await until(() => a.evaluate(() => TG._village.live() && TG._village.live().online), 'A back in the village');
+  ok('a parent can make a name + 4-digit backup code (only with the pass), kept on the device');
+
   // chat flood guard: only one phrase a second gets through
   const spam = new WebSocket(`ws://127.0.0.1:${port}/ws`), heard = [];
   await new Promise((r) => (spam.onopen = r));

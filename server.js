@@ -35,6 +35,7 @@ function serveStatic(req, res) {
     return res.end(JSON.stringify({ naadamy: true, rooms: rooms.size, players: c.total, nutag: c.nutag, urls: lanIPs().map((ip) => `http://${ip}:${actualPort}/`) }));
   }
   if (url.pathname === '/api/basar') return basar.handle(req, res);
+  if (url.pathname === '/api/backup') return backupCode(req, res);
   let p = decodeURIComponent(url.pathname);
   if (BLOCKED.some((re) => re.test(p))) { res.writeHead(404); return res.end(); }
   if (p.endsWith('/')) p += 'index.html';
@@ -91,7 +92,12 @@ const SECRET = process.env.PASS_SECRET || (() => {
   return s;
 })();
 const claimed = new Set(); // ids that already have a pass
-try { for (const id of JSON.parse(fs.readFileSync(PLAYERS_FILE, 'utf8')).ids || []) claimed.add(id); } catch { /* no players yet */ }
+const codes = new Map(), codeOf = new Map(); // backup code hash -> id, and id -> its current hash
+try {
+  const saved = JSON.parse(fs.readFileSync(PLAYERS_FILE, 'utf8'));
+  for (const id of saved.ids || []) claimed.add(id);
+  for (const [hash, id] of Object.entries(saved.codes || {})) { codes.set(hash, id); codeOf.set(id, hash); }
+} catch { /* no players yet */ }
 let playersDirty = false;
 const passFor = (id) => crypto.createHmac('sha256', SECRET).update('pass:' + id).digest('base64url');
 function passOk(id, pass) {
@@ -101,10 +107,44 @@ function passOk(id, pass) {
 function persistPlayers() {
   if (!playersDirty) return;
   playersDirty = false;
-  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(PLAYERS_FILE + '.tmp', JSON.stringify({ ids: [...claimed] })); fs.renameSync(PLAYERS_FILE + '.tmp', PLAYERS_FILE); }
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(PLAYERS_FILE + '.tmp', JSON.stringify({ ids: [...claimed], codes: Object.fromEntries(codes) })); fs.renameSync(PLAYERS_FILE + '.tmp', PLAYERS_FILE); }
   catch (e) { console.error('Could not save the players:', e.message); }
 }
 setInterval(persistPlayers, 5000).unref();
+
+// ---------------------------------------------------------------- parent backup codes
+// A parent can get a 4-digit code for each child. The child's name plus that code, typed in on a new device, brings back
+// the child's id and pass (so their ger is theirs again). Needing the name too makes a random guess almost useless.
+// The server keeps only a keyed hash of name + code, never the code itself.
+const backupName = (s) => cleanName(s).toLowerCase();
+const codeHash = (name, code) => crypto.createHmac('sha256', SECRET).update('code:' + backupName(name) + ':' + code).digest('base64url');
+const recentTries = new Map(); // 'kind:ip' -> times of recent requests, so codes can't be guessed or farmed
+function allowTry(key, max, ms) {
+  const t = Date.now(), list = (recentTries.get(key) || []).filter((x) => t - x < ms);
+  if (list.length >= max) { recentTries.set(key, list); return false; }
+  list.push(t); recentTries.set(key, list); return true;
+}
+setInterval(() => { const t = Date.now(); for (const [key, list] of recentTries) if (!list.some((x) => t - x < 600000)) recentTries.delete(key); }, 60000).unref();
+function readJson(req, res, fn) {
+  const send = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
+  if (req.method !== 'POST') return send(405, { ok: false });
+  let raw = '';
+  req.on('data', (d) => { raw += d; if (raw.length > 2000) req.destroy(); });
+  req.on('end', () => { let body; try { body = JSON.parse(raw); } catch { return send(400, { ok: false, why: 'bad-request' }); } fn(body, send, (req.socket && req.socket.remoteAddress) || '?'); });
+}
+/** POST /api/backup { id, pass, name } -> { ok, code: '0000'..'9999' }. A new code replaces the old one. */
+function backupCode(req, res) {
+  readJson(req, res, (b, send, ip) => {
+    if (!allowTry('backup:' + ip, 10, 600000)) return send(429, { ok: false, why: 'busy' });
+    const id = String(b.id || '');
+    if (!claimed.has(id) || !passOk(id, b.pass)) return send(403, { ok: false, why: 'bad-pass' });
+    let code, hash;
+    do { code = String(crypto.randomInt(10000)).padStart(4, '0'); hash = codeHash(b.name, code); } while (codes.has(hash));
+    if (codeOf.has(id)) codes.delete(codeOf.get(id));
+    codes.set(hash, id); codeOf.set(id, hash); playersDirty = true;
+    send(200, { ok: true, code });
+  });
+}
 process.on('SIGINT', () => { persist(); persistPlayers(); process.exit(0); });
 process.on('SIGTERM', () => { persist(); persistPlayers(); process.exit(0); });
 

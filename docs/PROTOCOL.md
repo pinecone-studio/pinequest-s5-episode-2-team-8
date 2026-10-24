@@ -31,6 +31,14 @@ So nobody can join as someone else (and take over their ger):
 
 The web client keeps the pass in the profile (`localStorage`). On `bad-pass` it offers "play alone" or "start fresh" (a new id).
 
+## Parent backup code (HTTP)
+
+`POST /api/backup` with JSON `{ id, pass, name }` → `{ ok: true, code: '0000'…'9999' }`. Restoring (planned: `POST /api/restore`) will need the child's **name and** this code, so a random 4-digit guess is almost useless.
+- Needs the id's valid pass, or it gets `403 { ok: false, why: 'bad-pass' }`.
+- A new code replaces the id's old one. The server keeps only an HMAC of name + code (name trimmed and lower-cased; `data/players.json`, `codes`), never the code itself.
+- At most 10 requests per 10 minutes per IP (`429 { why: 'busy' }`).
+- The web client keeps a copy in the child's profile, shown only in the parent dashboard (behind the grown-up check).
+
 ## Connection flow
 
 1. Open the WebSocket.
