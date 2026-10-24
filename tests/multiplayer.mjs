@@ -48,6 +48,8 @@ try {
   const a = await player('Бат', { deel: 'red', hat: 'mongol', pet: 'lamb' });
   const b = await player('Сарнай', { deel: 'green', hat: 'flower', neck: 'khadag' });
   ok('both players connected to the server');
+  if (!/^[\w-]{40,}$/.test(await a.evaluate(() => TG.store.active().village.pass || ''))) throw new Error('the profile did not keep its village pass');
+  ok('the server gives each new player a pass, kept with the profile');
 
   await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Сарнай')), 'A sees B');
   await until(() => b.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Бат' && o.look.hat === 'mongol')), 'B sees A with hat');
@@ -150,6 +152,71 @@ try {
   await until(() => a.evaluate(() => ![...TG._village.live().others.values()].some((o) => o.name === 'Сүнс')), 'the silent player is removed', 6000);
   ghost.destroy();
   ok('a player whose connection silently died is removed automatically');
+
+  // player pass: an id that has a pass only gets in with it
+  const rawJoin = (id, pass) => new Promise((res) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', room: 'PASS', id, pass, name: 'P', look: {}, x: 20, y: 13 }));
+    ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t === 'welcome' || m.t === 'error') { ws.close(); res(m); } };
+  });
+  const first = await rawJoin('pass-test-1');
+  if (first.t !== 'welcome' || !first.pass) throw new Error('a new id did not get a pass');
+  if ((await rawJoin('pass-test-1')).why !== 'bad-pass') throw new Error('a taken id got in without its pass');
+  if ((await rawJoin('pass-test-1', first.pass.replace(/^./, (c) => (c === 'A' ? 'B' : 'A')))).why !== 'bad-pass') throw new Error('a taken id got in with a wrong pass');
+  if ((await rawJoin('pass-test-1', first.pass)).t !== 'welcome') throw new Error('the right pass was refused');
+  const aId = await a.evaluate(() => TG.store.active().village.id);
+  if ((await rawJoin(aId)).why !== 'bad-pass') throw new Error("someone could join as another player's id");
+  ok('a taken id only gets in with its own pass');
+
+  // a profile whose pass doesn't match is told so, and can start fresh with a new id
+  const d = await player('Дорж', { deel: 'teal' }, 'PASS');
+  await d.evaluate((id) => { const v = TG.store.active().village; v.id = id; v.pass = 'wrong'; TG.store.save(); TG.go('village'); }, aId);
+  await until(() => d.evaluate(() => [...document.querySelectorAll('.modal .btn.primary')].some((x) => /Шинээр эхлэх/.test(x.textContent))), 'D is told the pass does not match');
+  await d.evaluate(() => [...document.querySelectorAll('.modal .btn.primary')].find((x) => /Шинээр эхлэх/.test(x.textContent)).click());
+  await until(() => d.evaluate((id) => TG._village.live().online && TG.store.active().village.id !== id && !!TG.store.active().village.pass, aId), 'D starts fresh and gets online');
+  await d.close();
+  ok('a profile with a wrong pass can start fresh with a new id');
+
+  // parent backup code: only with the child's pass, 8 pictures, a new one replaces the old
+  const backup = (body) => fetch(`http://127.0.0.1:${port}/api/backup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+  if ((await backup({ id: 'pass-test-1' })).ok) throw new Error('a backup code was given without a pass');
+  const code1 = await backup({ id: 'pass-test-1', pass: first.pass, name: 'P' });
+  if (!code1.ok || !/^\d{4}$/.test(code1.code)) throw new Error('bad backup code: ' + JSON.stringify(code1));
+  await a.evaluate(() => TG.go('family'));
+  await until(() => a.evaluate(() => !!document.querySelector('.gate-q')), 'grown-up check');
+  await a.evaluate(() => { const [x, y] = document.querySelector('.gate-q').textContent.match(/\d+/g).map(Number); document.querySelector('.gate-input').value = x * y; document.querySelector('.gate .btn.primary').click(); });
+  await until(() => a.evaluate(() => [...document.querySelectorAll('.child-row .link-btn')].some((x) => /Нөөц код/.test(x.textContent))), 'A sees the backup code button');
+  await a.evaluate(() => [...document.querySelectorAll('.child-row .link-btn')].find((x) => /Нөөц код/.test(x.textContent)).click());
+  const makeBtn = () => [...document.querySelectorAll('.modal .btn.primary')].find((x) => /Код гаргах/.test(x.textContent));
+  await until(() => a.evaluate(`!!(${makeBtn})()`), 'backup window');
+  await a.evaluate(`(${makeBtn})().click()`);
+  await until(() => a.evaluate(() => document.querySelectorAll('.modal .backup-code span').length === 4 && /^\d{4}$/.test((TG.store.active().village.backup || {}).code) && TG.store.active().village.backup.name === 'Бат'), 'A gets a 4-digit code with the name, kept with the profile');
+  await a.evaluate(() => { document.querySelectorAll('.modal-x').forEach((x) => x.click()); TG.go('village'); });
+  await until(() => a.evaluate(() => TG._village.live() && TG._village.live().online), 'A back in the village');
+  ok('a parent can make a name + 4-digit backup code (only with the pass), kept on the device');
+
+  // restore: name + code bring the id back, the old code stops working
+  const restore = (body) => fetch(`http://127.0.0.1:${port}/api/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+  if ((await restore({ name: 'P', code: code1.code === '0000' ? '0001' : '0000' })).why !== 'wrong') throw new Error('a wrong code was accepted');
+  if ((await restore({ name: 'Q', code: code1.code })).why !== 'wrong') throw new Error('the right code with the wrong name was accepted');
+  const back = await restore({ name: ' p ', code: code1.code });
+  if (!back.ok || back.id !== 'pass-test-1' || back.pass !== first.pass || !/^\d{4}$/.test(back.code)) throw new Error('restore with name + code failed: ' + JSON.stringify(back));
+  if ((await restore({ name: 'P', code: code1.code })).ok && back.code !== code1.code) throw new Error('the old code still works after a restore');
+  ok('name + code restore the id and pass; wrong name or code is refused; the old code stops working');
+
+  // the same from the parent dashboard on a "new device": a fresh profile gets Бат's village back
+  const aCode = await a.evaluate(() => TG.store.active().village.backup.code);
+  const e = await player('Бат', { deel: 'red' }, 'NEWDEV');
+  await e.evaluate(() => TG.go('family'));
+  await until(() => e.evaluate(() => !!document.querySelector('.gate-q')), 'grown-up check on the new device');
+  await e.evaluate(() => { const [x, y] = document.querySelector('.gate-q').textContent.match(/\d+/g).map(Number); document.querySelector('.gate-input').value = x * y; document.querySelector('.gate .btn.primary').click(); });
+  await until(() => e.evaluate(() => [...document.querySelectorAll('.btn.ghost.block')].some((x) => /Кодоор сэргээх/.test(x.textContent))), 'restore button');
+  await e.evaluate(() => [...document.querySelectorAll('.btn.ghost.block')].find((x) => /Кодоор сэргээх/.test(x.textContent)).click());
+  await until(() => e.evaluate(() => !!document.querySelector('.backup-input')), 'restore window');
+  await e.evaluate((c) => { document.querySelector('.backup-input').value = c; [...document.querySelectorAll('.modal .btn.primary')].find((x) => /Сэргээх/.test(x.textContent)).click(); }, aCode);
+  await until(() => e.evaluate((id) => TG.store.active().village.id === id && !!TG.store.active().village.pass, aId), "the new device has Бат's id back");
+  await e.close();
+  ok('a parent restores a child on a new device from the dashboard');
 
   // chat flood guard: only one phrase a second gets through
   const spam = new WebSocket(`ws://127.0.0.1:${port}/ws`), heard = [];

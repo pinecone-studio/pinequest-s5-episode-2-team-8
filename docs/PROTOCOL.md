@@ -1,7 +1,7 @@
 # Naadamy multiplayer protocol
 
 This is how a game client (the web game today, maybe a Unity client later) talks to `server.js`.
-It describes protocol **version 4** (`VERSION` in `js/village/rules.js`).
+It describes protocol **version 5** (`VERSION` in `js/village/rules.js`).
 
 - Transport: WebSocket at `ws://<host>/ws` (`wss://` on HTTPS).
 - Every message is one JSON text frame: an object with a `t` (type) field.
@@ -22,6 +22,29 @@ Shared lists (phrases, emotes, looks, roofs, moves…) live in `js/village/rules
 
 `nutag` = players in the main room `NUTAG`. `urls` = LAN addresses that other devices can open.
 
+## Player pass
+
+So nobody can join as someone else (and take over their ger):
+1. The first time an id joins, the server remembers it as taken (`data/players.json`) and sends its pass in `welcome.pass`.
+2. The pass is an HMAC-SHA256 of the id, signed with a server secret: the `PASS_SECRET` env var, or else a random one made on first start and kept in `data/secret`. Changing the secret makes every pass invalid.
+3. From then on, `join` with that id must include the pass, or it gets `error: 'bad-pass'`.
+
+The web client keeps the pass in the profile (`localStorage`). On `bad-pass` it offers "play alone" or "start fresh" (a new id).
+
+## Parent backup code (HTTP)
+
+`POST /api/backup` with JSON `{ id, pass, name }` → `{ ok: true, code: '0000'…'9999' }`. Restoring needs the child's **name and** this code, so a random 4-digit guess is almost useless.
+- Needs the id's valid pass, or it gets `403 { ok: false, why: 'bad-pass' }`.
+- A new code replaces the id's old one. The server keeps only an HMAC of name + code (name trimmed and lower-cased; `data/players.json`, `codes`), never the code itself.
+- At most 10 requests per 10 minutes per IP (`429 { why: 'busy' }`).
+- The web client keeps a copy in the child's profile, shown only in the parent dashboard (behind the grown-up check).
+
+`POST /api/restore` with JSON `{ name, code }` → `{ ok: true, id, pass, code }`. The client puts `id` and `pass` into the profile; `code` is a **fresh** code (the one just used stops working).
+- `403 { why: 'wrong' }`: the name + code don't match. The name is compared trimmed and lower-cased.
+- `429 { why: 'busy' }`: over 5 tries per 10 minutes from this IP, or over 50 wrong tries per hour across the server.
+- `429 { why: 'locked' }`: 10 wrong tries for this name in the last 24 hours. It unlocks by itself after 24 hours, or right away when a new code is made for that name.
+- These counters are kept in memory, so a server restart clears them.
+
 ## Connection flow
 
 1. Open the WebSocket.
@@ -33,7 +56,8 @@ Shared lists (phrases, emotes, looks, roofs, moves…) live in `js/village/rules
 
 | Name | Meaning |
 |---|---|
-| `id` | Player id, `[\w-]{4,24}`. The client makes it once per profile (`'u' + random + time`) and keeps it. **Not checked by the server:** anyone can claim any id. |
+| `id` | Player id, `[\w-]{4,24}`. The client makes it once per profile (`'u' + random + time`) and keeps it. Protected by its `pass` (see Player pass). |
+| `pass` | The id's pass from the server (43 chars, base64url). Keep it with the profile and send it with every `join`. |
 | `room` | Room code, `^[A-Z0-9]{3,8}$` (upper-cased by the server). `NUTAG` is the main village. |
 | `x`, `y` | Position in tiles (the map is `W` 56 × `H` 40), 2 decimals. Clamped to `0.5 … W-2` / `0.5 … H-2`. |
 | `dir` | Facing direction: `0` down, `1` left, `2` right, `3` up. |
@@ -48,7 +72,7 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 ### Presence
 | `t` | Fields | What it does |
 |---|---|---|
-| `join` | `room, id, name, look, lvl, x, y, dir` | Enter a room. Joining again on the same connection leaves the old room first. If the same `id` is already in the room, the older connection gets `replaced` and is closed. |
+| `join` | `room, id, pass, name, look, lvl, x, y, dir` | Enter a room. `pass` may be left out only the very first time an id joins. Joining again on the same connection leaves the old room first. If the same `id` is already in the room, the older connection gets `replaced` and is closed. |
 | `move` | `x, y, dir` | New position. The web client sends it about 10 times a second while moving. |
 | `jump` | (none) | Shows a jump to others. At most once every 300 ms; extra ones are dropped. |
 | `look` | `look, lvl` | Changed outfit or level. |
@@ -89,7 +113,7 @@ Lots are the only thing the server saves (`data/rooms.json`, every 5 s and on sh
 
 | `t` | Fields | When |
 |---|---|---|
-| `welcome` | `v, now, room, players[], lots[], chat[]` | Reply to `join`. `v` = server protocol version (compare with your `VERSION`), `now` = server clock in ms, `players` = everyone else as `pub`, `lots` = `LOTS` entries (`null` or a lot), `chat` = the room's recent log lines, oldest first (see Chat log). |
+| `welcome` | `v, now, room, players[], lots[], chat[], pass` | Reply to `join`. `pass` = this id's pass; save it if it's new. `v` = server protocol version (compare with your `VERSION`), `now` = server clock in ms, `players` = everyone else as `pub`, `lots` = `LOTS` entries (`null` or a lot), `chat` = the room's recent log lines, oldest first (see Chat log). |
 | `join` | `p` | Someone entered your room (`pub`). |
 | `leave` | `id` | Someone left or dropped. |
 | `move` | `id, x, y, dir` | Someone moved. |
@@ -105,7 +129,7 @@ Lots are the only thing the server saves (`data/rooms.json`, every 5 s and on sh
 | `wr-result` | `ma, pa, mb, pb, r, score` | Round result. `r` = `1` a wins, `-1` b wins, `0` draw. `score` = `{ a, b }`. |
 | `wr-end` | `winner, reason` | Match over. `reason`: `''` (normal) or `'left'` (the other quit or dropped). |
 | `deny` | `act, why` | Request refused. `act: 'ger'` → `why: 'taken' \| 'own'`; `act: 'wr'` → `why: 'busy'`. |
-| `error` | `why` | `why: 'bad-join'` = bad room code or id. A refused `join` doesn't change anything: a player already in a room stays there. |
+| `error` | `why` | `why: 'bad-join'` = bad room code or id. `why: 'bad-pass'` = this id already has a pass and the one sent is missing or wrong; don't retry with the same id and pass. A refused `join` doesn't change anything: a player already in a room stays there. |
 | `replaced` | (none) | Your id joined from another tab or device; this connection will close. Don't reconnect. |
 
 ### Wrestling rules (server side)
@@ -116,7 +140,7 @@ Lots are the only thing the server saves (`data/rooms.json`, every 5 s and on sh
 ## What the server trusts the client with
 
 Good to know before building on this:
-- **Identity:** `id` and `name` are taken as sent. There is no check that a player is who they say they are.
+- **Identity:** an `id` is protected by its pass. Whoever joins first with a never-seen id gets its pass. `name` is taken as sent.
 - **Position:** clamped to the map only; no speed or wall checks.
 - **Progress:** XP, coins, items, dairy, fishing and quests are all on the device (`localStorage`). The server never sees them, apart from `lvl`.
 - The server is the source of truth only for **who is in the room, ger lots and wrestling matches**.

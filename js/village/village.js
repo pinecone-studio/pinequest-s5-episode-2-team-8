@@ -10,10 +10,11 @@
   const coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
 
   // ================================================================ saved data (per child profile)
+  const newId = () => 'u' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
   function V() {
     const p = S.active(); if (!p) return null;
     const v = p.village || (p.village = {});
-    const d = { id: 'u' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4), xp: 0, coins: 40, produce: {}, milkT: {}, fish: {},
+    const d = { id: newId(), pass: null, xp: 0, coins: 40, produce: {}, milkT: {}, fish: {},
       owned: ['deel-blue'], look: { deel: 'blue', skin: R.SKINS[0], hat: null, face: null, neck: null, pet: null }, rod: 1, room: 'NUTAG',
       quests: { d: '', list: [] }, pets: {}, seen: {}, tips: false, pos: null,
       energy: 100, ate: {}, lots: [], wr: { best: 0, champ: 0, wins: 0, losses: 0, pvpW: 0, pvpL: 0, techs: {} }, ovoo: '', horse: { coat: 'bay', races: 0, wins: 0, top5: 0, best: 0, dist: 0 } };
@@ -197,7 +198,7 @@
       const v = V(), url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + location.pathname.replace(/[^/]*$/, '') + 'ws';
       let ws; try { ws = new WebSocket(url); } catch (e) { return setStatus('solo'); }
       this.ws = ws;
-      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir })); };
+      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, pass: v.pass, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir })); };
       ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } if (live) handle(m); };
       ws.onclose = () => {
         if (this.ws !== ws) return;
@@ -217,6 +218,7 @@
     const v = V();
     switch (m.t) {
       case 'welcome':
+        if (m.pass && m.pass !== v.pass) { v.pass = m.pass; S.save(); } // the server's proof that this id is ours: kept with the profile
         live.online = true; live.offset = m.now - Date.now(); live.lots = m.lots || new Array(R.LOTS).fill(null); live.room = m.room; live.serverV = m.v;
         live.others.clear(); (m.players || []).forEach(addOther);
         live.chat = (m.chat || []).slice(-CHAT_KEEP); renderChat();
@@ -248,8 +250,20 @@
         TG.toast('🔁 ' + L('Энэ профайл өөр цонх эсвэл төхөөрөмж дээр нээгдлээ. Тэнд үргэлжлүүлэн тоглоорой.', 'This profile was opened in another tab or device. Keep playing there.'));
         break;
       case 'deny': deny(m.why); break;
-      case 'error': TG.toast(L('Өрөөнд нэвтэрч чадсангүй.', 'Could not join the room.')); break;
+      case 'error':
+        if (m.why === 'bad-pass') { passProblem(); break; }
+        TG.toast(L('Өрөөнд нэвтэрч чадсангүй.', 'Could not join the room.')); break;
     }
+  }
+  /** The server doesn't recognise this profile's pass (its data was copied or partly lost): play alone, restore with the parent's code, or start fresh. */
+  function passProblem() {
+    net.close(); live.online = false; live.others.clear(); setStatus('solo');
+    const close = TG.modal(h('div', { class: 'center' }, h('h2', null, L('Нутагт нэвтэрч чадсангүй', "Couldn't enter the village")),
+      h('p', { class: 'muted' }, L('Энэ профайлын нутгийн түлхүүр таарсангүй. Шинээр эхэлбэл найзуудтайгаа дахин тоглоно, гэхдээ хуучин гэр чинь энд байхгүй болно.', "This profile's village key doesn't match. Start fresh to play with friends again, but your old ger won't come with you.")),
+      h('div', { class: 'row-btns' },
+        h('button', { class: 'btn', onclick: () => close() }, L('Ганцаараа тоглох', 'Play alone')),
+        h('button', { class: 'btn', onclick: () => { close(); TG.openRestore(); } }, '🔑 ', L('Кодоор сэргээх', 'Restore with a code')),
+        h('button', { class: 'btn primary', onclick: () => { const v = V(); v.id = newId(); v.pass = null; S.save(); close(); net.rejoin(); } }, L('Шинээр эхлэх', 'Start fresh')))), { cls: 'v-modal' });
   }
   function addOther(p) { live.others.set(p.id, { ...p, px: p.x, py: p.y, petPos: { x: p.x, y: p.y + 0.6 }, bubble: null, moving: false }); }
   function setStatus(s) { if (live) { live.status = s; hud(); } }

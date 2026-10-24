@@ -68,6 +68,63 @@
     if (Date.now() < parentUntil) return TG.go('family');
     TG.parentGate(() => { parentUntil = Date.now() + 10 * 60 * 1000; TG.go('family'); });
   }
+  /** A child's backup code: their name + 4 digits bring their village id (and ger) back on a new device.
+      The server keeps only a hash; this device keeps a copy so the parent can see it again (only behind the parent check). */
+  function backupModal(p) {
+    const v = p.village || {}, body = h('div', { class: 'center' });
+    const make = async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        const r = await fetch('api/backup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: v.id, pass: v.pass, name: p.name }) });
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.why);
+        v.backup = { name: p.name, code: j.code }; S.save();
+      } catch (err) { TG.toast(L('Сервертэй холбогдож чадсангүй. Дараа дахин оролдоорой.', "Couldn't reach the server. Please try again later.")); }
+      show();
+    };
+    const show = () => body.replaceChildren(
+      h('h2', null, '🔑 ', L('Нөөц код', 'Backup code'), ' · ', p.name),
+      !v.pass ? h('p', { class: 'muted' }, L('Эхлээд Нутагт нэг удаа онлайн тоглоорой. Дараа нь нөөц код гаргаж болно.', 'Play online in the village once first. Then you can make a backup code.'))
+        : v.backup && v.backup.code ? [h('div', { class: 'backup-name' }, L('Нэр', 'Name'), ': ', h('b', null, v.backup.name)),
+          h('div', { class: 'backup-code' }, [...v.backup.code].map((d) => h('span', null, d))),
+          h('p', { class: 'muted' }, L('Нэр болон 4 оронтой кодыг бичиж аваарай. Шинэ төхөөрөмж дээр хүүхдийнхээ гэрийг буцааж авахад хоёулаа хэрэгтэй. Шинэ код гаргавал хуучин нь ажиллахаа болино.', "Write down the name and the 4-digit code. You'll need both to get your child's ger back on a new device. Making a new code stops the old one working."))]
+        : h('p', { class: 'muted' }, L('Утас солих эсвэл өгөгдөл устах үед хүүхдийнхээ гэрийг буцааж авахын тулд нөөц код гаргаарай.', "Make a backup code so you can get your child's ger back after changing phones or losing data.")),
+      v.pass ? h('button', { class: 'btn primary', onclick: make }, v.backup && v.backup.code ? L('Шинэ код гаргах', 'Make a new code') : L('Код гаргах', 'Make a code')) : null);
+    show();
+    TG.modal(body);
+  }
+  /** On a new device: the child's name + backup code bring their old village id (and ger) back into profile p.
+      The server answers with a fresh code, so the old one stops working. */
+  function restoreModal(p) {
+    const name = h('input', { class: 'input', maxlength: 16, value: p.name, 'aria-label': L('Хүүхдийн нэр', "Child's name") });
+    const code = h('input', { class: 'input backup-input', type: 'text', inputmode: 'numeric', maxlength: 4, placeholder: '0000', autocomplete: 'off', 'aria-label': L('4 оронтой код', '4-digit code') });
+    const err = h('div', { class: 'err' });
+    const why = { wrong: L('Нэр эсвэл код буруу байна.', 'The name or code is wrong.'), busy: L('Хэт олон оролдлого. Түр хүлээгээд дахин оролдоорой.', 'Too many tries. Please wait a little and try again.'),
+      locked: L('Энэ нэр дээр хэт олон буруу оролдлого хийгдлээ. 24 цагийн дараа дахин оролдоорой.', 'Too many wrong tries for this name. Please try again in 24 hours.') };
+    const go = async (e) => {
+      const btn = e.currentTarget; btn.disabled = true; err.textContent = '';
+      try {
+        const r = await fetch('api/restore', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: name.value, code: code.value.trim() }) });
+        const j = await r.json();
+        if (!j.ok) { err.textContent = why[j.why] || why.wrong; btn.disabled = false; return; }
+        const v = p.village || (p.village = {});
+        v.id = j.id; v.pass = j.pass; v.backup = { name: name.value.trim(), code: j.code }; S.save();
+        close(); TG.toast('✅ ' + L(`${p.name}-ийн Нутаг сэргээгдлээ!`, `${p.name}'s village is back!`)); backupModal(p);
+      } catch (er) { err.textContent = L('Сервертэй холбогдож чадсангүй.', "Couldn't reach the server."); btn.disabled = false; }
+    };
+    const close = TG.modal(h('div', { class: 'center' },
+      h('h2', null, '🔑 ', L('Кодоор сэргээх', 'Restore with a code'), ' · ', p.avatar, ' ', p.name),
+      h('p', { class: 'muted' }, L('Хуучин төхөөрөмж дээр гаргасан хүүхдийн нэр болон 4 оронтой кодыг оруулаарай. Хүүхдийн хуучин гэр энэ профайлд буцаж ирнэ.', "Enter the child's name and the 4-digit code from the old device. The child's old ger comes back to this profile.")),
+      h('label', { class: 'age-label' }, L('Хүүхдийн нэр', "Child's name")), name,
+      h('label', { class: 'age-label' }, L('4 оронтой код', '4-digit code')), code, err,
+      h('button', { class: 'btn primary block', onclick: go }, L('Сэргээх', 'Restore'))));
+  }
+  /** From the village ("couldn't enter"): grown-up check, then the parent dashboard with the restore window open. */
+  TG.openRestore = () => {
+    const go = () => { TG.go('family'); setTimeout(() => restoreModal(S.active()), 0); };
+    if (Date.now() < parentUntil) return go();
+    TG.parentGate(() => { parentUntil = Date.now() + 10 * 60 * 1000; go(); });
+  };
   const shell = (children) => h('div', { class: 'shell' }, topbar(), h('main', { class: 'page' }, children), bottomNav());
 
   /** Main menu (the village profile card and the profile chip). */
@@ -416,9 +473,11 @@
       h('section', { class: 'card' },
         h('h3', null, '🧒 ', L('Хүүхдүүд', 'Children')),
         profiles.map((p) => h('div', { class: 'child-row' }, h('span', null, p.avatar, ' ', h('b', null, p.name), ` · ${p.age} ${L('нас', 'yrs')}`, p.code ? ' · 🔒' : ''),
-          h('span', null, p.code ? h('button', { class: 'link-btn', onclick: () => { p.code = null; S.save(); render(); TG.toast(L('Нууц зураг арилгалаа', 'Picture password removed')); } }, L('Нууц зураг арилгах', 'Remove password')) : null,
+          h('span', null, h('button', { class: 'link-btn', onclick: () => backupModal(p) }, '🔑 ', L('Нөөц код', 'Backup code')),
+            p.code ? h('button', { class: 'link-btn', onclick: () => { p.code = null; S.save(); render(); TG.toast(L('Нууц зураг арилгалаа', 'Picture password removed')); } }, L('Нууц зураг арилгах', 'Remove password')) : null,
             profiles.length > 1 ? h('button', { class: 'link-btn danger', onclick: () => { S.removeProfile(p.id); render(); } }, L('Хасах', 'Remove')) : null))),
-        h('button', { class: 'btn ghost block', onclick: () => { S.state.loggedIn = false; S.save(); TG.go('auth', { tab: 'register' }); } }, '+ ', L('Хүүхэд нэмэх', 'Add a child'))),
+        h('button', { class: 'btn ghost block', onclick: () => { S.state.loggedIn = false; S.save(); TG.go('auth', { tab: 'register' }); } }, '+ ', L('Хүүхэд нэмэх', 'Add a child')),
+        h('button', { class: 'btn ghost block', onclick: () => restoreModal(child) }, '🔑 ', L('Кодоор сэргээх', 'Restore with a code'))),
       h('button', { class: 'about-link', onclick: () => TG.go('about') }, h('span', null, L('Бидний зорилго, шударга үнэ', 'Our mission & fair pricing')), TG.icon('chevronRight')),
       h('button', { class: 'link-btn danger center-block', onclick: () => {
         const close = TG.modal(h('div', { class: 'center' }, h('h2', null, L('Бүх өгөгдлийг устгах уу?', 'Erase all data?')), h('p', { class: 'muted' }, L('Профайл, ахиц, тохиргоо устна.', 'Profiles, progress and settings will be erased.')),
