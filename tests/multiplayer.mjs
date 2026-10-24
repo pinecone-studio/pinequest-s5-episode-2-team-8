@@ -48,6 +48,8 @@ try {
   const a = await player('Бат', { deel: 'red', hat: 'mongol', pet: 'lamb' });
   const b = await player('Сарнай', { deel: 'green', hat: 'flower', neck: 'khadag' });
   ok('both players connected to the server');
+  if (!/^[\w-]{40,}$/.test(await a.evaluate(() => TG.store.active().village.pass || ''))) throw new Error('the profile did not keep its village pass');
+  ok('the server gives each new player a pass, kept with the profile');
 
   await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Сарнай')), 'A sees B');
   await until(() => b.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Бат' && o.look.hat === 'mongol')), 'B sees A with hat');
@@ -150,6 +152,30 @@ try {
   await until(() => a.evaluate(() => ![...TG._village.live().others.values()].some((o) => o.name === 'Сүнс')), 'the silent player is removed', 6000);
   ghost.destroy();
   ok('a player whose connection silently died is removed automatically');
+
+  // player pass: an id that has a pass only gets in with it
+  const rawJoin = (id, pass) => new Promise((res) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`);
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'join', room: 'PASS', id, pass, name: 'P', look: {}, x: 20, y: 13 }));
+    ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t === 'welcome' || m.t === 'error') { ws.close(); res(m); } };
+  });
+  const first = await rawJoin('pass-test-1');
+  if (first.t !== 'welcome' || !first.pass) throw new Error('a new id did not get a pass');
+  if ((await rawJoin('pass-test-1')).why !== 'bad-pass') throw new Error('a taken id got in without its pass');
+  if ((await rawJoin('pass-test-1', first.pass.replace(/^./, (c) => (c === 'A' ? 'B' : 'A')))).why !== 'bad-pass') throw new Error('a taken id got in with a wrong pass');
+  if ((await rawJoin('pass-test-1', first.pass)).t !== 'welcome') throw new Error('the right pass was refused');
+  const aId = await a.evaluate(() => TG.store.active().village.id);
+  if ((await rawJoin(aId)).why !== 'bad-pass') throw new Error("someone could join as another player's id");
+  ok('a taken id only gets in with its own pass');
+
+  // a profile whose pass doesn't match is told so, and can start fresh with a new id
+  const d = await player('Дорж', { deel: 'teal' }, 'PASS');
+  await d.evaluate((id) => { const v = TG.store.active().village; v.id = id; v.pass = 'wrong'; TG.store.save(); TG.go('village'); }, aId);
+  await until(() => d.evaluate(() => [...document.querySelectorAll('.modal .btn.primary')].some((x) => /Шинээр эхлэх/.test(x.textContent))), 'D is told the pass does not match');
+  await d.evaluate(() => [...document.querySelectorAll('.modal .btn.primary')].find((x) => /Шинээр эхлэх/.test(x.textContent)).click());
+  await until(() => d.evaluate((id) => TG._village.live().online && TG.store.active().village.id !== id && !!TG.store.active().village.pass, aId), 'D starts fresh and gets online');
+  await d.close();
+  ok('a profile with a wrong pass can start fresh with a new id');
 
   // chat flood guard: only one phrase a second gets through
   const spam = new WebSocket(`ws://127.0.0.1:${port}/ws`), heard = [];

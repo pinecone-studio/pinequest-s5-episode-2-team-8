@@ -78,8 +78,35 @@ function persist() {
   catch (e) { console.error('Could not save the rooms:', e.message); }
 }
 setInterval(persist, 5000).unref();
-process.on('SIGINT', () => { persist(); process.exit(0); });
-process.on('SIGTERM', () => { persist(); process.exit(0); });
+
+// ---------------------------------------------------------------- player passes
+// The first time an id joins, the server signs it with a secret only it knows and hands that pass back.
+// From then on that id only gets in with its pass, so nobody can join as someone else (and take over their ger).
+const SECRET_FILE = path.join(DATA_DIR, 'secret'), PLAYERS_FILE = path.join(DATA_DIR, 'players.json');
+const SECRET = process.env.PASS_SECRET || (() => {
+  try { const s = fs.readFileSync(SECRET_FILE, 'utf8').trim(); if (s.length >= 32) return s; } catch { /* first start */ }
+  const s = crypto.randomBytes(32).toString('hex');
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(SECRET_FILE, s, { mode: 0o600 }); }
+  catch (e) { console.error('Could not save the pass secret (passes will change on restart):', e.message); }
+  return s;
+})();
+const claimed = new Set(); // ids that already have a pass
+try { for (const id of JSON.parse(fs.readFileSync(PLAYERS_FILE, 'utf8')).ids || []) claimed.add(id); } catch { /* no players yet */ }
+let playersDirty = false;
+const passFor = (id) => crypto.createHmac('sha256', SECRET).update('pass:' + id).digest('base64url');
+function passOk(id, pass) {
+  const want = Buffer.from(passFor(id)), got = Buffer.from(String(pass || ''));
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
+function persistPlayers() {
+  if (!playersDirty) return;
+  playersDirty = false;
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(PLAYERS_FILE + '.tmp', JSON.stringify({ ids: [...claimed] })); fs.renameSync(PLAYERS_FILE + '.tmp', PLAYERS_FILE); }
+  catch (e) { console.error('Could not save the players:', e.message); }
+}
+setInterval(persistPlayers, 5000).unref();
+process.on('SIGINT', () => { persist(); persistPlayers(); process.exit(0); });
+process.on('SIGTERM', () => { persist(); persistPlayers(); process.exit(0); });
 
 // ---------------------------------------------------------------- minimal WebSocket (RFC 6455)
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -158,6 +185,8 @@ function onMessage(conn, text) {
     const code = String(m.room || '').toUpperCase();
     const id = String(m.id || '').slice(0, 24);
     if (!R.ROOM_RE.test(code) || !/^[\w-]{4,24}$/.test(id)) return conn.send({ t: 'error', why: 'bad-join' });
+    if (claimed.has(id)) { if (!passOk(id, m.pass)) return conn.send({ t: 'error', why: 'bad-pass' }); }
+    else { claimed.add(id); playersDirty = true; } // first visit: this id gets its pass in welcome
     leave(conn);
     const r = room(code);
     const old = r.players.get(id);
@@ -165,7 +194,7 @@ function onMessage(conn, text) {
     const p = { id, conn, name: cleanName(m.name), look: R.cleanLook(m.look), lvl: num(m.lvl, 1, 99), x: numf(m.x, 0.5, R.W - 2), y: numf(m.y, 0.5, R.H - 2), dir: num(m.dir, 0, 3) };
     r.players.set(id, p); conn.player = p; conn.room = r;
     if (!old) logChat(r, { k: 'join', id, n: p.name }); // a second tab of the same player is not a new arrival
-    conn.send({ t: 'welcome', v: R.VERSION, now: t, room: code, players: [...r.players.values()].filter((x) => x !== p).map(pub), lots: r.lots, chat: r.chat });
+    conn.send({ t: 'welcome', v: R.VERSION, now: t, room: code, players: [...r.players.values()].filter((x) => x !== p).map(pub), lots: r.lots, chat: r.chat, pass: passFor(id) });
     broadcast(r, { t: 'join', p: pub(p) }, conn);
     census();
     return;
