@@ -255,13 +255,14 @@
         TG.toast(L('Өрөөнд нэвтэрч чадсангүй.', 'Could not join the room.')); break;
     }
   }
-  /** The server doesn't recognise this profile's pass (its data was copied or partly lost): play alone, or start fresh with a new village id. */
+  /** The server doesn't recognise this profile's pass (its data was copied or partly lost): play alone, restore with the parent's code, or start fresh. */
   function passProblem() {
     net.close(); live.online = false; live.others.clear(); setStatus('solo');
     const close = TG.modal(h('div', { class: 'center' }, h('h2', null, L('Нутагт нэвтэрч чадсангүй', "Couldn't enter the village")),
       h('p', { class: 'muted' }, L('Энэ профайлын нутгийн түлхүүр таарсангүй. Шинээр эхэлбэл найзуудтайгаа дахин тоглоно, гэхдээ хуучин гэр чинь энд байхгүй болно.', "This profile's village key doesn't match. Start fresh to play with friends again, but your old ger won't come with you.")),
       h('div', { class: 'row-btns' },
         h('button', { class: 'btn', onclick: () => close() }, L('Ганцаараа тоглох', 'Play alone')),
+        h('button', { class: 'btn', onclick: () => { close(); TG.openRestore(); } }, '🔑 ', L('Кодоор сэргээх', 'Restore with a code')),
         h('button', { class: 'btn primary', onclick: () => { const v = V(); v.id = newId(); v.pass = null; S.save(); close(); net.rejoin(); } }, L('Шинээр эхлэх', 'Start fresh')))), { cls: 'v-modal' });
   }
   function addOther(p) { live.others.set(p.id, { ...p, px: p.x, py: p.y, petPos: { x: p.x, y: p.y + 0.6 }, bubble: null, moving: false }); }

@@ -33,11 +33,17 @@ The web client keeps the pass in the profile (`localStorage`). On `bad-pass` it 
 
 ## Parent backup code (HTTP)
 
-`POST /api/backup` with JSON `{ id, pass, name }` → `{ ok: true, code: '0000'…'9999' }`. Restoring (planned: `POST /api/restore`) will need the child's **name and** this code, so a random 4-digit guess is almost useless.
+`POST /api/backup` with JSON `{ id, pass, name }` → `{ ok: true, code: '0000'…'9999' }`. Restoring needs the child's **name and** this code, so a random 4-digit guess is almost useless.
 - Needs the id's valid pass, or it gets `403 { ok: false, why: 'bad-pass' }`.
 - A new code replaces the id's old one. The server keeps only an HMAC of name + code (name trimmed and lower-cased; `data/players.json`, `codes`), never the code itself.
 - At most 10 requests per 10 minutes per IP (`429 { why: 'busy' }`).
 - The web client keeps a copy in the child's profile, shown only in the parent dashboard (behind the grown-up check).
+
+`POST /api/restore` with JSON `{ name, code }` → `{ ok: true, id, pass, code }`. The client puts `id` and `pass` into the profile; `code` is a **fresh** code (the one just used stops working).
+- `403 { why: 'wrong' }`: the name + code don't match. The name is compared trimmed and lower-cased.
+- `429 { why: 'busy' }`: over 5 tries per 10 minutes from this IP, or over 50 wrong tries per hour across the server.
+- `429 { why: 'locked' }`: 10 wrong tries for this name in the last 24 hours. It unlocks by itself after 24 hours, or right away when a new code is made for that name.
+- These counters are kept in memory, so a server restart clears them.
 
 ## Connection flow
 

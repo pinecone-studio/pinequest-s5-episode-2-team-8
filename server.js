@@ -36,6 +36,7 @@ function serveStatic(req, res) {
   }
   if (url.pathname === '/api/basar') return basar.handle(req, res);
   if (url.pathname === '/api/backup') return backupCode(req, res);
+  if (url.pathname === '/api/restore') return restoreCode(req, res);
   let p = decodeURIComponent(url.pathname);
   if (BLOCKED.some((re) => re.test(p))) { res.writeHead(404); return res.end(); }
   if (p.endsWith('/')) p += 'index.html';
@@ -124,7 +125,11 @@ function allowTry(key, max, ms) {
   if (list.length >= max) { recentTries.set(key, list); return false; }
   list.push(t); recentTries.set(key, list); return true;
 }
-setInterval(() => { const t = Date.now(); for (const [key, list] of recentTries) if (!list.some((x) => t - x < 600000)) recentTries.delete(key); }, 60000).unref();
+setInterval(() => {
+  const t = Date.now();
+  for (const [key, list] of recentTries) if (!list.some((x) => t - x < 600000)) recentTries.delete(key);
+  for (const [key, list] of nameFails) if (!list.some((x) => t - x < DAY)) nameFails.delete(key);
+}, 60000).unref();
 function readJson(req, res, fn) {
   const send = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(obj)); };
   if (req.method !== 'POST') return send(405, { ok: false });
@@ -138,11 +143,33 @@ function backupCode(req, res) {
     if (!allowTry('backup:' + ip, 10, 600000)) return send(429, { ok: false, why: 'busy' });
     const id = String(b.id || '');
     if (!claimed.has(id) || !passOk(id, b.pass)) return send(403, { ok: false, why: 'bad-pass' });
-    let code, hash;
-    do { code = String(crypto.randomInt(10000)).padStart(4, '0'); hash = codeHash(b.name, code); } while (codes.has(hash));
-    if (codeOf.has(id)) codes.delete(codeOf.get(id));
-    codes.set(hash, id); codeOf.set(id, hash); playersDirty = true;
-    send(200, { ok: true, code });
+    send(200, { ok: true, code: newCode(id, b.name) });
+  });
+}
+/** Give id a fresh code for name, replacing its old one. */
+function newCode(id, name) {
+  let code, hash;
+  do { code = String(crypto.randomInt(10000)).padStart(4, '0'); hash = codeHash(name, code); } while (codes.has(hash));
+  if (codeOf.has(id)) codes.delete(codeOf.get(id));
+  codes.set(hash, id); codeOf.set(id, hash); playersDirty = true;
+  nameFails.delete(backupName(name));
+  return code;
+}
+// guessing guards for restore: per device, per child name, and for the whole server
+const nameFails = new Map(); // lower-cased name -> times of wrong codes in the last day
+let serverFails = []; // times of wrong codes in the last hour, any name
+const NAME_LOCK = 10, DAY = 86400000, HOUR = 3600000;
+/** POST /api/restore { name, code } -> { ok, id, pass, code } with a fresh code (the old one stops working). */
+function restoreCode(req, res) {
+  readJson(req, res, (b, send, ip) => {
+    const t = Date.now(), key = backupName(b.name), code = String(b.code || '');
+    serverFails = serverFails.filter((x) => t - x < HOUR);
+    const fails = (nameFails.get(key) || []).filter((x) => t - x < DAY);
+    if (fails.length >= NAME_LOCK) return send(429, { ok: false, why: 'locked' });
+    if (serverFails.length >= 50 || !allowTry('restore:' + ip, 5, 600000)) return send(429, { ok: false, why: 'busy' });
+    const id = /^\d{4}$/.test(code) && codes.get(codeHash(b.name, code));
+    if (!id) { fails.push(t); nameFails.set(key, fails); serverFails.push(t); return send(403, { ok: false, why: 'wrong' }); }
+    send(200, { ok: true, id, pass: passFor(id), code: newCode(id, b.name) });
   });
 }
 process.on('SIGINT', () => { persist(); persistPlayers(); process.exit(0); });

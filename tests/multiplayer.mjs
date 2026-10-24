@@ -195,6 +195,29 @@ try {
   await until(() => a.evaluate(() => TG._village.live() && TG._village.live().online), 'A back in the village');
   ok('a parent can make a name + 4-digit backup code (only with the pass), kept on the device');
 
+  // restore: name + code bring the id back, the old code stops working
+  const restore = (body) => fetch(`http://127.0.0.1:${port}/api/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+  if ((await restore({ name: 'P', code: code1.code === '0000' ? '0001' : '0000' })).why !== 'wrong') throw new Error('a wrong code was accepted');
+  if ((await restore({ name: 'Q', code: code1.code })).why !== 'wrong') throw new Error('the right code with the wrong name was accepted');
+  const back = await restore({ name: ' p ', code: code1.code });
+  if (!back.ok || back.id !== 'pass-test-1' || back.pass !== first.pass || !/^\d{4}$/.test(back.code)) throw new Error('restore with name + code failed: ' + JSON.stringify(back));
+  if ((await restore({ name: 'P', code: code1.code })).ok && back.code !== code1.code) throw new Error('the old code still works after a restore');
+  ok('name + code restore the id and pass; wrong name or code is refused; the old code stops working');
+
+  // the same from the parent dashboard on a "new device": a fresh profile gets Бат's village back
+  const aCode = await a.evaluate(() => TG.store.active().village.backup.code);
+  const e = await player('Бат', { deel: 'red' }, 'NEWDEV');
+  await e.evaluate(() => TG.go('family'));
+  await until(() => e.evaluate(() => !!document.querySelector('.gate-q')), 'grown-up check on the new device');
+  await e.evaluate(() => { const [x, y] = document.querySelector('.gate-q').textContent.match(/\d+/g).map(Number); document.querySelector('.gate-input').value = x * y; document.querySelector('.gate .btn.primary').click(); });
+  await until(() => e.evaluate(() => [...document.querySelectorAll('.btn.ghost.block')].some((x) => /Кодоор сэргээх/.test(x.textContent))), 'restore button');
+  await e.evaluate(() => [...document.querySelectorAll('.btn.ghost.block')].find((x) => /Кодоор сэргээх/.test(x.textContent)).click());
+  await until(() => e.evaluate(() => !!document.querySelector('.backup-input')), 'restore window');
+  await e.evaluate((c) => { document.querySelector('.backup-input').value = c; [...document.querySelectorAll('.modal .btn.primary')].find((x) => /Сэргээх/.test(x.textContent)).click(); }, aCode);
+  await until(() => e.evaluate((id) => TG.store.active().village.id === id && !!TG.store.active().village.pass, aId), "the new device has Бат's id back");
+  await e.close();
+  ok('a parent restores a child on a new device from the dashboard');
+
   // chat flood guard: only one phrase a second gets through
   const spam = new WebSocket(`ws://127.0.0.1:${port}/ws`), heard = [];
   await new Promise((r) => (spam.onopen = r));
