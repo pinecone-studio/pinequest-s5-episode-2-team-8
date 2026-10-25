@@ -61,7 +61,7 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 ### Chat log
 Each room keeps its last **30** lines: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. The server saves this bounded log alongside room lots every 5 seconds when changed and on shutdown. Without `DATABASE_URL`, the store is `DATA_DIR/rooms.json`; with `DATABASE_URL`, it is the `naadamy_rooms` PostgreSQL table. PostgreSQL startup imports room codes missing from the database from the legacy JSON file without overwriting existing database rows. Older room records without a `chat` field start with an empty log. On load, entries are validated against the preset phrase/emote lists and cleaned before being sent to players.
 
-When PostgreSQL is configured, each server also records its active players in `naadamy_players` and uses PostgreSQL `LISTEN`/`NOTIFY` to share room joins, leaves, moves, looks, jumps, preset chat and ger updates with the other instances. Ger claims and edits are applied while holding a row lock on the room snapshot, so two servers cannot claim the same plot at once. Snapshot saves update chat without overwriting the transactionally updated ger lots. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, the existing in-process WebSocket room behavior is unchanged. Live wrestling state still requires a single server instance.
+When PostgreSQL is configured, each server also records its active players in `naadamy_players` and uses PostgreSQL `LISTEN`/`NOTIFY` to share room joins, leaves, moves, looks, jumps, preset chat, ger updates and wrestling messages with the other instances. Ger claims and edits, wrestling invitations, match starts, moves, timeouts and forfeits are applied while holding a row lock on the room snapshot, so concurrent servers cannot claim one lot twice or resolve a wrestling round twice. Notifications are enqueued inside the same transaction as each wrestling update. Snapshot saves update chat without overwriting the transactionally updated ger or wrestling state. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, the existing in-process WebSocket room behavior is unchanged.
 
 A log line is `{ k, id, n, i? }`:
 - `k`: `'p'` phrase, `'e'` emote, `'join'`, `'leave'`.
@@ -121,7 +121,7 @@ Good to know before building on this:
 - **Identity:** `id` and `name` are taken as sent. There is no check that a player is who they say they are.
 - **Position:** clamped to the map only; no speed or wall checks.
 - **Progress:** XP, coins, items, dairy, fishing and quests are all on the device (`localStorage`). The server never sees them, apart from `lvl`.
-- The server is the source of truth only for **who is in the room, ger lots and wrestling matches**.
+- The server is the source of truth only for **who is in the room, ger lots and wrestling matches**. With PostgreSQL, those live room updates are shared across instances.
 
 ## Changing the protocol
 

@@ -57,10 +57,10 @@ async function openSocket(page, port, id, name, room) {
   });
 }
 
-async function waitForMessage(page, predicate, description) {
+async function waitForMessage(page, predicate, description, timeout = 8000) {
   const test = predicate.toString();
   try {
-    await page.waitForFunction(`() => window.wsEvents.some(${test})`, { timeout: 8000 });
+    await page.waitForFunction(`() => window.wsEvents.some(${test})`, { timeout });
   } catch (error) {
     throw new Error(`timed out waiting for ${description}: ${error.message}`, { cause: error });
   }
@@ -80,14 +80,15 @@ try {
   assert.deepEqual(welcomeA.players, [], 'first player starts alone');
 
   await openSocket(pageB, serverB.port, idB, 'Найз', room);
+  await Promise.all([pageA, pageB].map((page) => page.evaluate((ids) => { window.sharedTest = ids; }, { idA, idB })));
   const welcomeB = await waitForMessage(pageB, (message) => message.t === 'welcome', 'second player welcome');
   assert.ok(welcomeB.players.some((player) => player.id === idA), 'joining another server discovers the first player');
-  await waitForMessage(pageA, (message) => message.t === 'join' && message.p.id === idB, 'cross-instance join');
+  await waitForMessage(pageA, (message) => message.t === 'join' && message.p.id === window.sharedTest.idB, 'cross-instance join');
 
   await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'move', x: 31, y: 16, dir: 2 })));
-  await waitForMessage(pageA, (message) => message.t === 'move' && message.id === idB && message.x === 31, 'cross-instance movement');
+  await waitForMessage(pageA, (message) => message.t === 'move' && message.id === window.sharedTest.idB && message.x === 31, 'cross-instance movement');
   await pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'say', k: 'p', i: 0 })));
-  await waitForMessage(pageB, (message) => message.t === 'say' && message.id === idA && message.i === 0, 'cross-instance chat');
+  await waitForMessage(pageB, (message) => message.t === 'say' && message.id === window.sharedTest.idA && message.i === 0, 'cross-instance chat');
 
   await Promise.all([
     pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-claim', i: 0, roof: 'blue', door: 'red', stage: 1 }))),
@@ -110,9 +111,54 @@ try {
   const staged = await waitForMessage(ownerPage, (message) => message.t === 'lot' && message.act === 'stage', 'persisted ger building stage');
   assert.equal(staged.lot.stage, 2, 'the room stores the updated building stage');
 
+  await pageA.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-invite', to: id })), idB);
+  await waitForMessage(pageB, (message) => message.t === 'wr-invite' && message.from === window.sharedTest.idA, 'cross-instance wrestling invite');
+  await pageB.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-accept', from: id })), idA);
+  const [matchA, matchB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-start', 'wrestling match start on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'wr-start', 'wrestling match start on second instance'),
+  ]);
+  assert.equal(matchA.id, matchB.id, 'both players enter the same distributed match');
+  await Promise.all([pageA, pageB].map((page) => page.evaluate((id) => { window.sharedTest.matchId = id; }, matchA.id)));
+  await pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-move', m: 'push', p: 0.8 })));
+  await waitForMessage(pageB, (message) => message.t === 'wr-wait' && message.id === window.sharedTest.matchId, 'opponent move notification across instances');
+  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-move', m: 'pull', p: 0.65 })));
+  const [roundA, roundB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-result' && message.id === window.sharedTest.matchId, 'wrestling round result on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'wr-result' && message.id === window.sharedTest.matchId, 'wrestling round result on second instance'),
+  ]);
+  assert.deepEqual(roundA.score, roundB.score, 'both servers deliver the same authoritative round score');
+  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-quit' })));
+  const [endA, endB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-end' && message.id === window.sharedTest.matchId, 'forfeit result on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'wr-end' && message.id === window.sharedTest.matchId, 'forfeit result on second instance'),
+  ]);
+  assert.equal(endA.winner, idA, 'forfeiting player awards the match to the opponent');
+  assert.equal(endB.winner, idA, 'both servers agree on the winner');
+
+  await pageA.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-invite', to: id })), idB);
+  await waitForMessage(pageB, (message) => message.t === 'wr-invite' && message.from === window.sharedTest.idA, 'second cross-instance wrestling invite');
+  await pageB.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-accept', from: id })), idA);
+  const timedMatch = await waitForMessage(pageA, (message) => message.t === 'wr-start' && message.id !== window.sharedTest.matchId, 'timeout test match start');
+  await Promise.all([pageA, pageB].map((page) => page.evaluate((id) => { window.sharedTest.timeoutMatchId = id; }, timedMatch.id)));
+  await waitForMessage(pageB, (message) => message.t === 'wr-start' && message.id === window.sharedTest.timeoutMatchId, 'timeout test match start on second instance');
+  await pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-move', m: 'push', p: 0.8 })));
+  const [timeoutRoundA, timeoutRoundB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-result' && message.id === window.sharedTest.timeoutMatchId, 'distributed wrestling move timeout on first instance', 35000),
+    waitForMessage(pageB, (message) => message.t === 'wr-result' && message.id === window.sharedTest.timeoutMatchId, 'distributed wrestling move timeout on second instance', 35000),
+  ]);
+  assert.deepEqual(timeoutRoundA.score, timeoutRoundB.score, 'the distributed timeout resolves once with the same score everywhere');
+  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-quit' })));
+  const [timeoutEndA, timeoutEndB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-end' && message.id === window.sharedTest.timeoutMatchId, 'forfeit result on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'wr-end' && message.id === window.sharedTest.timeoutMatchId, 'forfeit result on second instance'),
+  ]);
+  assert.equal(timeoutEndA.winner, idA, 'forfeiting player awards the match to the opponent');
+  assert.equal(timeoutEndB.winner, idA, 'both servers agree on the winner after timeout');
+
   await pageB.evaluate(() => window.gameSocket.close());
-  await waitForMessage(pageA, (message) => message.t === 'leave' && message.id === idB, 'cross-instance disconnect');
-  console.log('Shared multiplayer: two PostgreSQL-backed servers synchronize presence, movement, chat, ger claims and leave.');
+  await waitForMessage(pageA, (message) => message.t === 'leave' && message.id === window.sharedTest.idB, 'cross-instance disconnect');
+  console.log('Shared multiplayer: two PostgreSQL-backed servers synchronize presence, movement, chat, ger claims, wrestling and leave.');
 } finally {
   if (browser) await browser.close();
   for (const server of servers) {

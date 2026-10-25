@@ -47,7 +47,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         fs.renameSync(temporaryFile, dataFile);
       },
       async getRoomState() { return null; },
-      async mutateRoom(roomCode, initialState, mutate) {
+      async mutateRoom(roomCode, initialState, mutate, instanceId) {
         const rooms = readLegacyFile(dataFile);
         const state = rooms[roomCode] || { ...initialState };
         const result = mutate(state);
@@ -143,7 +143,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         client.release();
       }
     },
-    async mutateRoom(roomCode, initialState, mutate) {
+    async mutateRoom(roomCode, initialState, mutate, instanceId) {
       if (!ROOM_CODE.test(roomCode)) throw new Error(`Invalid room code: ${roomCode}`);
       const client = await pool.connect();
       try {
@@ -160,6 +160,11 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             'UPDATE naadamy_rooms SET state = $2::jsonb, updated_at = now() WHERE code = $1',
             [roomCode, JSON.stringify(state)],
           );
+          for (const event of result.events || []) {
+            const payload = JSON.stringify({ room: roomCode, instanceId, message: event });
+            if (Buffer.byteLength(payload, 'utf8') > 7000) throw new Error('realtime event exceeds the PostgreSQL notification limit');
+            await client.query('SELECT pg_notify($1, $2)', [REALTIME_CHANNEL, payload]);
+          }
         }
         await client.query('COMMIT');
         return { state, result };

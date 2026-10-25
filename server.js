@@ -75,7 +75,7 @@ function normalizeLots(lots) {
 function room(code) {
   if (!rooms.has(code)) {
     const lots = normalizeLots(saved[code] && saved[code].lots);
-    rooms.set(code, { code, players: new Map(), remotePlayers: new Map(), lots, matches: new Map(), chat: restoreChat(saved[code] && saved[code].chat) });
+    rooms.set(code, { code, players: new Map(), remotePlayers: new Map(), lots, matches: new Map(), wrestlingTimers: new Map(), chat: restoreChat(saved[code] && saved[code].chat) });
   }
   return rooms.get(code);
 }
@@ -205,6 +205,11 @@ function broadcast(r, msg, except) {
 function handleRealtime(event) {
   if (!event || !R.ROOM_RE.test(event.room || '') || !event.message || typeof event.message.t !== 'string') return;
   const { room: code, message } = event;
+  if (message.t === 'wrestle') {
+    const r = room(code);
+    deliverWrestleEvent(r, message);
+    return;
+  }
   if (message.t === 'replaced') {
     for (const r of rooms.values()) {
       if (r.remotePlayers.delete(message.id)) broadcastLocal(r, { t: 'leave', id: message.id });
@@ -244,12 +249,196 @@ function handleRealtime(event) {
   broadcastLocal(r, message);
   if (message.t === 'join' || message.t === 'leave') census();
 }
+function wrestlingEvent(to, message) {
+  return { t: 'wrestle', to, message };
+}
+function deliverWrestleEvent(r, event) {
+  const message = event.message;
+  const timerKey = message.id && `${r.code}:${message.id}`;
+  if (message.t === 'wr-end' && timerKey) {
+    clearTimeout(r.wrestlingTimers.get(timerKey));
+    r.wrestlingTimers.delete(timerKey);
+  } else if ((message.t === 'wr-start' || message.t === 'wr-result') && timerKey && message.deadline) {
+    clearTimeout(r.wrestlingTimers.get(timerKey));
+    const delay = Math.max(0, message.deadline - Date.now());
+    const timer = setTimeout(() => {
+      r.wrestlingTimers.delete(timerKey);
+      resolveSharedWrestlingTimeout(r, message.id).catch((error) => {
+        console.error('Could not resolve shared wrestling timeout:', error.message);
+      });
+    }, delay);
+    if (timer.unref) timer.unref();
+    r.wrestlingTimers.set(timerKey, timer);
+  }
+  for (const id of event.to || []) {
+    const player = r.players.get(id);
+    if (player) player.conn.send(message);
+  }
+}
+async function mutateSharedWrestling(r, mutate) {
+  const { result } = await roomStore.mutateRoom(
+    r.code,
+    { lots: r.lots, chat: r.chat, wrestling: { invites: [], matches: [] } },
+    (state) => {
+      if (!state.wrestling || typeof state.wrestling !== 'object') state.wrestling = {};
+      if (!Array.isArray(state.wrestling.invites)) state.wrestling.invites = [];
+      if (!Array.isArray(state.wrestling.matches)) state.wrestling.matches = [];
+      const now = Date.now();
+      const oldInviteCount = state.wrestling.invites.length;
+      state.wrestling.invites = state.wrestling.invites.filter((invite) => invite.expiresAt > now);
+      const changed = state.wrestling.invites.length !== oldInviteCount;
+      const outcome = mutate(state.wrestling);
+      return {
+        changed: changed || Boolean(outcome && outcome.changed),
+        events: outcome && outcome.events || [],
+        value: outcome && outcome.value,
+      };
+    },
+    INSTANCE_ID,
+  );
+  for (const event of result.events) deliverWrestleEvent(r, event);
+  return result.value;
+}
+function resolveSharedRound(wrestling, match, timedOut) {
+  if (timedOut) {
+    for (const side of ['a', 'b']) {
+      if (!match.moves[side]) match.moves[side] = { m: R.MOVES[Math.floor(Math.random() * R.MOVES.length)].id, p: 0.15 };
+    }
+  }
+  const a = match.moves.a, b = match.moves.b;
+  if (!a || !b) return { changed: false, events: [] };
+  const result = R.exchange(a.m, a.p, b.m, b.p);
+  if (result > 0) match.score.a++;
+  else if (result < 0) match.score.b++;
+  match.moves = {};
+  const finished = match.score.a >= 2 || match.score.b >= 2;
+  match.deadline = finished ? null : Date.now() + 25000;
+  const events = [wrestlingEvent([match.a, match.b], {
+    t: 'wr-result', id: match.id, ma: a.m, pa: a.p, mb: b.m, pb: b.p,
+    r: result, score: match.score, ...(finished ? {} : { deadline: match.deadline }),
+  })];
+  if (finished) {
+    wrestling.matches = wrestling.matches.filter((entry) => entry.id !== match.id);
+    events.push(wrestlingEvent([match.a, match.b], {
+      t: 'wr-end', id: match.id, winner: match.score.a > match.score.b ? match.a : match.b, reason: '',
+    }));
+  }
+  return { changed: true, events };
+}
+async function resolveSharedWrestlingTimeout(r, matchId) {
+  if (!roomStore.sharedRealtime) return;
+  await mutateSharedWrestling(r, (wrestling) => {
+    const match = wrestling.matches.find((entry) => entry.id === matchId);
+    if (!match || match.deadline > Date.now()) return { changed: false };
+    return resolveSharedRound(wrestling, match, true);
+  });
+}
+async function handleSharedWrestling(conn, type, message) {
+  const p = conn.player, r = conn.room;
+  if (!p || !r) return;
+  try {
+    await mutateSharedWrestling(r, (wrestling) => {
+      const events = [];
+      if (type === 'wr-invite') {
+        const toId = String(message.to || '').slice(0, 24);
+        const target = r.players.get(toId) || r.remotePlayers.get(toId);
+        if (!target || toId === p.id || wrestling.matches.some((match) => match.a === p.id || match.b === p.id || match.a === toId || match.b === toId)) {
+          conn.send({ t: 'deny', act: 'wr', why: 'busy' });
+          return { changed: false };
+        }
+        if (wrestling.invites.some((invite) => invite.from === p.id && invite.to === toId)) return { changed: false };
+        wrestling.invites.push({ from: p.id, to: toId, fromName: p.name, expiresAt: Date.now() + 60000 });
+        events.push(wrestlingEvent([toId], { t: 'wr-invite', from: p.id, name: p.name }));
+        return { changed: true, events };
+      }
+      if (type === 'wr-decline') {
+        const fromId = String(message.from || '').slice(0, 24);
+        const index = wrestling.invites.findIndex((invite) => invite.from === fromId && invite.to === p.id);
+        if (index < 0) return { changed: false };
+        wrestling.invites.splice(index, 1);
+        events.push(wrestlingEvent([fromId], { t: 'wr-declined', by: p.id, name: p.name }));
+        return { changed: true, events };
+      }
+      if (type === 'wr-accept') {
+        const fromId = String(message.from || '').slice(0, 24);
+        const invitationIndex = wrestling.invites.findIndex((invite) => invite.from === fromId && invite.to === p.id);
+        const opponent = r.players.get(fromId) || r.remotePlayers.get(fromId);
+        if (invitationIndex < 0 || !opponent || wrestling.matches.some((match) => match.a === p.id || match.b === p.id || match.a === fromId || match.b === fromId)) {
+          conn.send({ t: 'deny', act: 'wr', why: 'busy' });
+          return { changed: false };
+        }
+        const invitation = wrestling.invites[invitationIndex];
+        wrestling.invites = wrestling.invites.filter((invite) => invite.from !== p.id && invite.to !== p.id && invite.from !== fromId && invite.to !== fromId);
+        const id = `w${crypto.randomUUID()}`;
+        const match = {
+          id, a: fromId, b: p.id, score: { a: 0, b: 0 }, moves: {}, deadline: Date.now() + 25000,
+          aInfo: { id: fromId, name: invitation.fromName, look: opponent.look },
+          bInfo: { id: p.id, name: p.name, look: p.look },
+        };
+        wrestling.matches.push(match);
+        events.push(wrestlingEvent([match.a, match.b], {
+          t: 'wr-start', id, a: match.aInfo, b: match.bInfo, deadline: match.deadline,
+        }));
+        return { changed: true, events };
+      }
+      if (type === 'wr-move') {
+        const match = wrestling.matches.find((entry) => entry.a === p.id || entry.b === p.id);
+        const side = match && (match.a === p.id ? 'a' : 'b');
+        if (!match || !side || match.deadline <= Date.now() || match.moves[side] || !R.MOVES.some((move) => move.id === message.m)) {
+          if (match && match.deadline <= Date.now()) return resolveSharedRound(wrestling, match, true);
+          return { changed: false };
+        }
+        const power = Number(message.p);
+        match.moves[side] = { m: message.m, p: Math.max(0, Math.min(1, Number.isFinite(power) ? power : 0)) };
+        const opponentId = side === 'a' ? match.b : match.a;
+        if (!match.moves[side === 'a' ? 'b' : 'a']) {
+          events.push(wrestlingEvent([opponentId], { t: 'wr-wait', id: match.id }));
+          return { changed: true, events };
+        }
+        return resolveSharedRound(wrestling, match, false);
+      }
+      if (type === 'wr-quit') {
+        const index = wrestling.matches.findIndex((match) => match.a === p.id || match.b === p.id);
+        if (index < 0) return { changed: false };
+        const [match] = wrestling.matches.splice(index, 1);
+        const winner = match.a === p.id ? match.b : match.a;
+        events.push(wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, reason: 'left' }));
+        return { changed: true, events };
+      }
+      return { changed: false };
+    });
+  } catch (error) {
+    console.error(`Could not process ${type} in shared wrestling:`, error.message);
+    conn.send({ t: 'error', why: 'storage' });
+  }
+}
+async function endSharedWrestlingOnLeave(r, playerId) {
+  if (!roomStore.sharedRealtime) return;
+  try {
+    await mutateSharedWrestling(r, (wrestling) => {
+      const before = wrestling.invites.length;
+      wrestling.invites = wrestling.invites.filter((invite) => invite.from !== playerId && invite.to !== playerId);
+      const index = wrestling.matches.findIndex((match) => match.a === playerId || match.b === playerId);
+      if (index < 0) return { changed: wrestling.invites.length !== before };
+      const [match] = wrestling.matches.splice(index, 1);
+      const winner = match.a === playerId ? match.b : match.a;
+      return {
+        changed: true,
+        events: [wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, reason: 'left' })],
+      };
+    });
+  } catch (error) {
+    console.error('Could not finish shared wrestling after player left:', error.message);
+  }
+}
 async function refreshPresence() {
   if (!roomStore.sharedRealtime) return;
   const stale = await roomStore.refreshPresence(INSTANCE_ID);
   for (const player of stale) {
-    const r = rooms.get(player.room_code);
-    if (r && r.remotePlayers.delete(player.id)) broadcast(r, { t: 'leave', id: player.id });
+    const r = rooms.get(player.room_code) || room(player.room_code);
+    const wasOnline = r.remotePlayers.delete(player.id);
+    await endSharedWrestlingOnLeave(r, player.id);
+    if (wasOnline) broadcast(r, { t: 'leave', id: player.id });
   }
 }
 /** The room's bounded history of phrases, emotes, joins and leaves. */
@@ -304,6 +493,9 @@ async function joinPlayer(conn, message, code, id, now) {
   if (conn.socket.destroyed) {
     await roomStore.removePresence(INSTANCE_ID, p.id);
     return;
+  }
+  if (roomStore.sharedRealtime && (old || replacingRemote || previousInstance)) {
+    await endSharedWrestlingOnLeave(r, p.id);
   }
   if (previousInstance && previousInstance !== INSTANCE_ID) {
     await roomStore.publishRealtime({ room: code, instanceId: INSTANCE_ID, message: { t: 'replaced', id } });
@@ -440,6 +632,10 @@ function onMessage(conn, text) {
     }
     // ---- live wrestling
     case 'wr-invite': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-invite', m);
+        break;
+      }
       const to = r.players.get(String(m.to));
       if (!to || to === p || to.match || p.match) return conn.send({ t: 'deny', act: 'wr', why: 'busy' });
       (to.invites = to.invites || new Set()).add(p.id);
@@ -447,11 +643,19 @@ function onMessage(conn, text) {
       break;
     }
     case 'wr-decline': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-decline', m);
+        break;
+      }
       const from = r.players.get(String(m.from)); if (p.invites) p.invites.delete(String(m.from));
       if (from) from.conn.send({ t: 'wr-declined', by: p.id, name: p.name });
       break;
     }
     case 'wr-accept': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-accept', m);
+        break;
+      }
       const from = r.players.get(String(m.from));
       if (!from || !p.invites || !p.invites.has(from.id) || from.match || p.match) return conn.send({ t: 'deny', act: 'wr', why: 'busy' });
       p.invites.delete(from.id);
@@ -464,6 +668,10 @@ function onMessage(conn, text) {
       break;
     }
     case 'wr-move': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-move', m);
+        break;
+      }
       const match = p.match && r.matches.get(p.match); if (!match) return;
       const side = match.a === p.id ? 'a' : 'b';
       if (match.moves[side] || !R.MOVES.some((x) => x.id === m.m)) return;
@@ -473,6 +681,10 @@ function onMessage(conn, text) {
       break;
     }
     case 'wr-quit': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-quit', m);
+        break;
+      }
       const match = p.match && r.matches.get(p.match); if (!match) return;
       endMatch(r, match, match.a === p.id ? match.b : match.a, 'left');
       break;
@@ -503,13 +715,17 @@ function leave(conn) {
   const p = conn.player, r = conn.room;
   conn.player = null; conn.room = null;
   if (!p || !r || r.players.get(p.id) !== p) return Promise.resolve();
-  if (p.match && r.matches.get(p.match)) { const match = r.matches.get(p.match); endMatch(r, match, match.a === p.id ? match.b : match.a, 'left'); }
+  if (!roomStore.sharedRealtime && p.match && r.matches.get(p.match)) {
+    const match = r.matches.get(p.match);
+    endMatch(r, match, match.a === p.id ? match.b : match.a, 'left');
+  }
   r.players.delete(p.id);
   const removed = roomStore.removePresence(INSTANCE_ID, p.id).catch((error) => console.error('Could not remove player presence:', error.message));
+  const endedWrestling = endSharedWrestlingOnLeave(r, p.id);
   logChat(r, { k: 'leave', id: p.id, n: p.name });
   broadcast(r, { t: 'leave', id: p.id });
   census();
-  return removed;
+  return Promise.all([removed, endedWrestling]);
 }
 
 // ---------------------------------------------------------------- start

@@ -12,6 +12,7 @@ class FakePool {
     this.state = state || new Map();
     this.failOnUpsert = failOnUpsert;
     this.calls = [];
+    this.notifications = [];
   }
   async connect() {
     return {
@@ -36,6 +37,10 @@ class FakePool {
         if (/^SELECT state FROM naadamy_rooms WHERE code =/.test(statement)) {
           const state = this.state.get(values[0]);
           return { rows: state ? [{ state }] : [] };
+        }
+        if (/^SELECT pg_notify/.test(statement)) {
+          this.notifications.push({ channel: values[0], payload: JSON.parse(values[1]) });
+          return { rows: [] };
         }
         if (/^UPDATE naadamy_rooms SET state =/.test(statement)) {
           this.state.set(values[0], JSON.parse(values[1]));
@@ -74,6 +79,17 @@ try {
   });
   assert.deepEqual(mutation.state.lots, ['atomic update'], 'room mutations return the updated shared state');
   assert.deepEqual(await store.getRoomState('NUTAG'), mutation.state, 'shared state can be reloaded from PostgreSQL');
+  await store.mutateRoom('NUTAG', { lots: [], chat: [] }, (state) => {
+    state.wrestling = { invites: [{ from: 'player-a', to: 'player-b' }], matches: [] };
+    return {
+      changed: true,
+      events: [{ t: 'wrestle', to: ['player-b'], message: { t: 'wr-invite', from: 'player-a', name: 'Хүүхэд' } }],
+    };
+  }, 'instance-a');
+  assert.equal(pool.notifications.length, 1, 'transactional room mutation publishes its realtime event');
+  assert.equal(pool.notifications[0].payload.instanceId, 'instance-a', 'realtime event identifies its origin instance');
+  assert.equal(pool.calls.indexOf('SELECT pg_notify($1, $2)') < pool.calls.lastIndexOf('COMMIT'), true,
+    'realtime notification is enqueued before the room transaction commits');
   await store.save(persisted);
   assert.deepEqual(dbState.get('BAT25'), persisted.BAT25, 'new and updated room chat is upserted');
   assert.deepEqual(dbState.get('NUTAG').lots, ['atomic update'], 'chat snapshots do not overwrite shared lot state');
