@@ -23,7 +23,7 @@ async function waitForSavedPhrase() {
 
 async function startServer() {
   const server = spawn(process.execPath, [join(root, 'server.js')], {
-    env: { ...process.env, PORT: '0', DATA_DIR: dataDir },
+    env: { ...process.env, PORT: '0', DATA_DIR: dataDir, DATABASE_URL: '' },
     stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
   });
   const port = await new Promise((resolvePort, reject) => {

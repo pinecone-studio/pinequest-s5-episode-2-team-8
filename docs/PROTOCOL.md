@@ -59,7 +59,7 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 | `say` | `k, i` | `k: 'p'` = phrase `PHRASES[i]`, `k: 'e'` = emote `EMOTES[i]`. `i` must be a valid integer index. There is **no typed text**, by design (safe for kids). Sent to everyone in the room, **including the sender**. At most **one per second** per player; extra ones are dropped silently. Added to the room's chat log. |
 
 ### Chat log
-Each room keeps its last **30** lines: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. The server saves this bounded log alongside room lots in `DATA_DIR/rooms.json`, every 5 seconds when changed and on shutdown. Older room files without a `chat` field start with an empty log. On load, entries are validated against the preset phrase/emote lists and cleaned before being sent to players.
+Each room keeps its last **30** lines: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. The server saves this bounded log alongside room lots every 5 seconds when changed and on shutdown. Without `DATABASE_URL`, the store is `DATA_DIR/rooms.json`; with `DATABASE_URL`, it is the `naadamy_rooms` PostgreSQL table. PostgreSQL startup imports room codes missing from the database from the legacy JSON file without overwriting existing database rows. Older room records without a `chat` field start with an empty log. On load, entries are validated against the preset phrase/emote lists and cleaned before being sent to players.
 
 A log line is `{ k, id, n, i? }`:
 - `k`: `'p'` phrase, `'e'` emote, `'join'`, `'leave'`.
@@ -74,7 +74,7 @@ A second tab of the same player (`replaced`) doesn't add a join or leave line.
 | `ger-buy` | `i, roof, door` | Claim lot `i` (`0 … LOTS-1`). One ger per player. `roof` ∈ `ROOF`, `door` ∈ `DOOR` (defaults: `blue`, `red`). |
 | `ger-style` | `roof?, door?, furn?` | Restyle your own ger. `furn` = up to 12 unique `FURNITURE` ids. |
 
-Lots are the only thing the server saves (`data/rooms.json`, every 5 s and on shutdown). Coins are **not** checked by the server; the client takes off `GER_PRICE` when it sees its own `lot` `buy`.
+Room lots and the recent chat log are saved every 5 seconds when changed and on shutdown. The default store is `DATA_DIR/rooms.json`; when `DATABASE_URL` is configured, PostgreSQL is authoritative and the server stores the room snapshot in `naadamy_rooms`. Coins are **not** checked by the server; the client takes off `GER_PRICE` when it sees its own `lot` `buy`.
 
 ### Live wrestling (best of 3)
 | `t` | Fields | What it does |

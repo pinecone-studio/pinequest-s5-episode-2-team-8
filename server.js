@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /* Naadamy server: serves the app and links players into a shared village (Нутаг).
-   Zero dependencies: only Node's built-in modules, so nothing to install and no licenses.
+   Default JSON storage uses Node built-ins; PostgreSQL storage is enabled with DATABASE_URL.
 
    Run:  node server.js            (port 8000)
          PORT=3000 node server.js
-   Everyone on the same Wi-Fi opens http://<this-computer-ip>:8000 and plays together. */
+   Everyone on the same Wi-Fi opens http://<this-computer-ip>:8000 and plays together.
+   For PostgreSQL storage, install dependencies with npm ci and set DATABASE_URL. */
 'use strict';
 const http = require('http');
 const fs = require('fs');
@@ -14,13 +15,14 @@ const os = require('os');
 const R = require('./js/village/rules.js');
 const QR = require('./js/qr.js');
 const basar = require('./basar-ai.js')(__dirname);
+const { createRoomStore } = require('./room-store');
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || process.argv[2] || 8000);
 const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
 let actualPort = PORT;
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'rooms.json');
+const roomStore = createRoomStore({ dataDir: DATA_DIR });
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
   '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
@@ -60,8 +62,10 @@ function serveStatic(req, res) {
 // ---------------------------------------------------------------- rooms + saved gers
 const rooms = new Map(); // code -> { code, players: Map(id -> player), lots: [] }
 let saved = {};
-try { saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch { saved = {}; }
 let dirty = false;
+let dirtyVersion = 0;
+let persistPromise = null;
+function markDirty() { dirty = true; dirtyVersion++; }
 function room(code) {
   if (!rooms.has(code)) {
     const lots = Array.isArray(saved[code] && saved[code].lots) ? saved[code].lots.slice(0, R.LOTS) : [];
@@ -70,20 +74,46 @@ function room(code) {
   }
   return rooms.get(code);
 }
-function persist() {
-  if (!dirty) return;
-  for (const r of rooms.values()) saved[r.code] = { lots: r.lots, chat: r.chat, t: Date.now() };
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(saved));
-    fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
-    dirty = false;
+async function persist() {
+  if (!dirty) return true;
+  if (persistPromise) {
+    const previousSaveSucceeded = await persistPromise;
+    return previousSaveSucceeded && dirty ? persist() : previousSaveSucceeded;
   }
-  catch (e) { console.error('Could not save the rooms:', e.message); }
+  const version = dirtyVersion;
+  const snapshot = { ...saved };
+  for (const r of rooms.values()) snapshot[r.code] = { lots: r.lots, chat: r.chat, t: Date.now() };
+  persistPromise = (async () => {
+    try {
+      await roomStore.save(snapshot);
+      saved = snapshot;
+      if (dirtyVersion === version) dirty = false;
+      return true;
+    } catch (e) {
+      console.error('Could not save the rooms:', e.message);
+      return false;
+    } finally {
+      persistPromise = null;
+    }
+  })();
+  return persistPromise;
 }
-setInterval(persist, 5000).unref();
-process.on('SIGINT', () => { persist(); process.exit(0); });
-process.on('SIGTERM', () => { persist(); process.exit(0); });
+setInterval(() => { void persist(); }, 5000).unref();
+let stopping = false;
+async function shutdown() {
+  if (stopping) return;
+  stopping = true;
+  const savedOnShutdown = await persist();
+  try {
+    await roomStore.close();
+  } catch (e) {
+    console.error('Could not close room storage:', e.message);
+    process.exit(1);
+  }
+  process.exit(savedOnShutdown ? 0 : 1);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 // ---------------------------------------------------------------- minimal WebSocket (RFC 6455)
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -169,7 +199,7 @@ function restoreChat(lines) {
 function logChat(r, line) {
   r.chat.push(line);
   if (r.chat.length > CHAT_KEEP) r.chat.splice(0, r.chat.length - CHAT_KEEP);
-  dirty = true;
+  markDirty();
 }
 
 function onMessage(conn, text) {
@@ -226,13 +256,13 @@ function onMessage(conn, text) {
       if (r.lots[i]) return conn.send({ t: 'deny', act: 'ger', why: 'taken' });
       if (r.lots.some((l) => l && l.by === p.id)) return conn.send({ t: 'deny', act: 'ger', why: 'own' });
       r.lots[i] = { by: p.id, n: p.name, roof: R.ROOF[m.roof] ? m.roof : 'blue', door: R.DOOR[m.door] ? m.door : 'red', furn: [], stage };
-      dirty = true;
+      markDirty();
       broadcast(r, { t: 'lot', act: 'claim', i, lot: r.lots[i], by: p.id });
       break;
     }
     case 'ger-stage': { // one more building step done on your own plot
       const i = r.lots.findIndex((l) => l && l.by === p.id); if (i < 0 || !Number.isInteger(m.stage)) return;
-      r.lots[i].stage = Math.max(1, Math.min(R.GER_DONE, m.stage)); dirty = true;
+      r.lots[i].stage = Math.max(1, Math.min(R.GER_DONE, m.stage)); markDirty();
       broadcast(r, { t: 'lot', act: 'stage', i, lot: r.lots[i], by: p.id });
       break;
     }
@@ -242,7 +272,7 @@ function onMessage(conn, text) {
       if (R.ROOF[m.roof]) l.roof = m.roof;
       if (R.DOOR[m.door]) l.door = m.door;
       if (Array.isArray(m.furn)) l.furn = [...new Set(m.furn.filter((f) => R.FURNITURE.some((x) => x.id === f)))].slice(0, 12);
-      l.n = p.name; dirty = true;
+      l.n = p.name; markDirty();
       broadcast(r, { t: 'lot', act: 'style', i, lot: l, by: p.id });
       break;
     }
@@ -345,4 +375,11 @@ server.on('listening', () => {
   console.log('\n  Press Ctrl+C to stop.\n');
   if (process.send) process.send({ port });
 });
-server.listen(PORT, '0.0.0.0');
+roomStore.load().then((state) => {
+  saved = state;
+  server.listen(PORT, '0.0.0.0');
+}).catch(async (error) => {
+  console.error('Could not initialize room storage:', error.message);
+  try { await roomStore.close(); } catch (closeError) { console.error('Could not close room storage:', closeError.message); }
+  process.exit(1);
+});

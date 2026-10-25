@@ -27,9 +27,12 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install backend dependencies
+        run: npm ci
+
       - name: JavaScript syntax
         run: |
-          for f in $(find js -name '*.js') sw.js server.js basar-ai.js; do node --check "$f"; done
+          for f in $(find js -name '*.js') sw.js server.js basar-ai.js room-store.js; do node --check "$f"; done
           echo "All JavaScript files parse."
 
       - name: Every referenced file exists and is cached offline
@@ -51,6 +54,9 @@ jobs:
 
       - name: Multiplayer chat survives server restart
         run: node tests/chat-persistence.mjs
+
+      - name: Room storage migration and compatibility
+        run: node tests/room-store.mjs
 
       - name: Touch test (phone joystick and buttons)
         run: node tests/touch.mjs
