@@ -191,6 +191,8 @@ try {
   for (let i = 0; i < 6; i++) { await page.evaluate(() => { const b = document.querySelector('.modal .btn.primary.big'); if (b) b.click(); }); await sleep(120); }
   const yard = await page.evaluate(() => { const p = TG.store.active().village.produce; return { milk: p.milk || 0, aaruul: p.aaruul || 0 }; });
   if (yard.aaruul !== 3 || yard.milk !== 0) errors.push(`dairy yard: making aaruul did not work ${JSON.stringify(yard)}`);
+  // every recipe at every station has its hands-on steps
+  { const missing = await page.evaluate(() => TG._village.recipes().filter((r) => !(TG.dairywork.steps(r.id) > 0)).map((r) => r.id)); if (missing.length) errors.push(`dairy yard: no hands-on steps for ${missing.join(', ')}`); }
   await page.evaluate(() => document.querySelectorAll('.modal-x').forEach((x) => x.click())); await sleep(250);
   await page.evaluate(() => { const v = TG.store.active().village, e0 = v.energy = 50; TG.villageEat('aaruul'); }); await sleep(150);
   const ate = await page.evaluate(() => { const v = TG.store.active().village; return { aaruul: v.produce.aaruul, energy: v.energy }; });
