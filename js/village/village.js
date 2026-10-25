@@ -606,6 +606,7 @@
     if (d2 && d2.id === e.id) { // player 2's joystick
       const dx = e.x - d2.x0, dy = e.y - d2.y0, dist = Math.hypot(dx, dy), st = live.els.stick2;
       if (!d2.on) { if (dist < 12) return; d2.on = true; const r = live.root.getBoundingClientRect(); st.style.left = d2.x0 - r.left + 'px'; st.style.top = d2.y0 - r.top + 'px'; st.classList.add('on'); }
+      slideBase(d2, e.x, e.y, st);
       const q = dist > STICK_R ? STICK_R / dist : 1; live.p2.stick = { x: (dx * q) / STICK_R, y: (dy * q) / STICK_R };
       st.firstChild.style.transform = `translate(${Math.round(dx * q)}px, ${Math.round(dy * q)}px)`; return;
     }
@@ -618,6 +619,7 @@
       els.stick.style.left = d.x0 - r.left + 'px'; els.stick.style.top = d.y0 - r.top + 'px'; els.stick.classList.add('on');
       if (!els.stickHint.classList.contains('gone')) { els.stickHint.classList.add('gone'); const v = V(); if (v) { v.stickUsed = true; S.save(); } }
     }
+    slideBase(d, e.x, e.y, els.stick);
     const q = dist > STICK_R ? STICK_R / dist : 1;
     live.stick = { x: (dx * q) / STICK_R, y: (dy * q) / STICK_R };
     els.stick.firstChild.style.transform = `translate(${Math.round(dx * q)}px, ${Math.round(dy * q)}px)`;
@@ -628,6 +630,12 @@
     live.drag = null;
     if (d.on) return endStick();
     onTap(d.wx / T, d.wy / T);
+  }
+  /** Once the thumb passes the ring, the ring slides along behind it, so pulling back turns around at once. */
+  function slideBase(d, x, y, el) {
+    const dx = x - d.x0, dy = y - d.y0, dist = Math.hypot(dx, dy); if (dist <= STICK_R) return;
+    const k = (dist - STICK_R) / dist, r = live.root.getBoundingClientRect(); d.x0 += dx * k; d.y0 += dy * k;
+    el.style.left = d.x0 - r.left + 'px'; el.style.top = d.y0 - r.top + 'px';
   }
   function endStick2() { if (!live) return; live.drag2 = null; if (live.p2) live.p2.stick = null; live.els.stick2.classList.remove('on'); live.els.stick2.firstChild.style.transform = ''; }
   function endStick() { if (!live) return; live.drag = null; live.stick = null; live.els.stick.classList.remove('on'); live.els.stick.firstChild.style.transform = ''; }

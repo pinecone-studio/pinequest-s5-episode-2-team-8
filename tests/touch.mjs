@@ -134,6 +134,23 @@ try {
   if (await V(() => !!TG._village.live().drag2 || !!TG._village.live().p2.stick)) fail(step, "player 2's joystick was still held after the page was hidden");
   await setHidden(false); await liftAll(); await V(() => TG._village.together(null)); await sleep(200);
 
+  // the joystick's centre slides along behind a thumb that goes past the ring, so turning around is immediate
+  step = 'stick turns around at once';
+  await place(open.x, open.y);
+  await touch('touchStart', [[195, 500, 1]]); for (let i = 1; i <= 10; i++) { await touch('touchMove', [[195 + i * 15, 500, 1]]); await sleep(16); }
+  await sleep(150); for (let i = 1; i <= 4; i++) { await touch('touchMove', [[345 - i * 30, 500, 1]]); await sleep(16); }
+  await sleep(150);
+  { const s = await state(); if (!(s.stick && s.stick.x < 0 && s.vx < 0)) fail(step, `pulling the thumb back 120 px did not turn left (stick ${JSON.stringify(s.stick)}, vx ${s.vx.toFixed(2)})`); }
+  await liftAll();
+
+  step = 'player 2 stick follows';
+  await place(open.x, open.y); await V(() => TG._village.together('')); await sleep(300);
+  await touch('touchStart', [[250, 500, 2]]); for (let i = 1; i <= 10; i++) { await touch('touchMove', [[250 + i * 10, 500, 2]]); await sleep(16); }
+  for (let i = 1; i <= 6; i++) { await touch('touchMove', [[350 - i * 10, 500, 2]]); await sleep(16); }
+  await sleep(100);
+  { const s = await V(() => TG._village.live().p2.stick); if (!(s && s.x < 0)) fail(step, `pulling player 2's thumb back did not turn left (stick ${JSON.stringify(s)})`); }
+  await liftAll(); await V(() => TG._village.together(null)); await sleep(200);
+
   step = 'tap still walks';
   await place(open.x, open.y);
   await touch('touchStart', [[300, 420, 1]]); await sleep(60); await touch('touchEnd', [[300, 420, 1]]); await sleep(80);
