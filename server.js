@@ -66,15 +66,19 @@ function room(code) {
   if (!rooms.has(code)) {
     const lots = Array.isArray(saved[code] && saved[code].lots) ? saved[code].lots.slice(0, R.LOTS) : [];
     while (lots.length < R.LOTS) lots.push(null);
-    rooms.set(code, { code, players: new Map(), lots, matches: new Map(), chat: [] });
+    rooms.set(code, { code, players: new Map(), lots, matches: new Map(), chat: restoreChat(saved[code] && saved[code].chat) });
   }
   return rooms.get(code);
 }
 function persist() {
   if (!dirty) return;
-  dirty = false;
-  for (const r of rooms.values()) saved[r.code] = { lots: r.lots, t: Date.now() };
-  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(saved)); fs.renameSync(DATA_FILE + '.tmp', DATA_FILE); }
+  for (const r of rooms.values()) saved[r.code] = { lots: r.lots, chat: r.chat, t: Date.now() };
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(saved));
+    fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
+    dirty = false;
+  }
   catch (e) { console.error('Could not save the rooms:', e.message); }
 }
 setInterval(persist, 5000).unref();
@@ -143,9 +147,30 @@ const pub = (p) => ({ id: p.id, name: p.name, look: p.look, lvl: p.lvl, x: p.x, 
 function counts() { let total = 0; for (const r of rooms.values()) total += r.players.size; const main = rooms.get('NUTAG'); return { total, nutag: main ? main.players.size : 0 }; }
 function census() { const c = counts(); for (const r of rooms.values()) if (r.players.size) broadcast(r, { t: 'census', ...c }); }
 function broadcast(r, msg, except) { for (const p of r.players.values()) if (p.conn !== except) p.conn.send(msg); }
-/** The room's chat log: the last few phrases, joins and leaves, kept in memory only (gone when the server restarts). */
+/** The room's bounded history of phrases, emotes, joins and leaves. */
 const CHAT_KEEP = 30, SAY_GAP = 1000;
-function logChat(r, line) { r.chat.push(line); if (r.chat.length > CHAT_KEEP) r.chat.splice(0, r.chat.length - CHAT_KEEP); }
+function cleanChatLine(line) {
+  if (!line || typeof line !== 'object' || Array.isArray(line)) return null;
+  const { k } = line;
+  if (!['p', 'e', 'join', 'leave'].includes(k)) return null;
+  const id = String(line.id || '').slice(0, 24);
+  if (!/^[\w-]{4,24}$/.test(id)) return null;
+  const clean = { k, id, n: cleanName(line.n) };
+  if (k === 'p' || k === 'e') {
+    const max = k === 'e' ? R.EMOTES.length : R.PHRASES.length;
+    if (!Number.isInteger(line.i) || line.i < 0 || line.i >= max) return null;
+    clean.i = line.i;
+  }
+  return clean;
+}
+function restoreChat(lines) {
+  return Array.isArray(lines) ? lines.map(cleanChatLine).filter(Boolean).slice(-CHAT_KEEP) : [];
+}
+function logChat(r, line) {
+  r.chat.push(line);
+  if (r.chat.length > CHAT_KEEP) r.chat.splice(0, r.chat.length - CHAT_KEEP);
+  dirty = true;
+}
 
 function onMessage(conn, text) {
   const t = Date.now();                                     // simple rate limit: ~20 messages per second
