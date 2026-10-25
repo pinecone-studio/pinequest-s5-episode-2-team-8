@@ -104,6 +104,26 @@ try {
   await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 3, isMobile: true, hasTouch: true }); await sleep(300);
   await touch('touchEnd', [[210, 500, 1]]); await stopped(step);
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true }); await sleep(300); await liftAll();
+
+  // touch positions are screen points (CSS pixels) on every phone, whatever its pixel density
+  step = 'joystick ring sits under the thumb';
+  await place(open.x, open.y);
+  await touch('touchStart', [[150, 500, 1]]); await touch('touchMove', [[170, 500, 1]]); await sleep(80);
+  { const c = await V(() => { const r = document.querySelector('.v-stick').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+    if (Math.abs(c[0] - 150) > 4 || Math.abs(c[1] - 500) > 4) fail(step, `the ring was drawn at (${c.map(Math.round)}) instead of under the thumb at (150,500)`); }
+  await liftAll();
+
+  step = 'a shaky tap still walks';
+  await place(open.x, open.y);
+  await touch('touchStart', [[300, 420, 1]]); await touch('touchMove', [[306, 423, 1]]); await sleep(40); await touch('touchEnd', [[306, 423, 1]]); await sleep(80);
+  if (!(await V(() => TG._village.live().me.path.length > 0))) fail(step, 'a tap that wobbled 7 px became a drag instead of walking there');
+  await liftAll();
+
+  step = 'together: the left half steers player 1';
+  await place(open.x, open.y); await V(() => TG._village.together('')); await sleep(300);
+  await touch('touchStart', [[150, 500, 1]]); for (let i = 1; i <= 6; i++) { await touch('touchMove', [[150 + i * 10, 500, 1]]); await sleep(16); } await sleep(80);
+  if (!(await V(() => !!TG._village.live().stick && !TG._village.live().drag2))) fail(step, "a thumb on the left half of the screen steered player 2 instead of player 1");
+  await liftAll(); await V(() => TG._village.together(null)); await sleep(200);
 } catch (e) {
   errors.push(`${step}: ${e.stack || e.message}`);
 }

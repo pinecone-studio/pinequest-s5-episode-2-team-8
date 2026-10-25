@@ -67,8 +67,9 @@
     }
 
     pointer(type, p) {
-      const e = p.event || {}, cam = this.cameras.main;
-      this.hooks.pointer(type, { id: p.id, x: e.clientX ?? p.x, y: e.clientY ?? p.y, wx: cam.scrollX + p.x / cam.zoom, wy: cam.scrollY + p.y / cam.zoom, touch: !!p.wasTouch, event: e });
+      // x/y in screen points (CSS pixels) for mouse and touch alike: p.x is in the canvas's device pixels, and a touch event has no clientX
+      const e = p.event || {}, cam = this.cameras.main, r = this.game.canvas.getBoundingClientRect(), k = r.width / this.m.devW || 1 / this.m.dpr;
+      this.hooks.pointer(type, { id: p.id, x: r.left + p.x * k, y: r.top + p.y * k, wx: cam.scrollX + p.x / cam.zoom, wy: cam.scrollY + p.y / cam.zoom, touch: !!p.wasTouch, event: e });
     }
 
     /** Get (or make) the pooled object for this id; anything not asked for this frame is removed at the end of it. */
