@@ -46,6 +46,9 @@ jobs:
       - name: Multiplayer test (two players in the village)
         run: node tests/multiplayer.mjs
 
+      - name: Touch test (phone joystick and buttons)
+        run: node tests/touch.mjs
+
       - name: Basar AI bridge test (fake Claude API, no real key needed)
         run: node tests/basar-api.mjs
 
