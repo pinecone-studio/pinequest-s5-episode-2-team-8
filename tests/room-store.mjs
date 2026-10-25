@@ -14,6 +14,8 @@ class FakePool {
     this.calls = [];
     this.notifications = [];
     this.identities = new Map();
+    this.wallets = new Map();
+    this.walletOperations = new Map();
   }
   async connect() {
     return {
@@ -47,6 +49,26 @@ class FakePool {
         if (/^SELECT ticket_hash FROM naadamy_identities/.test(statement)) {
           const ticketHash = this.identities.get(values[0]);
           return { rows: ticketHash ? [{ ticket_hash: ticketHash }] : [] };
+        }
+        if (/^INSERT INTO naadamy_wallets/.test(statement)) {
+          if (!this.wallets.has(values[0])) this.wallets.set(values[0], { coins: values[1], xp: values[2], revision: 0 });
+          return { rows: [] };
+        }
+        if (/^SELECT coins, xp, revision FROM naadamy_wallets/.test(statement)) {
+          const wallet = this.wallets.get(values[0]);
+          return { rows: wallet ? [{ ...wallet }] : [] };
+        }
+        if (/^SELECT result FROM naadamy_wallet_ops/.test(statement)) {
+          const result = this.walletOperations.get(`${values[0]}:${values[1]}`);
+          return { rows: result ? [{ result }] : [] };
+        }
+        if (/^UPDATE naadamy_wallets SET coins =/.test(statement)) {
+          this.wallets.set(values[0], { coins: values[1], xp: values[2], revision: values[3] });
+          return { rows: [] };
+        }
+        if (/^INSERT INTO naadamy_wallet_ops/.test(statement)) {
+          this.walletOperations.set(`${values[0]}:${values[1]}`, JSON.parse(values[2]));
+          return { rows: [] };
         }
         if (/^SELECT pg_notify/.test(statement)) {
           this.notifications.push({ channel: values[0], payload: JSON.parse(values[1]) });
@@ -86,6 +108,22 @@ try {
   assert.equal(await store.authenticatePlayer('other-player', 'invalid'), false, 'malformed tickets are rejected');
   assert.equal(await store.authenticatePlayer('__proto__', ticket), true, 'special object-property names can register safely');
   assert.equal(await store.authenticatePlayer('__proto__', 'b'.repeat(64)), false, 'special object-property names remain protected');
+  const pgWallet = await store.getWallet('identity-player', { coins: 500, xp: 250 });
+  assert.deepEqual(pgWallet, { coins: 500, xp: 250, revision: 0 }, 'PostgreSQL creates the wallet from the one-time profile migration');
+  const pgOperation = '1'.repeat(32);
+  const pgSpend = await store.mutateWallet('identity-player', pgOperation, (wallet) => ({
+    changed: true,
+    wallet: { ...wallet, coins: wallet.coins - 125 },
+    result: { accepted: true },
+  }));
+  assert.deepEqual(pgSpend.wallet, { coins: 375, xp: 250, revision: 1 }, 'PostgreSQL wallet mutations advance the revision');
+  const pgReplay = await store.mutateWallet('identity-player', pgOperation, () => { throw new Error('duplicate operation was applied twice'); });
+  assert.equal(pgReplay.duplicate, true, 'PostgreSQL wallet operations are idempotent');
+  assert.deepEqual(pgReplay.wallet, pgSpend.wallet, 'a replay returns the current canonical wallet');
+  const pgRejected = await store.mutateWallet('identity-player', '2'.repeat(32), () => ({ changed: false, result: { accepted: false, reason: 'insufficient' } }));
+  assert.equal(pgRejected.wallet.coins, 375, 'rejected PostgreSQL spends leave the wallet unchanged');
+  assert.equal((await store.mutateWallet('identity-player', '2'.repeat(32), () => { throw new Error('rejected operation was retried'); })).duplicate, true,
+    'rejected PostgreSQL operations are also idempotent');
   const concurrentClaims = await Promise.all([
     store.authenticatePlayer('registration-race', 'e'.repeat(64)),
     store.authenticatePlayer('registration-race', 'f'.repeat(64)),
@@ -136,6 +174,19 @@ try {
   const restartedJsonStore = createRoomStore({ dataDir, databaseUrl: '' });
   assert.equal(await restartedJsonStore.authenticatePlayer('json-player', jsonTicket), true, 'JSON identity credentials survive a server restart');
   assert.equal(await restartedJsonStore.authenticatePlayer('json-player', 'd'.repeat(64)), false, 'JSON mode rejects a different ticket');
+  const jsonWallet = await jsonStore.getWallet('json-player', { coins: 80, xp: 10 });
+  assert.deepEqual(jsonWallet, { coins: 80, xp: 10, revision: 0 }, 'JSON mode seeds a profile wallet');
+  const jsonOperation = '3'.repeat(32);
+  const jsonReward = await jsonStore.mutateWallet('json-player', jsonOperation, (wallet) => ({
+    changed: true,
+    wallet: { ...wallet, coins: wallet.coins + 15, xp: wallet.xp + 20 },
+    result: { accepted: true },
+  }));
+  assert.deepEqual(jsonReward.wallet, { coins: 95, xp: 30, revision: 1 }, 'JSON mode persists wallet balances and revisions');
+  assert.deepEqual(jsonReward.result, { accepted: true }, 'JSON mutations return the operation result separately from the wallet envelope');
+  assert.deepEqual(await restartedJsonStore.getWallet('json-player'), jsonReward.wallet, 'JSON wallet balances survive a server restart');
+  const jsonReplay = await restartedJsonStore.mutateWallet('json-player', jsonOperation, () => { throw new Error('duplicate operation was applied twice'); });
+  assert.equal(jsonReplay.duplicate, true, 'JSON wallet operations are idempotent');
   await jsonStore.save({ NUTAG: { lots: [], chat: [] } });
   assert.deepEqual(await jsonStore.load(), { NUTAG: { lots: [], chat: [] } }, 'JSON storage still saves snapshots');
   const jsonMutation = await jsonStore.mutateRoom('NUTAG', { lots: [], chat: [] }, (state) => {

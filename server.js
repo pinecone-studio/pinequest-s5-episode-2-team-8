@@ -180,6 +180,11 @@ const num = (v, lo, hi) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.
 const numf = (v, lo, hi) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v * 100) / 100)) : lo); // positions with 2 decimals for smooth movement
 const cleanName = (s) => String(s || '').replace(/[<>]/g, '').trim().slice(0, 16) || 'Найз';
 const pub = (p) => ({ id: p.id, name: p.name, look: p.look, lvl: p.lvl, x: p.x, y: p.y, dir: p.dir });
+const WALLET_MAX = 2_000_000_000;
+function walletSeed(value) {
+  const integer = (amount, fallback, maximum) => Number.isSafeInteger(amount) ? Math.max(0, Math.min(maximum, amount)) : fallback;
+  return { coins: integer(value && value.coins, 40, 100_000), xp: integer(value && value.xp, 0, 1_000_000) };
+}
 /** How many people are on the whole server and in the main village, so players in different rooms can find each other. */
 function counts() {
   let total = 0, nutag = 0;
@@ -473,6 +478,7 @@ function updatePresence(p) {
 }
 
 async function joinPlayer(conn, message, code, id, now) {
+  const wallet = await roomStore.getWallet(id, walletSeed(message.wallet));
   await leave(conn);
   const r = room(code);
   const latestState = await roomStore.getRoomState(code);
@@ -513,10 +519,45 @@ async function joinPlayer(conn, message, code, id, now) {
     ...[...r.players.values()].filter((player) => player !== p).map(pub),
     ...r.remotePlayers.values(),
   ];
-  conn.send({ t: 'welcome', v: R.VERSION, now, room: code, players, lots: r.lots, chat: r.chat });
+  conn.wallet = wallet;
+  conn.send({ t: 'welcome', v: R.VERSION, now, room: code, players, lots: r.lots, chat: r.chat, wallet });
   const replacing = Boolean(old || replacingRemote || previousInstance);
   broadcast(r, { t: 'join', p: pub(p), ...(replacing ? { replace: true } : {}) }, conn);
   census();
+}
+
+async function handleWalletOperation(conn, message) {
+  const p = conn.player;
+  if (!p) return;
+  const operation = String(message.op || '');
+  const action = message.action;
+  const coins = message.coins, xp = message.xp;
+  if (!/^[a-f0-9]{32}$/i.test(operation)) return conn.send({ t: 'wallet-result', op: operation.slice(0, 40), accepted: false, reason: 'invalid', wallet: conn.wallet });
+  const valid = action === 'reward'
+    ? Number.isInteger(coins) && coins >= 0 && coins <= 10_000 && Number.isInteger(xp) && xp >= 0 && xp <= 100 && (coins > 0 || xp > 0)
+    : action === 'spend' && Number.isInteger(coins) && coins > 0 && coins <= 10_000 && xp === 0;
+  if (!valid) return conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'invalid', wallet: conn.wallet });
+
+  try {
+    const outcome = await roomStore.mutateWallet(p.id, operation, (wallet) => {
+      if (action === 'spend' && wallet.coins < coins) {
+        return { changed: false, result: { accepted: false, reason: 'insufficient' } };
+      }
+      if (action === 'reward' && (wallet.coins > WALLET_MAX - coins || wallet.xp > WALLET_MAX - xp)) {
+        return { changed: false, result: { accepted: false, reason: 'limit' } };
+      }
+      return {
+        changed: true,
+        wallet: { coins: wallet.coins + (action === 'reward' ? coins : -coins), xp: wallet.xp + xp },
+        result: { accepted: true },
+      };
+    });
+    conn.wallet = outcome.wallet;
+    conn.send({ t: 'wallet-result', op: operation, ...outcome.result, wallet: outcome.wallet });
+  } catch (error) {
+    console.error('Could not update player wallet:', error.message);
+    conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'storage', wallet: conn.wallet });
+  }
 }
 
 async function persistLotAction(conn, action, message) {
@@ -623,6 +664,9 @@ function onMessage(conn, text) {
       broadcast(r, { t: 'say', id: p.id, n: p.name, k: kind, i: m.i });   // to everyone, including the sender
       break;
     }
+    case 'wallet-op':
+      handleWalletOperation(conn, m);
+      break;
     // ---- own ger
     case 'ger-claim':
       persistLotAction(conn, 'claim', m);

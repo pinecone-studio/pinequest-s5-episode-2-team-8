@@ -24,6 +24,20 @@
     while (v.lots.length < R.LOTS) v.lots.push(null);
     return v;
   }
+  async function spendCoins(coins) {
+    const v = V();
+    if (!v || !Number.isInteger(coins) || coins < 0 || v.coins < coins) return false;
+    if (!coins) return true;
+    if (live && live.online) {
+      const result = await net.walletOperation('spend', coins, 0);
+      if (result && result.accepted) return true;
+      if (result && result.reason === 'insufficient') TG.toast(L('Зоос хүрэлцэхгүй байна.', 'Not enough coins.'));
+      else TG.toast(L('Зоосны өөрчлөлтийг сервер хадгалж чадсангүй.', 'The server could not save this coin change.'));
+      return false;
+    }
+    v.coins -= coins; S.save(); if (live) hud();
+    return true;
+  }
   const lotsArr = () => (live && live.online && live.lots ? live.lots : V().lots);
   const myLot = () => lotsArr().findIndex((l) => l && l.by === V().id);
   const now = () => Date.now() + (live && live.online ? live.offset : 0);
@@ -34,6 +48,11 @@
     const v = V(); if (!v) return null;
     const before = R.level(v.xp).l;
     v.coins += coins; v.xp += xp; S.save();
+    if (live && live.online) {
+      net.walletOperation('reward', coins, xp).then((result) => {
+        if (result && !result.accepted) TG.toast(L('Шагналын өөрчлөлтийг сервер баталгаажуулсангүй.', 'The server could not confirm this reward.'));
+      });
+    }
     const after = R.level(v.xp).l;
     if (after > before) {
       setTimeout(() => { TG.sfx.win(); TG.confetti(80); TG.toast(`🎉 ${L('Түвшин ахилаа!', 'Level up!')} ${L('Түвшин', 'Level')} ${after}`); }, 400);
@@ -145,14 +164,14 @@
   const ENERGY_MAX = 100;
   const food = (id) => FOODS.find((f) => f.id === id);
   /** Eat or drink something: costs coins (free for dairy you made, at home or when a family offers it), fills energy, teaches a fact. */
-  function eat(id, opts = {}) {
+  async function eat(id, opts = {}) {
     const v = V(); if (!v) return false;
     const f = food(id); if (!f) return false;
     const mine = !opts.free && R.DAIRY[id] && (v.produce[id] || 0) > 0;           // dairy you made yourself is free
-    if (mine) v.produce[id]--;
     const cost = mine || opts.free ? 0 : f.price;
     if (cost > v.coins) { TG.sfx.bad(); TG.toast('🪙 ' + L('Зоос хүрэлцэхгүй байна.', 'Not enough coins.')); return false; }
-    v.coins -= cost;
+    if (!(await spendCoins(cost))) return false;
+    if (mine) v.produce[id]--;
     v.energy = Math.min(ENERGY_MAX, (v.energy ?? ENERGY_MAX) + f.energy);
     v.ate = v.ate || {}; const first = !v.ate[id]; v.ate[id] = (v.ate[id] || 0) + 1;
     f.kind === 'drink' ? TG.sfx.pour && TG.sfx.pour(0.5) : TG.sfx.pop && TG.sfx.pop();
@@ -178,7 +197,7 @@
         h('div', { class: 'v-list' }, list.length ? list.map((it) => {
           const price = free(it) ? 0 : it.price;
           return h('div', { class: 'v-row' }, h('span', { class: 'v-card-e' }, it.e), h('div', { class: 'v-row-b' }, h('b', null, tx(it.name), own(it) ? h('small', { class: 'v-own' }, ` ×${own(it)} ${L('өөрийн', 'yours')}`) : null, v.ate && v.ate[it.id] ? '' : h('small', { class: 'v-new' }, ` ${L('шинэ', 'new')}`)), h('small', null, `+${it.energy} 🍖 · ${tx(it.fact)}`)),
-            h('button', { class: 'btn sm primary', onclick: () => { if (eat(it.id, { free: free(it) && !own(it) })) draw(); } }, it.kind === 'drink' ? L('Уух', 'Drink') : L('Идэх', 'Eat'), price ? ` ${price}🪙` : ''));
+            h('button', { class: 'btn sm primary', onclick: async () => { if (await eat(it.id, { free: free(it) && !own(it) })) draw(); } }, it.kind === 'drink' ? L('Уух', 'Drink') : L('Идэх', 'Eat'), price ? ` ${price}🪙` : ''));
         }) : null),
         h('p', { class: 'privacy' }, '🙏 ', L('Монгол ёсоор хоолны дээжийг ахмад хүнд өргөж, хоол идэхээс өмнө гараа угаадаг.', 'By Mongolian custom the first portion goes to the eldest, and you wash your hands before eating.')));
     };
@@ -233,7 +252,7 @@
       const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + location.pathname.replace(/[^/]*$/, '') + 'ws';
       let ws; try { ws = new WebSocket(url); } catch (e) { return setStatus('solo'); }
       this.ws = ws;
-      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, ticket, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir })); };
+      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, ticket, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir, wallet: { coins: v.coins, xp: v.xp } })); };
       ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } if (live) handle(m); };
       ws.onclose = () => {
         if (this.ws !== ws) return;
@@ -245,15 +264,39 @@
         this.timer = setTimeout(() => this.open(), Math.min(10000, 1500 * ++this.retry));
       };
     },
+    pendingWallet: new Map(),
+    walletOperation(action, coins, xp) {
+      if (!this.ws || this.ws.readyState !== 1 || !live || !live.online) return Promise.resolve(null);
+      const op = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => { this.pendingWallet.delete(op); resolve(null); }, 8000);
+        this.pendingWallet.set(op, { resolve, timer });
+        try {
+          this.ws.send(JSON.stringify({ t: 'wallet-op', op, action, coins, xp }));
+        } catch (error) {
+          clearTimeout(timer); this.pendingWallet.delete(op); resolve(null);
+          console.error('Could not send player wallet update:', error.message);
+        }
+      });
+    },
     send(m) { if (this.ws && this.ws.readyState === 1 && live && live.online) this.ws.send(JSON.stringify(m)); },
     close() { this.closed = true; clearTimeout(this.timer); if (this.ws) { const w = this.ws; this.ws = null; try { w.close(); } catch (e) { /* closing */ } } },
     rejoin() { this.close(); if (!live) return; this.closed = false; live.online = false; live.others.clear(); setStatus('connecting'); this.open(); },
   };
+  function applyWallet(wallet) {
+    if (!wallet || !Number.isSafeInteger(wallet.coins) || wallet.coins < 0 || !Number.isSafeInteger(wallet.xp) || wallet.xp < 0
+      || !Number.isSafeInteger(wallet.revision) || wallet.revision < 0) return;
+    if (live.walletRevision !== undefined && wallet.revision < live.walletRevision) return;
+    const v = V(); if (!v) return;
+    v.coins = wallet.coins; v.xp = wallet.xp; live.walletRevision = wallet.revision;
+    S.save(); hud();
+  }
   function handle(m) {
     const v = V();
     switch (m.t) {
       case 'welcome':
         live.online = true; live.offset = m.now - Date.now(); live.lots = m.lots || new Array(R.LOTS).fill(null); live.room = m.room; live.serverV = m.v;
+        applyWallet(m.wallet);
         live.others.clear(); (m.players || []).forEach(addOther);
         live.chat = (m.chat || []).slice(-CHAT_KEEP); renderChat();
         setStatus('online');
@@ -264,6 +307,12 @@
       case 'join': addOther(m.p); addChat({ k: 'join', id: m.p.id, n: m.p.name }); TG.toast(`👋 ${m.p.name} ${L('нутагт ирлээ', 'joined the village')}`); hud(); break;
       case 'leave': { const o = live.others.get(m.id); if (o) addChat({ k: 'leave', id: m.id, n: o.name }); live.others.delete(m.id); hud(); break; }
       case 'lot': onLot(m); break;
+      case 'wallet-result': {
+        applyWallet(m.wallet);
+        const pending = net.pendingWallet.get(m.op);
+        if (pending) { clearTimeout(pending.timer); net.pendingWallet.delete(m.op); pending.resolve(m); }
+        break;
+      }
       case 'wr-invite': case 'wr-declined': case 'wr-start': case 'wr-wait': case 'wr-result': case 'wr-end': onWrestleMsg(m); break;
       case 'move': { const o = live.others.get(m.id); if (o) { o.x = m.x; o.y = m.y; o.dir = m.dir; } break; }
       case 'jump': { const o = live.others.get(m.id); if (o) o.jt = performance.now(); break; }
@@ -410,7 +459,7 @@
   const fmtLeft = (ms) => { const s = Math.ceil(ms / 1000); return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}${L('с', 's')}`; };
 
   // ================================================================ screen
-  TG.gerwork.init({ V, live: () => live, net, reward, quest, factCard, lotsArr, enterGer, colours: (i) => gerColours(i), save: () => S.save(), refresh: () => { if (live) { hud(); updateCtx(); } } });
+  TG.gerwork.init({ V, live: () => live, net, reward, spendCoins, quest, factCard, lotsArr, enterGer, colours: (i) => gerColours(i), save: () => S.save(), refresh: () => { if (live) { hud(); updateCtx(); } } });
   TG.villageScreen = ({ setCleanup }) => {
     quests();
     const canvas = h('canvas', { class: 'v-canvas', 'aria-label': L('Нутаг: тоглоомын талбар', 'Village play area') });
@@ -1227,7 +1276,7 @@
     const v = V(); let cur = start || 'wear';
     const body = h('div', { class: 'v-shop' });
     const TABS = [['wear', 'deel:red', L('Хувцас', 'Clothes')], ['pet', 'pet:lamb', L('Тэжээвэр', 'Pets')], ['tool', 'tool:rod-2', L('Багаж', 'Tools')], ['sell', 'ui:coin', L('Зарах', 'Sell')]];
-    const pay = (price) => { if (v.coins < price) { TG.sfx.bad(); TG.toast(L('Зоос хүрэлцэхгүй байна. Хичээл үзэж, Басарын асуултад хариулж, цагаан идээ зарж цуглуулаарай!', 'Not enough coins. Learn, answer Basar’s quizzes or sell dairy foods to earn more!')); return false; } v.coins -= price; TG.sfx.chime(); return true; };
+    const pay = async (price) => { if (v.coins < price) { TG.sfx.bad(); TG.toast(L('Зоос хүрэлцэхгүй байна. Хичээл үзэж, Басарын асуултад хариулж, цагаан идээ зарж цуглуулаарай!', 'Not enough coins. Learn, answer Basar’s quizzes or sell dairy foods to earn more!')); return false; } if (!(await spendCoins(price))) return false; TG.sfx.chime(); return true; };
     const ownedItem = (it) => (it.cat === 'tool' ? v.rod >= it.val : v.owned.includes(it.id));
     const draw = () => {
       const level = lvl();
@@ -1236,7 +1285,7 @@
       else if (cur === 'sell') {
         const goods = [...Object.entries(v.produce).filter(([k, n]) => n > 0 && R.DAIRY[k]).map(([k, n]) => ({ k, n, kind: 'produce', e: 'dairy:' + k, name: R.DAIRY[k].name, price: R.DAIRY[k].sell })),
           ...Object.entries(v.fish).filter(([, n]) => n > 0).map(([k, n]) => ({ k, n, kind: 'fish', e: 'fish:' + k, name: R.FISH[k].name, price: R.FISH[k].sell }))];
-        const sell = (g, n) => { v[g.kind][g.k] -= n; v.coins += g.price * n; quest('sell', n); TG.sfx.chime(); save(); };
+        const sell = (g, n) => { v[g.kind][g.k] -= n; quest('sell', n); reward(g.price * n, 0); TG.sfx.chime(); save(); };
         list = goods.length ? [h('button', { class: 'btn primary block', onclick: () => goods.forEach((g) => sell(g, g.n)) }, `${L('Бүгдийг зарах', 'Sell everything')} · +${goods.reduce((s, g) => s + g.n * g.price, 0)}`, pic('ui:coin', 16)),
           ...goods.map((g) => h('div', { class: 'v-row' }, icon(g.e), h('div', { class: 'v-row-b' }, h('b', null, `${tx(g.name)} ×${g.n}`), h('small', null, `${g.price} ${L('зоос, ширхэг бүр', 'coins each')}`)),
             h('button', { class: 'btn sm', onclick: () => sell(g, 1) }, `${L('Зарах', 'Sell')} 1`)))]
@@ -1246,8 +1295,8 @@
         return h('div', { class: 'v-row' + (locked && !owned ? ' locked' : '') }, icon(itemKey(it)), h('div', { class: 'v-row-b' }, h('b', null, tx(it.name)), h('small', null, owned ? (worn ? L('Өмссөн', 'Wearing') : L('Танд байгаа', 'Owned')) : `${it.price} ${L('зоос', 'coins')}`)),
           owned ? (it.cat === 'tool' ? h('span', { class: 'v-owned' }, '✓') : h('button', { class: 'btn sm' + (worn ? ' done' : ''), onclick: () => equip(it.slot, worn && it.slot !== 'deel' ? null : it.val, draw) }, worn ? (it.slot === 'deel' ? '✓' : L('Тайлах', 'Remove')) : L('Өмсөх', 'Wear')))
             : locked ? h('span', { class: 'v-lock' }, '🔒 ', L('Түвшин', 'Lv'), ' ', it.lvl)
-              : h('button', { class: 'btn sm primary', onclick: () => {
-                if (!pay(it.price)) return;
+              : h('button', { class: 'btn sm primary', onclick: async () => {
+                  if (!(await pay(it.price))) return;
                 if (it.cat === 'tool') v.rod = it.val;
                 else { v.owned.push(it.id); v.look[it.slot] = it.val; sendLook(); }
                 TG.toast(`${tx(it.name)}: ${L('худалдаж авлаа!', 'purchased!')}`); save();
@@ -1256,7 +1305,7 @@
       if (cur === 'tool') { // the white cover for your ger: canvas the herders buy in town
         const g = v.ger, need = g.stage < 7 && !(g.parts.buurees > 0);
         list.unshift(h('div', { class: 'v-row v-cover' }, icon('part:buurees'), h('div', { class: 'v-row-b' }, h('b', null, L('Гэрийн цагаан бүрээс', 'White ger cover')), h('small', null, need ? L('Эсгийн гадуур хучиж, бороо, нарнаас хамгаална.', 'Goes over the felt and keeps out rain and sun.') : L('✓ Танд байгаа', '✓ You have it'))),
-          need ? h('button', { class: 'btn sm', 'data-buy': 'buurees', onclick: () => { if (!pay(R.COVER_PRICE)) return; g.parts.buurees = (g.parts.buurees || 0) + 1; TG.toast(L('Бүрээс худалдаж авлаа!', 'You bought the cover!')); save(); } }, `${R.COVER_PRICE}`, pic('ui:coin', 14)) : h('span', { class: 'v-owned' }, '✓')));
+          need ? h('button', { class: 'btn sm', 'data-buy': 'buurees', onclick: async () => { if (!(await pay(R.COVER_PRICE))) return; g.parts.buurees = (g.parts.buurees || 0) + 1; TG.toast(L('Бүрээс худалдаж авлаа!', 'You bought the cover!')); save(); } }, `${R.COVER_PRICE}`, pic('ui:coin', 14)) : h('span', { class: 'v-owned' }, '✓')));
       }
       rc(body, 
         h('div', { class: 'v-shop-head' }, h('h2', null, L('Наадмын дэлгүүр', 'Naadam Shop')), h('span', { class: 'v-pill dark' }, pic('ui:coin', 18), ` ${v.coins}`)),
@@ -2051,9 +2100,10 @@
           const owned = (l.furn || []).includes(f.id), locked = lvl() < f.lvl;
           return h('div', { class: 'v-row' + (locked && !owned ? ' locked' : '') }, icon('furn:' + f.id), h('div', { class: 'v-row-b' }, h('b', null, tx(f.name)), h('small', null, tx(f.fact))),
             owned ? h('span', { class: 'v-owned' }, '✓') : locked ? h('span', { class: 'v-lock' }, L('Түвшин', 'Lv'), ' ', f.lvl)
-              : h('button', { class: 'btn sm primary', onclick: () => {
+              : h('button', { class: 'btn sm primary', onclick: async () => {
                 if (v.coins < f.price) { TG.sfx.bad(); return TG.toast(L('Зоос хүрэлцэхгүй байна.', 'Not enough coins.')); }
-                v.coins -= f.price; saveLot(i, { furn: [...(l.furn || []), f.id] }); TG.sfx.chime(); hud(); draw();
+                if (!(await spendCoins(f.price))) return;
+                saveLot(i, { furn: [...(l.furn || []), f.id] }); TG.sfx.chime(); hud(); draw();
               } }, `${f.price} `, pic('ui:coin', 14)));
         })),
         h('div', { class: 'label', style: { marginTop: '12px' } }, L('Өнгө солих (үнэгүй)', 'Change colours (free)')),

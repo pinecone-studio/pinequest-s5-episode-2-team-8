@@ -49,10 +49,11 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 ### Presence
 | `t` | Fields | What it does |
 |---|---|---|
-| `join` | `room, id, ticket, name, look, lvl, x, y, dir` | Register or authenticate a profile's device-local identity, then enter a room. A bad or missing ticket cannot claim an existing id. Joining again on the same connection leaves the old room first. If the authenticated `id` is already in the room, the older connection gets `replaced` and is closed. |
+| `join` | `room, id, ticket, name, look, lvl, x, y, dir, wallet?` | Register or authenticate a profile's device-local identity, then enter a room. `wallet` is a one-time legacy migration seed `{ coins, xp }`, bounded to 100,000 coins and 1,000,000 XP; the server ignores it after the wallet is created. A bad or missing ticket cannot claim an existing id. Joining again on the same connection leaves the old room first. If the authenticated `id` is already in the room, the older connection gets `replaced` and is closed. |
 | `move` | `x, y, dir` | New position. The web client sends it about 10 times a second while moving. |
 | `jump` | (none) | Shows a jump to others. At most once every 300 ms; extra ones are dropped. |
 | `look` | `look, lvl` | Changed outfit or level. |
+| `wallet-op` | `op, action, coins, xp` | Authenticated wallet transaction. `op` is a 32-character hex idempotency key. `action: 'spend'` requires 1–10,000 coins and zero XP; `action: 'reward'` accepts 0–10,000 coins and 0–100 XP, with at least one positive amount. Spending is rejected if the server balance is too low. |
 
 ### Chat (preset only)
 | `t` | Fields | What it does |
@@ -62,7 +63,12 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 ### Chat log
 Each room keeps its last **30** lines: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. The server saves this bounded log alongside room lots every 5 seconds when changed and on shutdown. Without `DATABASE_URL`, the store is `DATA_DIR/rooms.json`; with `DATABASE_URL`, it is the `naadamy_rooms` PostgreSQL table. PostgreSQL startup imports room codes missing from the database from the legacy JSON file without overwriting existing database rows. Older room records without a `chat` field start with an empty log. On load, entries are validated against the preset phrase/emote lists and cleaned before being sent to players.
 
-When PostgreSQL is configured, each server records active players in `naadamy_players` and device-local identity ticket hashes in `naadamy_identities`; PostgreSQL `LISTEN`/`NOTIFY` shares room joins, leaves, moves, looks, jumps, preset chat, ger updates and wrestling messages across instances. Names, ages, raw tickets and game progress are not stored in the identity table. The first connection for a previously unseen id registers its ticket; existing local profiles therefore enroll the first time they connect after this protocol update. In single-server JSON mode, ticket hashes are kept in `DATA_DIR/identities.json`. Ger claims and edits, wrestling invitations, match starts, moves, timeouts and forfeits are applied while holding a row lock on the room snapshot, so concurrent servers cannot claim one lot twice or resolve a wrestling round twice. Notifications are enqueued inside the same transaction as each wrestling update. Snapshot saves update chat without overwriting the transactionally updated ger or wrestling state. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, room realtime behavior remains single-server and in-process.
+When PostgreSQL is configured, each server records active players in `naadamy_players` and device-local identity ticket hashes in `naadamy_identities`; PostgreSQL `LISTEN`/`NOTIFY` shares room joins, leaves, moves, looks, jumps, preset chat, ger updates and wrestling messages across instances. Names, ages and raw tickets are not stored in the identity table. Wallet balances are stored separately in `naadamy_wallets`; successful and rejected wallet operation ids are recorded in `naadamy_wallet_ops` for idempotent retries. Each wallet update holds a row lock and commits the balance, revision and operation result together. The first connection for a previously unseen id registers its ticket; existing local profiles therefore enroll the first time they connect after this protocol update. In single-server JSON mode, ticket hashes and wallet data are kept separately in `DATA_DIR/identities.json` and `DATA_DIR/wallets.json`. Ger claims and edits, wrestling invitations, match starts, moves, timeouts and forfeits are applied while holding a row lock on the room snapshot, so concurrent servers cannot claim one lot twice or resolve a wrestling round twice. Notifications are enqueued inside the same transaction as each wrestling update. Snapshot saves update chat without overwriting the transactionally updated ger or wrestling state. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, room realtime behavior remains single-server and in-process.
+
+### Wallet (coins and XP)
+The server returns the canonical `{ coins, xp, revision }` in `welcome.wallet` and after every `wallet-op` as `wallet-result { op, accepted, reason?, wallet }`. The browser waits for a successful spend before completing paid food, shop, furniture or ger-material trades. Wallet records persist across server restarts and, with PostgreSQL, across server instances. A wallet created for an older profile imports its local balance once, with the bounds above; this initial migration is client-reported and is not proof of previously earned progress.
+
+The server enforces non-negative balances, operation size limits and idempotency. However, the current browser client still reports reward amounts after local lessons and minigames, so reward eligibility and inventory trades are **not cheat-proof**: a modified client can request capped rewards repeatedly. Inventory, quest state, energy, and most gameplay outcomes remain local. This phase makes wallet storage and spending authoritative; it does not claim to validate gameplay or synchronize all progress.
 
 A log line is `{ k, id, n, i? }`:
 - `k`: `'p'` phrase, `'e'` emote, `'join'`, `'leave'`.
@@ -77,7 +83,7 @@ A second tab of the same player (`replaced`) doesn't add a join or leave line.
 | `ger-buy` | `i, roof, door` | Claim lot `i` (`0 … LOTS-1`). One ger per player. `roof` ∈ `ROOF`, `door` ∈ `DOOR` (defaults: `blue`, `red`). |
 | `ger-style` | `roof?, door?, furn?` | Restyle your own ger. `furn` = up to 12 unique `FURNITURE` ids. |
 
-Room lots and the recent chat log are saved every 5 seconds when changed and on shutdown. The default store is `DATA_DIR/rooms.json`; when `DATABASE_URL` is configured, PostgreSQL is authoritative and the server stores the room snapshot in `naadamy_rooms`. Coins are **not** checked by the server; the client takes off `GER_PRICE` when it sees its own `lot` `buy`.
+Room lots and the recent chat log are saved every 5 seconds when changed and on shutdown. The default store is `DATA_DIR/rooms.json`; when `DATABASE_URL` is configured, PostgreSQL is authoritative and the server stores the room snapshot in `naadamy_rooms`. Wallet spends are authoritative, but ger lot claims and stages do not yet validate or charge their costs on the server.
 
 ### Live wrestling (best of 3)
 | `t` | Fields | What it does |
@@ -92,13 +98,14 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 
 | `t` | Fields | When |
 |---|---|---|
-| `welcome` | `v, now, room, players[], lots[], chat[]` | Reply to `join`. `v` = server protocol version (compare with your `VERSION`), `now` = server clock in ms, `players` = everyone else as `pub`, `lots` = `LOTS` entries (`null` or a lot), `chat` = the room's recent log lines, oldest first (see Chat log). |
+| `welcome` | `v, now, room, players[], lots[], chat[], wallet` | Reply to `join`. `v` = server protocol version (compare with your `VERSION`), `now` = server clock in ms, `players` = everyone else as `pub`, `lots` = `LOTS` entries (`null` or a lot), `chat` = the room's recent log lines, oldest first (see Chat log), `wallet` = canonical `{ coins, xp, revision }`. |
 | `join` | `p` | Someone entered your room (`pub`). |
 | `leave` | `id` | Someone left or dropped. |
 | `move` | `id, x, y, dir` | Someone moved. |
 | `jump` | `id` | Someone jumped. |
 | `look` | `id, look, lvl` | Someone changed outfit or level. |
 | `say` | `id, k, i` | Someone said a phrase or emote (your own included). |
+| `wallet-result` | `op, accepted, reason?, wallet` | Reply to `wallet-op`. Returns the canonical wallet after the operation. `reason` may be `insufficient`, `limit`, `invalid` or `storage`. |
 | `census` | `total, nutag` | Player counts across the whole server; sent whenever anyone joins or leaves. |
 | `lot` | `act, i, lot, by` | `act: 'buy'` or `'style'`. `lot` = `{ by, n, roof, door, furn[] }` (`by` = owner id, `n` = owner name). |
 | `wr-invite` | `from, name` | You were invited. |
@@ -121,8 +128,8 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 Good to know before building on this:
 - **Identity:** the server verifies a random ticket bound to each profile id. Tickets remain on the device and cannot be recovered or used to sync a profile to another device; anyone who obtains a ticket can act as that profile. Use HTTPS/WSS outside a trusted local network.
 - **Position:** clamped to the map only; no speed or wall checks.
-- **Progress:** XP, coins, items, dairy, fishing and quests are all on the device (`localStorage`). The server never sees them, apart from `lvl`.
-- The server is the source of truth only for **who is in the room, ger lots, authenticated player ids and wrestling matches**. With PostgreSQL, those live room updates are shared across instances. XP, coins, inventory and quests remain local and are not protected against client-side changes.
+- **Progress:** coins and XP balances persist server-side, but the one-time migration seed and reward requests come from the client; the server limits amounts but does not validate lesson/minigame results. Items, dairy, fishing, quests and most outcomes remain device-local (`localStorage`). The shared player `lvl` is also client-reported.
+- The server is the source of truth for **authenticated player ids, shared room state, wallet balances and accepted wallet transactions**. With PostgreSQL, shared room state and wallet changes work across instances. The client still controls reward claims, so XP/coin earning, inventory, quests and reported levels are not cheat-proof.
 
 ## Changing the protocol
 

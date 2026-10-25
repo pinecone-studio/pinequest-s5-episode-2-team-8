@@ -48,6 +48,62 @@ try {
   const a = await player('Бат', { deel: 'red', hat: 'mongol', pet: 'lamb' });
   const b = await player('Сарнай', { deel: 'green', hat: 'flower', neck: 'khadag' });
   ok('both players connected to the server');
+  const walletBefore = await a.evaluate(() => {
+    const v = TG.store.active().village;
+    return { coins: v.coins, xp: v.xp, revision: TG._village.live().walletRevision };
+  });
+  if (walletBefore.coins !== 600 || walletBefore.xp !== 200 || walletBefore.revision !== 0) throw new Error('the server did not initialize the migrated wallet');
+  await a.evaluate(() => TG.villageReward(12, 7));
+  await until(() => a.evaluate(() => TG._village.live().walletRevision === 1), 'server confirms reward');
+  const rewardedWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
+  if (rewardedWallet.coins !== 612 || rewardedWallet.xp !== 207) throw new Error('the server did not persist the wallet reward');
+  const food = await a.evaluate(async () => {
+    const item = TG.FOODS.find((entry) => entry.price > 0);
+    const ok = await TG.villageEat(item.id), v = TG.store.active().village, live = TG._village.live();
+    return { ok, price: item.price, coins: v.coins, xp: v.xp, revision: live.walletRevision, online: live.online };
+  });
+  if (!food.ok) throw new Error(`a valid wallet purchase was rejected: ${JSON.stringify(food)}`);
+  await until(() => a.evaluate(() => TG._village.live().walletRevision === 3), 'server confirms spending and first-taste reward');
+  const spentWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
+  if (spentWallet.coins !== 612 - food.price || spentWallet.xp !== 212) throw new Error('the server did not persist the wallet spend and XP');
+  await a.evaluate(() => TG._village.reconnect());
+  await until(() => a.evaluate(() => TG._village.live().online), 'player reconnects');
+  const restoredWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
+  if (restoredWallet.coins !== spentWallet.coins || restoredWallet.xp !== spentWallet.xp) throw new Error('wallet balances did not survive reconnect');
+  ok('authenticated wallets persist rewards, confirmed purchases and reconnects');
+  const walletProbe = await browser.newPage();
+  await walletProbe.goto(`${base}/api/hello`);
+  const probeId = 'wallet-test-' + crypto.randomBytes(4).toString('hex');
+  await walletProbe.evaluate((url, id, ticket) => {
+    window.walletEvents = [];
+    window.walletSocket = new WebSocket(url);
+    window.walletSocket.addEventListener('message', (event) => window.walletEvents.push(JSON.parse(event.data)));
+    window.walletSocket.addEventListener('open', () => window.walletSocket.send(JSON.stringify({
+      t: 'join', room: 'NUTAG', id, ticket, name: 'Wallet test', look: {}, wallet: { coins: 40, xp: 0 },
+    })));
+  }, `ws://${new URL(base).host}/ws`, probeId, crypto.randomBytes(32).toString('hex'));
+  await walletProbe.waitForFunction(() => window.walletEvents.some((message) => message.t === 'welcome'), { timeout: 5000 });
+  const sendWalletOperation = async (op, action, coins, xp) => {
+    const previous = await walletProbe.evaluate((id) => window.walletEvents.filter((message) => message.t === 'wallet-result' && message.op === id).length, op);
+    await walletProbe.evaluate((operation) => window.walletSocket.send(JSON.stringify({ t: 'wallet-op', ...operation })), { op, action, coins, xp });
+    await until(() => walletProbe.evaluate(({ op, previous }) => window.walletEvents.filter((message) => message.t === 'wallet-result' && message.op === op).length > previous, { op, previous }), `wallet operation ${op}`);
+    return walletProbe.evaluate((id) => {
+      const events = window.walletEvents.filter((message) => message.t === 'wallet-result' && message.op === id);
+      return events[events.length - 1];
+    }, op);
+  };
+  const deniedSpend = await sendWalletOperation('b'.repeat(32), 'spend', 41, 0);
+  if (deniedSpend.accepted || deniedSpend.reason !== 'insufficient' || deniedSpend.wallet.coins !== 40) throw new Error('the server allowed an overspend');
+  const deniedReplay = await sendWalletOperation('b'.repeat(32), 'spend', 41, 0);
+  if (deniedReplay.accepted || deniedReplay.wallet.coins !== 40) throw new Error('a rejected operation was not idempotent');
+  const acceptedReward = await sendWalletOperation('c'.repeat(32), 'reward', 10, 5);
+  if (!acceptedReward.accepted || acceptedReward.wallet.coins !== 50 || acceptedReward.wallet.xp !== 5) throw new Error('the server rejected a valid wallet reward');
+  const repeatedReward = await sendWalletOperation('c'.repeat(32), 'reward', 10, 5);
+  if (!repeatedReward.accepted || repeatedReward.wallet.coins !== 50 || repeatedReward.wallet.xp !== 5 || repeatedReward.wallet.revision !== 1) {
+    throw new Error('a repeated reward operation changed the wallet twice');
+  }
+  await walletProbe.close();
+  ok('wallet overspending is denied and transaction replays do not duplicate changes');
   if (!(await a.evaluate(() => {
     const v = TG.store.active().village;
     const saved = JSON.parse(localStorage.getItem(TG.store.KEY) || 'null');
