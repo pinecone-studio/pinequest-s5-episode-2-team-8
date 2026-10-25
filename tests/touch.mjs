@@ -89,6 +89,13 @@ try {
   }
   await liftAll();
 
+  step = 'second finger eats from the hotbar';
+  await place(open.x, open.y);
+  await V(() => { const v = TG.store.active().village; v.produce.aaruul = 2; v.energy = 10; TG._village.hud(); });
+  await steer(); await tap2('.v-slot-btn');
+  { const n = await V(() => TG.store.active().village.produce.aaruul); if (n !== 1) fail(step, `tapping aaruul with a second finger did not eat it (left: ${n})`); }
+  await liftAll();
+
   step = 'mouse click acts once';
   { const [x, y] = await centre('.v-run'); await page.mouse.click(x, y); await sleep(100);
     if (!(await V(() => TG._village.live().runLock === true))) fail(step, 'one mouse click on Run did not switch running on exactly once');
