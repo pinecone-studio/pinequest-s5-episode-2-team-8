@@ -48,6 +48,30 @@ try {
   const a = await player('Бат', { deel: 'red', hat: 'mongol', pet: 'lamb' });
   const b = await player('Сарнай', { deel: 'green', hat: 'flower', neck: 'khadag' });
   ok('both players connected to the server');
+  if (!(await a.evaluate(() => {
+    const v = TG.store.active().village;
+    const saved = JSON.parse(localStorage.getItem(TG.store.KEY) || 'null');
+    const profile = saved && saved.profiles.find((entry) => entry.id === TG.store.active().id);
+    return /^[a-f0-9]{64}$/i.test(v.ticket || '') && profile && profile.village.ticket === v.ticket;
+  }))) throw new Error('the player identity ticket was not saved on the device');
+  ok('each profile keeps its private identity ticket on the device');
+
+  const protectedId = await a.evaluate(() => TG.store.active().village.id);
+  const impostor = await browser.newPage();
+  await impostor.goto(`${base}/api/hello`);
+  await impostor.evaluate((url, id, ticket) => {
+    window.identityEvents = [];
+    window.identitySocket = new WebSocket(url);
+    window.identitySocket.addEventListener('message', (event) => window.identityEvents.push(JSON.parse(event.data)));
+    window.identitySocket.addEventListener('open', () => window.identitySocket.send(JSON.stringify({
+      t: 'join', room: 'NUTAG', id, ticket, name: 'Дуурайгч', look: {}, x: 20, y: 13,
+    })));
+  }, `ws://${new URL(base).host}/ws`, protectedId, crypto.randomBytes(32).toString('hex'));
+  await impostor.waitForFunction(() => window.identityEvents.some((message) => message.t === 'error' && message.why === 'identity'), { timeout: 5000 });
+  await sleep(100);
+  if (!(await a.evaluate(() => TG._village.live().online))) throw new Error('an invalid identity ticket replaced its owner');
+  await impostor.close();
+  ok('an invalid ticket cannot take over a profile identity');
 
   await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Сарнай')), 'A sees B');
   await until(() => b.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Бат' && o.look.hat === 'mongol')), 'B sees A with hat');
@@ -150,8 +174,11 @@ try {
   await new Promise((r) => ghost.on('connect', r));
   ghost.write(`GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${crypto.randomBytes(16).toString('base64')}\r\n\r\n`);
   await sleep(200);
-  const payload = Buffer.from(JSON.stringify({ t: 'join', room: 'NUTAG', id: 'ghost-1', name: 'Сүнс', look: {}, x: 20, y: 13 })), mask = crypto.randomBytes(4);
-  ghost.write(Buffer.concat([Buffer.from([0x81, 0x80 | payload.length]), mask, Buffer.from(payload.map((x, i) => x ^ mask[i & 3]))]));
+  const payload = Buffer.from(JSON.stringify({ t: 'join', room: 'NUTAG', id: 'ghost-1', ticket: crypto.randomBytes(32).toString('hex'), name: 'Сүнс', look: {}, x: 20, y: 13 })), mask = crypto.randomBytes(4);
+  const header = payload.length < 126
+    ? Buffer.from([0x81, 0x80 | payload.length])
+    : Buffer.from([0x81, 0x80 | 126, payload.length >> 8, payload.length & 255]);
+  ghost.write(Buffer.concat([header, mask, Buffer.from(payload.map((x, i) => x ^ mask[i & 3]))]));
   ghost.pause();                                                // never answers the server's pings again
   await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Сүнс')), 'A sees the ghost join');
   await until(() => a.evaluate(() => ![...TG._village.live().others.values()].some((o) => o.name === 'Сүнс')), 'the silent player is removed', 6000);
@@ -162,7 +189,7 @@ try {
   const spam = new WebSocket(`ws://127.0.0.1:${port}/ws`), heard = [];
   await new Promise((r) => (spam.onopen = r));
   spam.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t === 'say' && m.id === 'spam-1') heard.push(m); };
-  spam.send(JSON.stringify({ t: 'join', room: 'SPAM', id: 'spam-1', name: 'Spam', look: {}, x: 20, y: 13 }));
+  spam.send(JSON.stringify({ t: 'join', room: 'SPAM', id: 'spam-1', ticket: crypto.randomBytes(32).toString('hex'), name: 'Spam', look: {}, x: 20, y: 13 }));
   await sleep(200);
   for (let k = 0; k < 5; k++) spam.send(JSON.stringify({ t: 'say', k: 'e', i: 0 }));
   await sleep(400);

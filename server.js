@@ -584,7 +584,14 @@ function onMessage(conn, text) {
     const code = String(m.room || '').toUpperCase();
     const id = String(m.id || '').slice(0, 24);
     if (!R.ROOM_RE.test(code) || !/^[\w-]{4,24}$/.test(id)) return conn.send({ t: 'error', why: 'bad-join' });
-    joinPlayer(conn, m, code, id, t).catch((error) => {
+    roomStore.authenticatePlayer(id, m.ticket).then((authenticated) => {
+      if (!authenticated) {
+        conn.send({ t: 'error', why: 'identity' });
+        setTimeout(() => conn.socket.destroy(), 50);
+        return;
+      }
+      return joinPlayer(conn, m, code, id, t);
+    }).catch((error) => {
       console.error('Could not join multiplayer room:', error.message);
       conn.send({ t: 'error', why: 'storage' });
     });

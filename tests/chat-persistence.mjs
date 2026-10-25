@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
@@ -6,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-chat-'));
+const ticket = randomBytes(32).toString('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const hasTestPhrase = (chat) => Array.isArray(chat) && chat.some((line) => line.k === 'p' && line.id === 'chat-test-1' && line.i === 0);
 
@@ -66,7 +68,7 @@ async function joinAndReadChat(port) {
         reject(new Error('websocket connection failed'));
       }, { once: true });
       socket.addEventListener('open', () => {
-        socket.send(JSON.stringify({ t: 'join', room: 'NUTAG', id: 'chat-test-1', name: 'Тест', look: {}, x: 20, y: 13 }));
+        socket.send(JSON.stringify({ t: 'join', room: 'NUTAG', id: 'chat-test-1', ticket, name: 'Тест', look: {}, x: 20, y: 13 }));
       }, { once: true });
       socket.addEventListener('message', (event) => {
         const message = JSON.parse(event.data);
@@ -96,7 +98,7 @@ try {
       reject(new Error('first websocket connection failed'));
     }, { once: true });
   });
-  firstSocket.send(JSON.stringify({ t: 'join', room: 'NUTAG', id: 'chat-test-1', name: 'Тест', look: {}, x: 20, y: 13 }));
+  firstSocket.send(JSON.stringify({ t: 'join', room: 'NUTAG', id: 'chat-test-1', ticket, name: 'Тест', look: {}, x: 20, y: 13 }));
   await new Promise((resolveSay, reject) => {
     const timeout = setTimeout(() => reject(new Error('timed out waiting for the preset phrase')), 5000);
     firstSocket.addEventListener('message', (event) => {

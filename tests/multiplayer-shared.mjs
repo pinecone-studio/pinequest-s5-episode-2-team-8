@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
@@ -44,7 +45,7 @@ async function startServer() {
   });
 }
 
-async function openSocket(page, port, id, name, room) {
+async function openSocket(page, port, id, ticket, name, room) {
   await page.goto(`http://127.0.0.1:${port}/api/hello`);
   await page.evaluate((url) => {
     window.wsEvents = [];
@@ -53,7 +54,7 @@ async function openSocket(page, port, id, name, room) {
   }, `ws://127.0.0.1:${port}/ws`);
   await page.waitForFunction(() => window.gameSocket.readyState === WebSocket.OPEN, { timeout: 8000 });
   await page.evaluate((join) => window.gameSocket.send(JSON.stringify(join)), {
-    t: 'join', room, id, name, look: {}, x: 20, y: 13, dir: 0,
+    t: 'join', room, id, ticket, name, look: {}, x: 20, y: 13, dir: 0,
   });
 }
 
@@ -74,16 +75,27 @@ try {
   const room = Math.random().toString(36).slice(2, 8).toUpperCase().padEnd(6, 'A');
   const idA = `player-${Math.random().toString(36).slice(2, 10)}`;
   const idB = `player-${Math.random().toString(36).slice(2, 10)}`;
+  const ticketA = randomBytes(32).toString('hex');
+  const ticketB = randomBytes(32).toString('hex');
 
-  await openSocket(pageA, serverA.port, idA, 'Бат', room);
+  await openSocket(pageA, serverA.port, idA, ticketA, 'Бат', room);
   const welcomeA = await waitForMessage(pageA, (message) => message.t === 'welcome', 'first player welcome');
   assert.deepEqual(welcomeA.players, [], 'first player starts alone');
+  assert.equal(welcomeA.ticket, undefined, 'the server never returns or exposes a player credential');
 
-  await openSocket(pageB, serverB.port, idB, 'Найз', room);
+  await openSocket(pageB, serverB.port, idB, ticketB, 'Найз', room);
   await Promise.all([pageA, pageB].map((page) => page.evaluate((ids) => { window.sharedTest = ids; }, { idA, idB })));
   const welcomeB = await waitForMessage(pageB, (message) => message.t === 'welcome', 'second player welcome');
   assert.ok(welcomeB.players.some((player) => player.id === idA), 'joining another server discovers the first player');
   await waitForMessage(pageA, (message) => message.t === 'join' && message.p.id === window.sharedTest.idB, 'cross-instance join');
+
+  const impostorPage = await browser.newPage();
+  await openSocket(impostorPage, serverB.port, idA, randomBytes(32).toString('hex'), 'Дуурайгч', room);
+  const deniedIdentity = await waitForMessage(impostorPage, (message) => message.t === 'error' && message.why === 'identity', 'rejecting an invalid player credential');
+  assert.equal(deniedIdentity.why, 'identity', 'a different device credential cannot claim an existing player id');
+  await sleep(100);
+  assert.equal(await pageA.evaluate(() => window.gameSocket.readyState), WebSocket.OPEN, 'an invalid identity claim cannot replace the real player connection');
+  await impostorPage.close();
 
   await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'move', x: 31, y: 16, dir: 2 })));
   await waitForMessage(pageA, (message) => message.t === 'move' && message.id === window.sharedTest.idB && message.x === 31, 'cross-instance movement');
@@ -158,6 +170,12 @@ try {
 
   await pageB.evaluate(() => window.gameSocket.close());
   await waitForMessage(pageA, (message) => message.t === 'leave' && message.id === window.sharedTest.idB, 'cross-instance disconnect');
+  await pageA.close();
+  const returningPage = await browser.newPage();
+  await openSocket(returningPage, serverB.port, idA, ticketA, 'Бат', room);
+  const returningWelcome = await waitForMessage(returningPage, (message) => message.t === 'welcome', 'authenticated identity reconnecting through another instance');
+  assert.equal(returningWelcome.room, room, 'the original ticket authenticates the same identity on another server');
+  await returningPage.close();
   console.log('Shared multiplayer: two PostgreSQL-backed servers synchronize presence, movement, chat, ger claims, wrestling and leave.');
 } finally {
   if (browser) await browser.close();

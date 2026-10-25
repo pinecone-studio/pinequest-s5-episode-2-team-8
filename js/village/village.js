@@ -187,6 +187,34 @@
   }
 
   // ================================================================ multiplayer connection
+  function playerTicket(v) {
+    if (/^[a-f0-9]{64}$/i.test(v.ticket || '')) return v.ticket;
+    if (v.ticket) {
+      setStatus('solo');
+      TG.toast(L('Энэ профайлын нэвтрэх түлхүүр эвдэрсэн байна. Профайлаа сэргээх боломжгүй тул шинэ профайл үүсгээрэй.', 'This profile’s sign-in key is invalid. It cannot be recovered; create a new profile.'));
+      return null;
+    }
+    if (!window.crypto || typeof window.crypto.getRandomValues !== 'function') {
+      setStatus('solo');
+      TG.toast(L('Энэ төхөөрөмж аюулгүй нэвтрэх түлхүүр үүсгэж чадсангүй.', 'This device could not create a secure sign-in key.'));
+      return null;
+    }
+    const bytes = window.crypto.getRandomValues(new Uint8Array(32));
+    v.ticket = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    S.save();
+    try {
+      const saved = JSON.parse(localStorage.getItem(S.KEY) || 'null');
+      const profile = saved && Array.isArray(saved.profiles) && saved.profiles.find((entry) => entry.id === S.active().id);
+      if (!profile || !profile.village || profile.village.ticket !== v.ticket) throw new Error('ticket was not persisted');
+    } catch (error) {
+      console.error('Could not persist the multiplayer identity ticket:', error.message);
+      v.ticket = null;
+      setStatus('solo');
+      TG.toast(L('Нэвтрэх түлхүүрийг төхөөрөмжид хадгалж чадсангүй. Хадгалалт боломжтой болсны дараа дахин холбоно уу.', 'Could not save the sign-in key on this device. Reconnect after device storage is available.'));
+      return null;
+    }
+    return v.ticket;
+  }
   const net = {
     ws: null, retry: 0, timer: 0, closed: true,
     async connect() {
@@ -200,10 +228,12 @@
     },
     open() {
       if (!live) return;
-      const v = V(), url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + location.pathname.replace(/[^/]*$/, '') + 'ws';
+      const v = V(), ticket = playerTicket(v);
+      if (!ticket) return;
+      const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + location.pathname.replace(/[^/]*$/, '') + 'ws';
       let ws; try { ws = new WebSocket(url); } catch (e) { return setStatus('solo'); }
       this.ws = ws;
-      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir })); };
+      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, ticket, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir })); };
       ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } if (live) handle(m); };
       ws.onclose = () => {
         if (this.ws !== ws) return;
@@ -255,7 +285,12 @@
         TG.toast('🔁 ' + L('Энэ профайл өөр цонх эсвэл төхөөрөмж дээр нээгдлээ. Тэнд үргэлжлүүлэн тоглоорой.', 'This profile was opened in another tab or device. Keep playing there.'));
         break;
       case 'deny': deny(m.why); break;
-      case 'error': TG.toast(L('Өрөөнд нэвтэрч чадсангүй.', 'Could not join the room.')); break;
+      case 'error':
+        if (m.why === 'identity') {
+          net.closed = true; clearTimeout(net.timer); live.online = false; setStatus('solo');
+          TG.toast(L('Энэ профайлын серверийн эрх өөр байна. Анхны төхөөрөмж дээрээ тоглоорой эсвэл шинэ профайл үүсгээрэй.', 'This profile’s server identity does not match. Use the original device or create a new profile.'));
+        } else TG.toast(L('Өрөөнд нэвтэрч чадсангүй.', 'Could not join the room.'));
+        break;
     }
   }
   function addOther(p) { live.others.set(p.id, { ...p, px: p.x, py: p.y, petPos: { x: p.x, y: p.y + 0.6 }, bubble: null, moving: false }); }

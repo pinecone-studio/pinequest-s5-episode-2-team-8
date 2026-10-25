@@ -2,9 +2,21 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const ROOM_CODE = /^[A-Z0-9]{3,8}$/;
+const PLAYER_ID = /^[\w-]{4,24}$/;
+const PLAYER_TICKET = /^[a-f0-9]{64}$/i;
 const REALTIME_CHANNEL = 'naadamy_realtime';
+
+function ticketHash(ticket) {
+  return crypto.createHash('sha256').update(ticket).digest('hex');
+}
+
+function sameTicketHash(expected, actual) {
+  if (!/^[a-f0-9]{64}$/i.test(expected || '') || !PLAYER_TICKET.test(actual || '')) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(ticketHash(actual), 'hex'));
+}
 
 function readDatabaseUrl() {
   if (Object.hasOwn(process.env, 'DATABASE_URL')) return process.env.DATABASE_URL;
@@ -30,8 +42,35 @@ function readLegacyFile(file) {
   }
 }
 
+function readIdentityFile(file) {
+  let identities;
+  try {
+    identities = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return {};
+    throw new Error(`Could not read player identities from ${file}: ${error.message}`, { cause: error });
+  }
+  if (!identities || typeof identities !== 'object' || Array.isArray(identities)) {
+    throw new Error(`Could not read player identities from ${file}: expected an object`);
+  }
+  for (const [id, hash] of Object.entries(identities)) {
+    if (!PLAYER_ID.test(id) || !/^[a-f0-9]{64}$/i.test(hash)) {
+      throw new Error(`Could not read player identities from ${file}: invalid identity record`);
+    }
+  }
+  return identities;
+}
+
+function writeIdentityFile(file, identities) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporaryFile = `${file}.tmp`;
+  fs.writeFileSync(temporaryFile, JSON.stringify(identities), { mode: 0o600 });
+  fs.renameSync(temporaryFile, file);
+}
+
 function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolOverride } = {}) {
   const dataFile = path.join(dataDir, 'rooms.json');
+  const identityFile = path.join(dataDir, 'identities.json');
 
   if (!databaseUrl) {
     return {
@@ -47,6 +86,15 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         fs.renameSync(temporaryFile, dataFile);
       },
       async getRoomState() { return null; },
+      async authenticatePlayer(id, ticket) {
+        if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) return false;
+        const identities = readIdentityFile(identityFile);
+        const digest = ticketHash(ticket);
+        if (Object.hasOwn(identities, id)) return sameTicketHash(identities[id], ticket);
+        Object.defineProperty(identities, id, { value: digest, writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(identityFile, identities);
+        return true;
+      },
       async mutateRoom(roomCode, initialState, mutate, instanceId) {
         const rooms = readLegacyFile(dataFile);
         const state = rooms[roomCode] || { ...initialState };
@@ -98,6 +146,13 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             updated_at timestamptz NOT NULL DEFAULT now()
           )
         `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_identities (
+            id text PRIMARY KEY,
+            ticket_hash text NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now()
+          )
+        `);
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_players_room_idx ON naadamy_players (room_code)');
         for (const [code, state] of Object.entries(legacy)) {
           if (!ROOM_CODE.test(code)) continue;
@@ -139,6 +194,24 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       try {
         const result = await client.query('SELECT state FROM naadamy_rooms WHERE code = $1', [roomCode]);
         return result.rows[0] ? result.rows[0].state : null;
+      } finally {
+        client.release();
+      }
+    },
+    async authenticatePlayer(id, ticket) {
+      if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) return false;
+      const digest = ticketHash(ticket);
+      const client = await pool.connect();
+      try {
+        const inserted = await client.query(
+          'INSERT INTO naadamy_identities (id, ticket_hash) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING RETURNING id',
+          [id, digest],
+        );
+        if (inserted.rows.length) return true;
+        const existing = await client.query('SELECT ticket_hash FROM naadamy_identities WHERE id = $1', [id]);
+        return Boolean(existing.rows[0] && sameTicketHash(existing.rows[0].ticket_hash, ticket));
+      } catch (error) {
+        throw new Error(`Could not authenticate player identity: ${error.message}`, { cause: error });
       } finally {
         client.release();
       }

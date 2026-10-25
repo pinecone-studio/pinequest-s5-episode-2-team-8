@@ -13,6 +13,7 @@ class FakePool {
     this.failOnUpsert = failOnUpsert;
     this.calls = [];
     this.notifications = [];
+    this.identities = new Map();
   }
   async connect() {
     return {
@@ -37,6 +38,15 @@ class FakePool {
         if (/^SELECT state FROM naadamy_rooms WHERE code =/.test(statement)) {
           const state = this.state.get(values[0]);
           return { rows: state ? [{ state }] : [] };
+        }
+        if (/^INSERT INTO naadamy_identities/.test(statement)) {
+          if (this.identities.has(values[0])) return { rows: [] };
+          this.identities.set(values[0], values[1]);
+          return { rows: [{ id: values[0] }] };
+        }
+        if (/^SELECT ticket_hash FROM naadamy_identities/.test(statement)) {
+          const ticketHash = this.identities.get(values[0]);
+          return { rows: ticketHash ? [{ ticket_hash: ticketHash }] : [] };
         }
         if (/^SELECT pg_notify/.test(statement)) {
           this.notifications.push({ channel: values[0], payload: JSON.parse(values[1]) });
@@ -68,6 +78,19 @@ try {
   assert.deepEqual(loaded.NUTAG, { lots: ['database wins'], chat: [] }, 'database records take precedence over stale JSON');
   assert.deepEqual(loaded.BAT25, legacyRooms.BAT25, 'valid legacy rooms are imported');
   assert.equal(loaded['NOT-VALID'], undefined, 'invalid legacy room codes are not imported');
+  const ticket = 'a'.repeat(64);
+  assert.equal(await store.authenticatePlayer('identity-player', ticket), true, 'a new player identity can register');
+  assert.equal(await store.authenticatePlayer('identity-player', ticket), true, 'the registered ticket authenticates again');
+  assert.equal(await store.authenticatePlayer('identity-player', 'b'.repeat(64)), false, 'a different ticket cannot claim an existing identity');
+  assert.notEqual(pool.identities.get('identity-player'), ticket, 'the database stores only a ticket hash');
+  assert.equal(await store.authenticatePlayer('other-player', 'invalid'), false, 'malformed tickets are rejected');
+  assert.equal(await store.authenticatePlayer('__proto__', ticket), true, 'special object-property names can register safely');
+  assert.equal(await store.authenticatePlayer('__proto__', 'b'.repeat(64)), false, 'special object-property names remain protected');
+  const concurrentClaims = await Promise.all([
+    store.authenticatePlayer('registration-race', 'e'.repeat(64)),
+    store.authenticatePlayer('registration-race', 'f'.repeat(64)),
+  ]);
+  assert.equal(concurrentClaims.filter(Boolean).length, 1, 'only one concurrent ticket can register an identity');
 
   const persisted = {
     ...loaded,
@@ -108,6 +131,11 @@ try {
 
   const jsonStore = createRoomStore({ dataDir, databaseUrl: '' });
   assert.deepEqual(await jsonStore.load(), legacyRooms, 'local JSON storage remains backward-compatible');
+  const jsonTicket = 'c'.repeat(64);
+  assert.equal(await jsonStore.authenticatePlayer('json-player', jsonTicket), true, 'JSON mode registers player identities');
+  const restartedJsonStore = createRoomStore({ dataDir, databaseUrl: '' });
+  assert.equal(await restartedJsonStore.authenticatePlayer('json-player', jsonTicket), true, 'JSON identity credentials survive a server restart');
+  assert.equal(await restartedJsonStore.authenticatePlayer('json-player', 'd'.repeat(64)), false, 'JSON mode rejects a different ticket');
   await jsonStore.save({ NUTAG: { lots: [], chat: [] } });
   assert.deepEqual(await jsonStore.load(), { NUTAG: { lots: [], chat: [] } }, 'JSON storage still saves snapshots');
   const jsonMutation = await jsonStore.mutateRoom('NUTAG', { lots: [], chat: [] }, (state) => {

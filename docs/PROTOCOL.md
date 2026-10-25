@@ -33,7 +33,8 @@ Shared lists (phrases, emotes, looks, roofs, moves…) live in `js/village/rules
 
 | Name | Meaning |
 |---|---|
-| `id` | Player id, `[\w-]{4,24}`. The client makes it once per profile (`'u' + random + time`) and keeps it. **Not checked by the server:** anyone can claim any id. |
+| `id` | Player id, `[\w-]{4,24}`. The client keeps it with a random per-profile `ticket`; the server verifies the ticket before allowing the id to join or replace an existing connection. |
+| `ticket` | A 32-byte random credential encoded as 64 hex characters. It is generated and stored with the local profile; the server stores only its SHA-256 hash. It is never included in public player data. Losing it means that profile cannot reclaim its online identity. |
 | `room` | Room code, `^[A-Z0-9]{3,8}$` (upper-cased by the server). `NUTAG` is the main village. |
 | `x`, `y` | Position in tiles (the map is `W` 56 × `H` 40), 2 decimals. Clamped to `0.5 … W-2` / `0.5 … H-2`. |
 | `dir` | Facing direction: `0` down, `1` left, `2` right, `3` up. |
@@ -48,7 +49,7 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 ### Presence
 | `t` | Fields | What it does |
 |---|---|---|
-| `join` | `room, id, name, look, lvl, x, y, dir` | Enter a room. Joining again on the same connection leaves the old room first. If the same `id` is already in the room, the older connection gets `replaced` and is closed. |
+| `join` | `room, id, ticket, name, look, lvl, x, y, dir` | Register or authenticate a profile's device-local identity, then enter a room. A bad or missing ticket cannot claim an existing id. Joining again on the same connection leaves the old room first. If the authenticated `id` is already in the room, the older connection gets `replaced` and is closed. |
 | `move` | `x, y, dir` | New position. The web client sends it about 10 times a second while moving. |
 | `jump` | (none) | Shows a jump to others. At most once every 300 ms; extra ones are dropped. |
 | `look` | `look, lvl` | Changed outfit or level. |
@@ -61,7 +62,7 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 ### Chat log
 Each room keeps its last **30** lines: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. The server saves this bounded log alongside room lots every 5 seconds when changed and on shutdown. Without `DATABASE_URL`, the store is `DATA_DIR/rooms.json`; with `DATABASE_URL`, it is the `naadamy_rooms` PostgreSQL table. PostgreSQL startup imports room codes missing from the database from the legacy JSON file without overwriting existing database rows. Older room records without a `chat` field start with an empty log. On load, entries are validated against the preset phrase/emote lists and cleaned before being sent to players.
 
-When PostgreSQL is configured, each server also records its active players in `naadamy_players` and uses PostgreSQL `LISTEN`/`NOTIFY` to share room joins, leaves, moves, looks, jumps, preset chat, ger updates and wrestling messages with the other instances. Ger claims and edits, wrestling invitations, match starts, moves, timeouts and forfeits are applied while holding a row lock on the room snapshot, so concurrent servers cannot claim one lot twice or resolve a wrestling round twice. Notifications are enqueued inside the same transaction as each wrestling update. Snapshot saves update chat without overwriting the transactionally updated ger or wrestling state. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, the existing in-process WebSocket room behavior is unchanged.
+When PostgreSQL is configured, each server records active players in `naadamy_players` and device-local identity ticket hashes in `naadamy_identities`; PostgreSQL `LISTEN`/`NOTIFY` shares room joins, leaves, moves, looks, jumps, preset chat, ger updates and wrestling messages across instances. Names, ages, raw tickets and game progress are not stored in the identity table. The first connection for a previously unseen id registers its ticket; existing local profiles therefore enroll the first time they connect after this protocol update. In single-server JSON mode, ticket hashes are kept in `DATA_DIR/identities.json`. Ger claims and edits, wrestling invitations, match starts, moves, timeouts and forfeits are applied while holding a row lock on the room snapshot, so concurrent servers cannot claim one lot twice or resolve a wrestling round twice. Notifications are enqueued inside the same transaction as each wrestling update. Snapshot saves update chat without overwriting the transactionally updated ger or wrestling state. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, room realtime behavior remains single-server and in-process.
 
 A log line is `{ k, id, n, i? }`:
 - `k`: `'p'` phrase, `'e'` emote, `'join'`, `'leave'`.
@@ -107,7 +108,7 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 | `wr-result` | `ma, pa, mb, pb, r, score` | Round result. `r` = `1` a wins, `-1` b wins, `0` draw. `score` = `{ a, b }`. |
 | `wr-end` | `winner, reason` | Match over. `reason`: `''` (normal) or `'left'` (the other quit or dropped). |
 | `deny` | `act, why` | Request refused. `act: 'ger'` → `why: 'taken' \| 'own'`; `act: 'wr'` → `why: 'busy'`. |
-| `error` | `why` | `why: 'bad-join'` = bad room code or id. A refused `join` doesn't change anything: a player already in a room stays there. |
+| `error` | `why` | `why: 'bad-join'` = bad room code or id; `'identity'` = the ticket does not authenticate that profile id. A refused `join` doesn't change an existing room session. |
 | `replaced` | (none) | Your id joined from another tab or device; this connection will close. Don't reconnect. |
 
 ### Wrestling rules (server side)
@@ -118,10 +119,10 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 ## What the server trusts the client with
 
 Good to know before building on this:
-- **Identity:** `id` and `name` are taken as sent. There is no check that a player is who they say they are.
+- **Identity:** the server verifies a random ticket bound to each profile id. Tickets remain on the device and cannot be recovered or used to sync a profile to another device; anyone who obtains a ticket can act as that profile. Use HTTPS/WSS outside a trusted local network.
 - **Position:** clamped to the map only; no speed or wall checks.
 - **Progress:** XP, coins, items, dairy, fishing and quests are all on the device (`localStorage`). The server never sees them, apart from `lvl`.
-- The server is the source of truth only for **who is in the room, ger lots and wrestling matches**. With PostgreSQL, those live room updates are shared across instances.
+- The server is the source of truth only for **who is in the room, ger lots, authenticated player ids and wrestling matches**. With PostgreSQL, those live room updates are shared across instances. XP, coins, inventory and quests remain local and are not protected against client-side changes.
 
 ## Changing the protocol
 
