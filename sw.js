@@ -1,6 +1,6 @@
 /* Service worker: always tries the network first so players get the newest version,
    and falls back to the saved copy when there is no internet (countryside, airplane mode). */
-const CACHE = 'naadamy-v39';
+const CACHE = 'naadamy-v40';
 const FILES = [
   './', './index.html', './manifest.webmanifest', './css/styles.css', './assets/icon.svg', './assets/fonts/fonts.css',
   './assets/fonts/nunito-cyrillic.woff2', './assets/fonts/nunito-cyrillic-ext.woff2', './assets/fonts/nunito-latin.woff2',

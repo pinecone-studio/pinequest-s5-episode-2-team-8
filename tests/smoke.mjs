@@ -185,15 +185,58 @@ try {
   for (let i = 0; i < 5; i++) { await page.waitForFunction(() => { const m = TG._village.milkNow(); return m.phase === 'milk' && m.pos > 0.42 && m.pos < 0.58; }, { timeout: 5000 }); await page.evaluate(() => document.querySelector('.modal .btn.primary').click()); await sleep(60); }
   if ((await page.evaluate(() => TG.store.active().village.produce.milk || 0)) < 2) errors.push('dairy yard: milking the cow gave no milk');
   await page.evaluate(() => document.querySelectorAll('.modal-x').forEach((x) => x.click())); await sleep(250);
+  // making a white food is done by hand: every step of the recipe is a gesture on the village stage, in order
+  const dairyKinds = async (id, pickFor) => {
+    const kinds = [];
+    for (let i = 0; i < 12; i++) {
+      for (let w = 0; w < 20 && !(await page.evaluate(() => !!TG.tasks.active())); w++) await sleep(50);
+      const a = await page.evaluate(() => TG.tasks.active()); if (!a) break;
+      kinds.push(a.kind);
+      if (a.kind === 'choose') { await page.evaluate((p) => TG.tasks.pick(p), pickFor); await sleep(400); continue; }
+      const spec = await page.evaluate((id, i) => { const s = TG.dairywork.spec(id, i); return s && { kind: s.kind, path: s.path }; }, id, kinds.length - 1);
+      if (spec && spec.kind === 'drag') { // a real drag along the step's path, as a finger or mouse would
+        const p0 = await page.evaluate((p) => TG.tasks.toCss(...p), spec.path[0]), p1 = await page.evaluate((p) => TG.tasks.toCss(...p), spec.path[1]);
+        const before = (await page.evaluate(() => TG.tasks.active())).progress;
+        await page.mouse.move(...p0); await page.mouse.down(); for (let k = 1; k <= 12; k++) { await page.mouse.move(p0[0] + (p1[0] - p0[0]) * k / 12, p0[1] + (p1[1] - p0[1]) * k / 12); await sleep(16); } await page.mouse.up(); await sleep(150);
+        const after = await page.evaluate(() => TG.tasks.active());
+        if (!after || after.progress <= before) { if (after) errors.push(`dairy ${id}: dragging along step ${kinds.length} did not count`); }
+      }
+      await page.evaluate(() => TG.tasks.active() && TG.tasks.finish()); await sleep(450);
+    }
+    return kinds;
+  };
   await page.evaluate(() => TG._village.station('rack')); await sleep(250);
   await check('aaruul rack', '.modal .v-list .v-row');
-  await page.evaluate(() => document.querySelector('.modal .v-row .btn.primary').click()); await sleep(150);
-  for (let i = 0; i < 6; i++) { await page.evaluate(() => { const b = document.querySelector('.modal .btn.primary.big'); if (b) b.click(); }); await sleep(120); }
+  await page.evaluate(() => document.querySelector('.modal .v-row .btn.primary').click()); await sleep(400);
+  if (await page.evaluate(() => !!document.querySelector('.modal .v-steps'))) errors.push('dairy yard: making aaruul is still a list of ✓ buttons');
+  { const kinds = await dairyKinds('aaruul');
+    if (kinds.join() !== 'hold,rhythm,hold,drag,spots') errors.push(`dairy yard: aaruul steps should be hold,rhythm,hold,drag,spots, got ${kinds.join()}`); }
+  await sleep(300);
   const yard = await page.evaluate(() => { const p = TG.store.active().village.produce; return { milk: p.milk || 0, aaruul: p.aaruul || 0 }; });
   if (yard.aaruul !== 3 || yard.milk !== 0) errors.push(`dairy yard: making aaruul did not work ${JSON.stringify(yard)}`);
+  await check('aaruul made: the fact card', '.modal .teach');
+  await page.evaluate(() => document.querySelectorAll('.modal-x').forEach((x) => x.click())); await sleep(250);
+  // stopping halfway uses nothing up
+  await page.evaluate(() => { TG.store.active().village.produce.milk = 2; TG._village.station('tulga'); }); await sleep(250);
+  await page.evaluate(() => document.querySelector('.modal .v-row .btn.primary').click()); await sleep(400);
+  await page.evaluate(() => TG.tasks.cancel()); await sleep(400);
+  { const p = await page.evaluate(() => { const p = TG.store.active().village.produce; return { milk: p.milk || 0, urum: p.urum || 0 }; });
+    if (p.milk !== 2 || p.urum !== 0) errors.push(`dairy yard: closing öröm halfway should keep the milk ${JSON.stringify(p)}`); }
+  // tarag asks when the starter goes in: a wrong guess gets a kind word and another try, the right one goes on
+  await page.evaluate(() => { document.querySelectorAll('.modal-x').forEach((x) => x.click()); TG._village.station('tulga'); }); await sleep(250);
+  await page.evaluate(() => document.querySelectorAll('.modal .v-row .btn.primary')[1].click()); await sleep(400);
+  await page.evaluate(() => TG.tasks.finish()); await sleep(450);
+  if ((await page.evaluate(() => TG.tasks.active() && TG.tasks.active().kind)) !== 'choose') errors.push('dairy yard: tarag should ask how warm the milk must be');
+  await page.evaluate(() => TG.tasks.pick('hot')); await sleep(450);
+  if ((await page.evaluate(() => TG.tasks.active() && TG.tasks.active().kind)) !== 'choose') errors.push('dairy yard: a wrong guess for tarag should ask again');
+  { const kinds = await dairyKinds('tarag', 'warm'); if (kinds.join() !== 'choose,spots,drag') errors.push(`dairy yard: after the guess tarag should go choose,spots,drag, got ${kinds.join()}`); }
+  await sleep(300);
+  { const p = await page.evaluate(() => { const p = TG.store.active().village.produce; return { milk: p.milk || 0, tarag: p.tarag || 0 }; });
+    if (p.tarag !== 2 || p.milk !== 1) errors.push(`dairy yard: making tarag did not work ${JSON.stringify(p)}`); }
   // every recipe at every station has its hands-on steps
   { const missing = await page.evaluate(() => TG._village.recipes().filter((r) => !(TG.dairywork.steps(r.id) > 0)).map((r) => r.id)); if (missing.length) errors.push(`dairy yard: no hands-on steps for ${missing.join(', ')}`); }
   await page.evaluate(() => document.querySelectorAll('.modal-x').forEach((x) => x.click())); await sleep(250);
+  await page.evaluate(() => { TG.store.active().village.produce.milk = 0; });
   await page.evaluate(() => { const v = TG.store.active().village, e0 = v.energy = 50; TG.villageEat('aaruul'); }); await sleep(150);
   const ate = await page.evaluate(() => { const v = TG.store.active().village; return { aaruul: v.produce.aaruul, energy: v.energy }; });
   if (ate.aaruul !== 2 || ate.energy <= 50) errors.push(`dairy yard: eating your own aaruul did not work ${JSON.stringify(ate)}`);

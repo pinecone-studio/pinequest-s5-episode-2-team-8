@@ -327,17 +327,13 @@
   }
   // recipes at each station: what milk they need, what they give, the real steps, and how you do them
   const RECIPES = {
-    rack: [{ id: 'aaruul', need: { milk: 2 }, gives: 3, how: 'steps',
-      steps: [Tx('Сүүгээ исгэж тараг болгоно', 'Let the milk sour into tarag'), Tx('Тарагаа буцалгаж ээдэм гаргана', 'Boil it until curds (ээдэм) form'), Tx('Ээдмээ даавуунд хийж шахна', 'Press the curds in a cloth'), Tx('Хэрчиж хэлбэр оруулна', 'Cut them into pieces'), Tx('Тавиур дээр наранд хатаана', 'Dry them in the sun on the rack')],
+    rack: [{ id: 'aaruul', need: { milk: 2 }, gives: 3,
       fact: Tx('Ааруулыг наранд хэд хоног хатаадаг. Хатсан ааруул бүтэн жил хадгалагддаг тул өвөл, аянд авч явдаг.', 'Aaruul dries in the sun for several days. Dried, it keeps for a whole year, so herders take it on journeys and through winter.') }],
-    tulga: [{ id: 'urum', need: { milk: 2 }, gives: 1, how: 'mash', taps: 12, verb: Tx('Самрах', 'Ladle'),
-      steps: [Tx('Сүүгээ бага галд аажмаар буцалгана', 'Heat the milk slowly on a low fire'), Tx('Шанагаар дээш өргөж самарна: хөөс гарна', 'Ladle it up high so it foams'), Tx('Шөнөжин хөргөнө, дээр нь өрөм тогтоно', 'Leave it overnight: the öröm forms on top')],
+    tulga: [{ id: 'urum', need: { milk: 2 }, gives: 1,
       fact: Tx('Өрөм бол сүүг зөөлөн буцалгаж, самраад, хөргөхөд дээр нь тогтдог өтгөн цөцгий. Цагаан сараар хамгийн хүндэт зочинд өргөдөг.', 'Öröm is the thick cream that forms on top of gently boiled, ladled and cooled milk, offered to honoured guests at Tsagaan Sar.') },
-      { id: 'tarag', need: { milk: 1 }, gives: 2, how: 'steps',
-      steps: [Tx('Сүүгээ буцалгана', 'Boil the milk'), Tx('Бүлээн болтол хөргөнө', 'Let it cool until warm'), Tx('Хөрөнгө нэмнэ: өмнөх тарагнаас жаахан', 'Add a starter: a little old tarag'), Tx('Дулаан газар хононо', 'Keep it warm overnight')],
+      { id: 'tarag', need: { milk: 1 }, gives: 2,
       fact: Tx('Тарагны “хөрөнгө”-ийг айлууд үеэс үед хадгалж, бие биедээ өгдөг.', 'Families keep their tarag starter for generations and share it with each other.') }],
-    churn: [{ id: 'airag', need: { mare: 2 }, gives: 2, how: 'mash', taps: 30, verb: Tx('Бүлэх', 'Churn'),
-      steps: [Tx('Гүүний сүүгээ хөхүүрт хийнэ', 'Pour the mare’s milk into the khukhuur'), Tx('Бүлүүрээр олон дахин бүлнэ', 'Churn it with the stick, again and again'), Tx('Нэг хоног исгэнэ', 'Let it ferment for a day')],
+    churn: [{ id: 'airag', need: { mare: 2 }, gives: 2,
       fact: Tx('Айргийг мянга гаруй удаа бүлдэг. Айлд орж ирсэн хүн бүр хэдэн удаа бүлээд өгдөг заншилтай.', 'Airag is churned over a thousand times, and everyone who comes into the ger gives it a few stirs.') }],
   };
   /** A dairy station: pick a recipe you have the milk for, then do the real steps (tap each in order, or churn/ladle many times). */
@@ -350,30 +346,16 @@
         return h('div', { class: 'v-row' + (ok ? '' : ' locked') }, pic('dairy:' + r.id, 32), h('div', { class: 'v-row-b' }, h('b', null, `${tx(d.name)} ×${r.gives}`), h('small', null, Object.entries(r.need).map(([k, n]) => `${R.DAIRY[k].e} ${n} ${tx(R.DAIRY[k].name)}`).join(' + '))),
           h('button', { class: 'btn sm primary', disabled: !ok, onclick: () => make(r) }, ok ? L('Хийх', 'Make') : L('Саах хэрэгтэй', 'Milk first'))); })),
       h('p', { class: 'privacy' }, '🐄 ', L('Сүү авахын тулд үнээ, ямаа, гүүгээ саагаарай.', 'Milk the cows, goats and mares to get milk.')));
-    function make(r) {
-      let step = 0, taps = 0;
-      const show = () => {
-        const s = r.steps[Math.min(step, r.steps.length - 1)];
-        const mashing = r.how === 'mash' && step === 1;
-        rc(body, h('h2', null, `${R.DAIRY[r.id].e} ${tx(R.DAIRY[r.id].name)}`),
-          h('ol', { class: 'v-steps' }, r.steps.map((q, i) => h('li', { class: i < step ? 'done' : i === step ? 'on' : '' }, tx(q)))),
-          mashing ? h('div', { class: 'meter' }, h('span', { style: { width: (taps / r.taps) * 100 + '%' } })) : null,
-          h('button', { class: 'btn primary big block', onclick: () => {
-            if (mashing) { taps++; TG.sfx.scrub && TG.sfx.scrub(); if (taps < r.taps) return show(); }
-            else TG.sfx.tap();
-            step++;
-            if (step >= r.steps.length) return finish();
-            show();
-          } }, mashing ? `${tx(r.verb)}! ${taps}/${r.taps}` : `${step + 1}. ${tx(s)} ✓`));
-      };
-      const finish = () => {
-        Object.entries(r.need).forEach(([k, n]) => stock(k, -n)); stock(r.id, r.gives); quest('dairy'); reward(3, 10);
-        v.seen = v.seen || {}; const first = !v.seen['made_' + r.id]; v.seen['made_' + r.id] = 1; S.save(); if (live) hud(); TG.sfx.good(); if (first) TG.confetti(40);
-        rc(body, h('div', { class: 'center' }, h('div', { class: 'v-fact-e' }, pic('dairy:' + r.id, 64)), h('h2', null, `+${r.gives} ${tx(R.DAIRY[r.id].name)}`),
-          h('div', { class: 'teach' }, h('b', null, '💡 ', L('Мэдсэн үү?', 'Did you know?')), h('p', null, tx(r.fact))),
-          h('div', { class: 'row-btns' }, h('button', { class: 'btn', onclick: list }, L('Дахиад хийх', 'Make more')), h('button', { class: 'btn primary', onclick: () => close() }, L('Боллоо', 'Done')))));
-      };
-      show();
+    // every step is done by hand on the village stage (dairywork.js); the milk is used only once the food is made
+    async function make(r) {
+      close();
+      if (!(await TG.dairywork.make(r.id)) || !live) return;
+      if (!has(r.need)) return TG.toast('🥛 ' + L('Сүү хүрэлцэхгүй байна.', 'Not enough milk.'));
+      Object.entries(r.need).forEach(([k, n]) => stock(k, -n)); stock(r.id, r.gives); quest('dairy'); reward(3, 10);
+      v.seen = v.seen || {}; const first = !v.seen['made_' + r.id]; v.seen['made_' + r.id] = 1; S.save(); hud(); TG.sfx.good(); if (first) TG.confetti(40);
+      const done = TG.modal(h('div', { class: 'center' }, h('div', { class: 'v-fact-e' }, pic('dairy:' + r.id, 64)), h('h2', null, `+${r.gives} ${tx(R.DAIRY[r.id].name)}`),
+        h('div', { class: 'teach' }, h('b', null, '💡 ', L('Мэдсэн үү?', 'Did you know?')), h('p', null, tx(r.fact))),
+        h('div', { class: 'row-btns' }, h('button', { class: 'btn', onclick: () => { done(); dairyStation(st); } }, L('Дахиад хийх', 'Make more')), h('button', { class: 'btn primary', onclick: () => done() }, L('Боллоо', 'Done')))), { cls: 'v-modal' });
     }
     list();
     const close = TG.modal(body, { cls: 'v-modal' });
