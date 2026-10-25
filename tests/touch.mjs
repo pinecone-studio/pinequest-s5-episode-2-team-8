@@ -66,6 +66,29 @@ try {
   await sleep(500);
   const open = { x: 17, y: 13 };
 
+  step = 'second finger jumps';
+  await place(open.x, open.y); await V(() => { TG._village.live().me.jt = 0; });
+  await steer(); await tap2('.v-jump');
+  if (!(await jumpedRecently())) fail(step, 'tapping Jump with a second finger while steering did not jump');
+  if (!(await state()).stick) fail(step, 'steering stopped when the second finger pressed Jump');
+  await liftAll();
+
+  step = 'second finger toggles run';
+  await place(open.x, open.y); await steer(); await tap2('.v-run');
+  if (!(await V(() => TG._village.live().runLock === true))) fail(step, 'tapping Run with a second finger while steering did not switch running on');
+  await liftAll();
+
+  step = 'second finger uses';
+  { const d = await V(() => TG._village.objects().find((o) => o.id === 'well').door); await place(d.x, d.y); }
+  await V(() => { TG.store.active().village.energy = 10; }); await sleep(250);
+  if (await V(() => document.querySelector('.v-act').classList.contains('hidden'))) fail(step, 'the Use button did not show at the well');
+  else {
+    await touch('touchStart', [[150, 500, 1]]); await sleep(60); await tap2('.v-act', [[150, 500, 1]]);
+    const e = await V(() => TG.store.active().village.energy);
+    if (!(e > 10)) fail(step, `tapping Use with a second finger did not drink (energy ${e})`);
+  }
+  await liftAll();
+
   step = 'mouse click acts once';
   { const [x, y] = await centre('.v-run'); await page.mouse.click(x, y); await sleep(100);
     if (!(await V(() => TG._village.live().runLock === true))) fail(step, 'one mouse click on Run did not switch running on exactly once');
@@ -104,6 +127,24 @@ try {
   await page.setViewport({ width: 844, height: 390, deviceScaleFactor: 3, isMobile: true, hasTouch: true }); await sleep(300);
   await touch('touchEnd', [[210, 500, 1]]); await stopped(step);
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true }); await sleep(300); await liftAll();
+
+  // a button that opens a window on the press must not let the same tap click something inside that window
+  step = 'one-finger Use opens one window';
+  { const d = await V(() => TG._village.objects().find((o) => o.id === 'board').door); await place(d.x, d.y); } await sleep(250);
+  { const [x, y] = await centre('.v-act'); await touch('touchStart', [[x, y, 1]]); await sleep(60); await touch('touchEnd', [[x, y, 1]]); await sleep(500); }
+  { const r = await V(() => ({ village: !!TG._village.live() && !!document.querySelector('.village'), modals: document.querySelectorAll('.modal-back').length }));
+    if (!r.village) fail(step, 'the tap on Use went on to press a button in the quest board and left the village');
+    else if (r.modals !== 1) fail(step, `expected the quest board open, found ${r.modals} windows`); }
+  await liftAll(); await sleep(200);
+
+  // the village engine takes a slot for every touch; taps on the buttons must never use one up, or the joystick runs out
+  step = 'button taps leave the joystick free';
+  await place(open.x, open.y);
+  for (const sel of ['.v-jump', '.v-run', '.v-jump', '.v-run', '.v-jump']) { const [x, y] = await centre(sel); await touch('touchStart', [[x, y, 1]]); await sleep(40); await touch('touchEnd', [[x, y, 1]]); await sleep(120); }
+  { const held = await V(() => TG._village.phaser().game.input.pointers.filter((p) => p.isDown).length); if (held) fail(step, `${held} touch slot(s) stayed held after lifting the finger from the buttons`); }
+  await steer();
+  if (!(await state()).stick) fail(step, 'the joystick did not work after a few taps on the buttons');
+  await liftAll();
 
   // touch positions are screen points (CSS pixels) on every phone, whatever its pixel density
   step = 'joystick ring sits under the thumb';

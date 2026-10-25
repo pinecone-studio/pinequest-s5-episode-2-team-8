@@ -112,6 +112,10 @@
   }
   const itemKey = (it) => (it.slot === 'deel' ? 'deel:' + it.val : it.cat === 'pet' ? 'pet:' + it.val : it.cat === 'tool' ? 'tool:' + it.id : 'wear:' + it.slot + '-' + it.val);
   const pic = (key, size = 32) => PX.icon(key, size);
+  /** Button props that act the moment a finger lands: phones send no click for a second finger (one thumb steering, the other pressing).
+   *  A keyboard click (detail 0) still acts; the click that follows a press does not act again. A finger's touch is cancelled at the
+   *  start: no click comes after it (a window the press just opened would take that click), and the village engine leaves it alone. */
+  const press = (fn) => ({ onpointerdown: (e) => { if (e.button === 0) fn(); }, onclick: (e) => { if (e.detail === 0) fn(); }, ontouchstart: (e) => { if (e.cancelable) e.preventDefault(); } });
   const ZASUUL = { deel: 'gold', skin: '#D9A06E', hat: 'mongol', face: null, neck: 'khadag', pet: null };
   TG.drawAvatarPixel = (ctx, look, scale) => { ctx.imageSmoothingEnabled = false; ctx.drawImage(PX.char(look, 0, 0), 0, 0, 16 * scale, 28 * scale); };
 
@@ -391,18 +395,18 @@
       energy: h('button', { class: 'v-pill px-frame v-energy', title: L('Хоол, ундаа', 'Food & drink'), onclick: () => eatModal() }), net: h('button', { class: 'v-pill px-frame v-net', onclick: () => roomModal() }),
       season: h('button', { class: 'v-pill px-frame v-season', onclick: () => TG.seasons.open() }),
       loc: h('button', { class: 'v-loc px-frame', onclick: () => TG.go('passport') }),
-      ctx: h('button', { class: 'v-act px-frame hidden', onclick: () => { const a = contextAction(); if (a) doAction(a); } }),
+      ctx: h('button', { class: 'v-act px-frame hidden', ...press(() => { const a = contextAction(); if (a) doAction(a); }) }),
       hotbar: h('div', { class: 'v-hotbar px-frame', role: 'toolbar', 'aria-label': L('Цагаан идээ', 'Dairy') }),
       race: h('div', { class: 'v-race px-frame hidden', 'aria-live': 'polite' }),
       battle: h('div', { class: 'v-race v-battle px-frame hidden', 'aria-live': 'polite' }),
-      shoot: h('button', { class: 'v-sprint v-shoot px-frame hidden', 'aria-label': L('Харвах (F)', 'Shoot (F)'), onclick: () => shootNearest() }, '🏹'),
+      shoot: h('button', { class: 'v-sprint v-shoot px-frame hidden', 'aria-label': L('Харвах (F)', 'Shoot (F)'), ...press(() => shootNearest()) }, '🏹'),
       sprint: h('button', { class: 'v-sprint px-frame hidden', 'aria-label': L('Чү! (Shift)', 'Chü! (Shift)'),
         onpointerdown: (e) => { e.preventDefault(); if (live && live.race) live.race.sprint = true; }, onpointerup: () => { if (live && live.race) live.race.sprint = false; }, onpointerleave: () => { if (live && live.race) live.race.sprint = false; }, oncontextmenu: (e) => e.preventDefault() }, L('Чү!', 'Chü!')),
       horse: h('button', { class: 'v-round px-frame hidden', 'aria-label': 'horse', title: L('Мориноос буух', 'Get off the horse'), onclick: () => dismount() }, pic('ui:horse', 34)),
       mini: h('canvas', { class: 'v-mini px-frame', width: WD.W * 3, height: WD.H * 3, 'aria-label': L('Газрын зураг', 'Map'), title: L('Газрын зураг: дарж томруулна', 'Map: tap to enlarge') }),
-      run: h('button', { class: 'v-run px-frame', 'aria-label': L('Гүйх', 'Run'), 'aria-pressed': 'false', title: L('Гүйх (Shift)', 'Run (Shift)'), onclick: () => { if (!live) return; live.runLock = !live.runLock; live.els.run.classList.toggle('on', live.runLock); live.els.run.setAttribute('aria-pressed', String(live.runLock)); TG.sfx.tap(); } }, '🏃'),
+      run: h('button', { class: 'v-run px-frame', 'aria-label': L('Гүйх', 'Run'), 'aria-pressed': 'false', title: L('Гүйх (Shift)', 'Run (Shift)'), ...press(() => { if (!live) return; live.runLock = !live.runLock; live.els.run.classList.toggle('on', live.runLock); live.els.run.setAttribute('aria-pressed', String(live.runLock)); TG.sfx.tap(); }) }, '🏃'),
       fp: h('button', { class: 'v-round px-frame v-fpbtn', 'aria-label': L('Өөрийн нүдээр', 'First person'), title: L('Өөрийн нүдээр (3D)', 'First person (3D)'), onclick: () => openFP() }, '👁'),
-      jump: h('button', { class: 'v-jump px-frame', 'aria-label': L('Үсрэх', 'Jump'), title: L('Үсрэх (Space)', 'Jump (Space)'), onclick: () => jump() }, '⤒'),
+      jump: h('button', { class: 'v-jump px-frame', 'aria-label': L('Үсрэх', 'Jump'), title: L('Үсрэх (Space)', 'Jump (Space)'), ...press(() => jump()) }, '⤒'),
       talk: h('button', { class: 'v-round px-frame v-talk', 'aria-label': 'talk', onclick: () => talk() }, pic('ui:chat', 32), h('i', { class: 'v-badge hidden' })),
       more: h('div', { class: 'v-more', onclick: (e) => { if (e.target.closest('button') && !e.target.closest('.v-music')) e.currentTarget.classList.remove('open'); } }),
       music: h('button', { class: 'v-round px-frame v-music hidden', 'aria-label': L('Хөгжим', 'Music'), onclick: () => { TG.music.toggle(); } }),
