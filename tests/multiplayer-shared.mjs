@@ -89,9 +89,30 @@ try {
   await pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'say', k: 'p', i: 0 })));
   await waitForMessage(pageB, (message) => message.t === 'say' && message.id === idA && message.i === 0, 'cross-instance chat');
 
+  await Promise.all([
+    pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-claim', i: 0, roof: 'blue', door: 'red', stage: 1 }))),
+    pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-claim', i: 0, roof: 'red', door: 'blue', stage: 1 }))),
+  ]);
+  const [lotA, lotB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'lot' && message.i === 0, 'shared ger claim on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'lot' && message.i === 0, 'shared ger claim on second instance'),
+  ]);
+  assert.equal(lotA.lot.by, lotB.lot.by, 'both instances converge on the same winning lot claim');
+  await Promise.any([
+    waitForMessage(pageA, (message) => message.t === 'deny' && message.act === 'ger' && message.why === 'taken', 'rejected competing ger claim'),
+    waitForMessage(pageB, (message) => message.t === 'deny' && message.act === 'ger' && message.why === 'taken', 'rejected competing ger claim'),
+  ]);
+  const ownerPage = lotA.lot.by === idA ? pageA : pageB;
+  await ownerPage.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-style', roof: 'teal', door: 'gold', furn: ['tulga'] })));
+  const styled = await waitForMessage(ownerPage, (message) => message.t === 'lot' && message.act === 'style', 'persisted ger style');
+  assert.equal(styled.lot.roof, 'teal', 'the room stores the updated ger style');
+  await ownerPage.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-stage', stage: 2 })));
+  const staged = await waitForMessage(ownerPage, (message) => message.t === 'lot' && message.act === 'stage', 'persisted ger building stage');
+  assert.equal(staged.lot.stage, 2, 'the room stores the updated building stage');
+
   await pageB.evaluate(() => window.gameSocket.close());
   await waitForMessage(pageA, (message) => message.t === 'leave' && message.id === idB, 'cross-instance disconnect');
-  console.log('Shared multiplayer: two PostgreSQL-backed servers synchronize join, snapshot, movement, chat and leave.');
+  console.log('Shared multiplayer: two PostgreSQL-backed servers synchronize presence, movement, chat, ger claims and leave.');
 } finally {
   if (browser) await browser.close();
   for (const server of servers) {

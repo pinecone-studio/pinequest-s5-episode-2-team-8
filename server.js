@@ -67,10 +67,14 @@ let dirty = false;
 let dirtyVersion = 0;
 let persistPromise = null;
 function markDirty() { dirty = true; dirtyVersion++; }
+function normalizeLots(lots) {
+  const normalized = Array.isArray(lots) ? lots.slice(0, R.LOTS) : [];
+  while (normalized.length < R.LOTS) normalized.push(null);
+  return normalized;
+}
 function room(code) {
   if (!rooms.has(code)) {
-    const lots = Array.isArray(saved[code] && saved[code].lots) ? saved[code].lots.slice(0, R.LOTS) : [];
-    while (lots.length < R.LOTS) lots.push(null);
+    const lots = normalizeLots(saved[code] && saved[code].lots);
     rooms.set(code, { code, players: new Map(), remotePlayers: new Map(), lots, matches: new Map(), chat: restoreChat(saved[code] && saved[code].chat) });
   }
   return rooms.get(code);
@@ -186,7 +190,7 @@ function counts() {
   return { total, nutag };
 }
 function census() { const c = counts(); for (const r of rooms.values()) if (r.players.size) broadcast(r, { t: 'census', ...c }); }
-const REALTIME_TYPES = new Set(['join', 'leave', 'move', 'jump', 'look', 'say', 'replaced']);
+const REALTIME_TYPES = new Set(['join', 'leave', 'move', 'jump', 'look', 'say', 'lot', 'replaced']);
 function broadcastLocal(r, msg, except) {
   for (const p of r.players.values()) if (p.conn !== except) p.conn.send(msg);
 }
@@ -232,6 +236,10 @@ function handleRealtime(event) {
     const kind = message.k === 'e' ? 'e' : 'p';
     const max = kind === 'e' ? R.EMOTES.length : R.PHRASES.length;
     if (message.i >= 0 && message.i < max) logChat(r, { k: kind, id: message.id, n: cleanName(message.n), i: message.i });
+  } else if (message.t === 'lot' && Number.isInteger(message.i) && message.i >= 0 && message.i < R.LOTS
+    && ['claim', 'stage', 'style'].includes(message.act)) {
+    r.lots[message.i] = message.lot || null;
+    saved[code] = { ...(saved[code] || {}), lots: r.lots };
   }
   broadcastLocal(r, message);
   if (message.t === 'join' || message.t === 'leave') census();
@@ -278,6 +286,12 @@ function updatePresence(p) {
 async function joinPlayer(conn, message, code, id, now) {
   await leave(conn);
   const r = room(code);
+  const latestState = await roomStore.getRoomState(code);
+  if (latestState) {
+    r.lots = normalizeLots(latestState.lots);
+    r.chat = restoreChat(latestState.chat);
+    saved[code] = latestState;
+  }
   const old = r.players.get(id);
   const replacingRemote = r.remotePlayers.has(id);
   if (old) {
@@ -311,6 +325,60 @@ async function joinPlayer(conn, message, code, id, now) {
   const replacing = Boolean(old || replacingRemote || previousInstance);
   broadcast(r, { t: 'join', p: pub(p), ...(replacing ? { replace: true } : {}) }, conn);
   census();
+}
+
+async function persistLotAction(conn, action, message) {
+  const p = conn.player, r = conn.room;
+  if (!p || !r) return;
+  const i = message.i;
+  if (action === 'claim' && (!Number.isInteger(i) || i < 0 || i >= R.LOTS)) return;
+  if (action !== 'claim' && (!Number.isInteger(i) || i < 0 || i >= R.LOTS)) return;
+
+  try {
+    const { state, result } = await roomStore.mutateRoom(
+      r.code,
+      { lots: r.lots, chat: r.chat },
+      (current) => {
+        const lots = normalizeLots(current.lots);
+        let lot = lots[i];
+        if (action === 'claim') {
+          if (lot) return { changed: false, deny: 'taken' };
+          if (lots.some((owned) => owned && owned.by === p.id)) return { changed: false, deny: 'own' };
+          lot = {
+            by: p.id,
+            n: p.name,
+            roof: Object.hasOwn(R.ROOF, message.roof) ? message.roof : 'blue',
+            door: Object.hasOwn(R.DOOR, message.door) ? message.door : 'red',
+            furn: [],
+            stage: Number.isInteger(message.stage) ? Math.max(1, Math.min(R.GER_DONE, message.stage)) : 1,
+          };
+          lots[i] = lot;
+        } else {
+          if (!lot || lot.by !== p.id) return { changed: false };
+          if (action === 'stage') {
+            if (!Number.isInteger(message.stage)) return { changed: false };
+            lot.stage = Math.max(1, Math.min(R.GER_DONE, message.stage));
+          } else {
+            if (Object.hasOwn(R.ROOF, message.roof)) lot.roof = message.roof;
+            if (Object.hasOwn(R.DOOR, message.door)) lot.door = message.door;
+            if (Array.isArray(message.furn)) {
+              lot.furn = [...new Set(message.furn.filter((furniture) => R.FURNITURE.some((item) => item.id === furniture)))].slice(0, 12);
+            }
+            lot.n = p.name;
+          }
+        }
+        current.lots = lots;
+        return { changed: true, event: { t: 'lot', act: action, i, lot, by: p.id } };
+      },
+    );
+    r.lots = normalizeLots(state.lots);
+    saved[r.code] = { ...(saved[r.code] || {}), lots: r.lots };
+    if (result.deny) conn.send({ t: 'deny', act: 'ger', why: result.deny });
+    if (result.event) broadcast(r, result.event);
+  } catch (error) {
+    console.error('Could not save shared ger state:', error.message);
+    conn.send({ t: 'error', why: 'storage' });
+  }
 }
 
 function onMessage(conn, text) {
@@ -357,30 +425,17 @@ function onMessage(conn, text) {
       break;
     }
     // ---- own ger
-    case 'ger-claim': { // laying the floor claims a plot; a ger already part-way up (from solo play or another room) brings its stage along
-      const i = m.i, stage = Number.isInteger(m.stage) ? Math.max(1, Math.min(R.GER_DONE, m.stage)) : 1;
-      if (!Number.isInteger(i) || i < 0 || i >= R.LOTS) return;
-      if (r.lots[i]) return conn.send({ t: 'deny', act: 'ger', why: 'taken' });
-      if (r.lots.some((l) => l && l.by === p.id)) return conn.send({ t: 'deny', act: 'ger', why: 'own' });
-      r.lots[i] = { by: p.id, n: p.name, roof: R.ROOF[m.roof] ? m.roof : 'blue', door: R.DOOR[m.door] ? m.door : 'red', furn: [], stage };
-      markDirty();
-      broadcast(r, { t: 'lot', act: 'claim', i, lot: r.lots[i], by: p.id });
+    case 'ger-claim':
+      persistLotAction(conn, 'claim', m);
       break;
-    }
-    case 'ger-stage': { // one more building step done on your own plot
-      const i = r.lots.findIndex((l) => l && l.by === p.id); if (i < 0 || !Number.isInteger(m.stage)) return;
-      r.lots[i].stage = Math.max(1, Math.min(R.GER_DONE, m.stage)); markDirty();
-      broadcast(r, { t: 'lot', act: 'stage', i, lot: r.lots[i], by: p.id });
+    case 'ger-stage': {
+      const i = r.lots.findIndex((lot) => lot && lot.by === p.id);
+      if (i >= 0) persistLotAction(conn, 'stage', { ...m, i });
       break;
     }
     case 'ger-style': {
       const i = r.lots.findIndex((l) => l && l.by === p.id); if (i < 0) return;
-      const l = r.lots[i];
-      if (R.ROOF[m.roof]) l.roof = m.roof;
-      if (R.DOOR[m.door]) l.door = m.door;
-      if (Array.isArray(m.furn)) l.furn = [...new Set(m.furn.filter((f) => R.FURNITURE.some((x) => x.id === f)))].slice(0, 12);
-      l.n = p.name; markDirty();
-      broadcast(r, { t: 'lot', act: 'style', i, lot: l, by: p.id });
+      persistLotAction(conn, 'style', { ...m, i });
       break;
     }
     // ---- live wrestling

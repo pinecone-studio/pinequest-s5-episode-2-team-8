@@ -46,6 +46,20 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         fs.writeFileSync(temporaryFile, JSON.stringify(rooms));
         fs.renameSync(temporaryFile, dataFile);
       },
+      async getRoomState() { return null; },
+      async mutateRoom(roomCode, initialState, mutate) {
+        const rooms = readLegacyFile(dataFile);
+        const state = rooms[roomCode] || { ...initialState };
+        const result = mutate(state);
+        if (result && result.changed) {
+          rooms[roomCode] = state;
+          fs.mkdirSync(dataDir, { recursive: true });
+          const temporaryFile = `${dataFile}.tmp`;
+          fs.writeFileSync(temporaryFile, JSON.stringify(rooms));
+          fs.renameSync(temporaryFile, dataFile);
+        }
+        return { state, result };
+      },
       async startRealtime() {},
       async listPresence() { return []; },
       async registerPresence() { return null; },
@@ -120,6 +134,46 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       });
       await subscriber.query(`LISTEN ${REALTIME_CHANNEL}`);
     },
+    async getRoomState(roomCode) {
+      const client = await pool.connect();
+      try {
+        const result = await client.query('SELECT state FROM naadamy_rooms WHERE code = $1', [roomCode]);
+        return result.rows[0] ? result.rows[0].state : null;
+      } finally {
+        client.release();
+      }
+    },
+    async mutateRoom(roomCode, initialState, mutate) {
+      if (!ROOM_CODE.test(roomCode)) throw new Error(`Invalid room code: ${roomCode}`);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          'INSERT INTO naadamy_rooms (code, state) VALUES ($1, $2::jsonb) ON CONFLICT (code) DO NOTHING',
+          [roomCode, JSON.stringify(initialState)],
+        );
+        const selected = await client.query('SELECT state FROM naadamy_rooms WHERE code = $1 FOR UPDATE', [roomCode]);
+        const state = selected.rows[0].state;
+        const result = mutate(state);
+        if (result && result.changed) {
+          await client.query(
+            'UPDATE naadamy_rooms SET state = $2::jsonb, updated_at = now() WHERE code = $1',
+            [roomCode, JSON.stringify(state)],
+          );
+        }
+        await client.query('COMMIT');
+        return { state, result };
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          console.error('Could not roll back shared room update:', rollbackError.message);
+        }
+        throw new Error(`Could not update shared room ${roomCode}: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
     async publishRealtime(event) {
       const payload = JSON.stringify(event);
       if (Buffer.byteLength(payload, 'utf8') > 7000) throw new Error('realtime event exceeds the PostgreSQL notification limit');
@@ -190,7 +244,9 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           await client.query(
             `INSERT INTO naadamy_rooms (code, state, updated_at)
              VALUES ($1, $2::jsonb, now())
-             ON CONFLICT (code) DO UPDATE SET state = EXCLUDED.state, updated_at = EXCLUDED.updated_at`,
+             ON CONFLICT (code) DO UPDATE SET
+               state = jsonb_set(naadamy_rooms.state, '{chat}', COALESCE(EXCLUDED.state -> 'chat', '[]'::jsonb), true),
+               updated_at = EXCLUDED.updated_at`,
             [code, JSON.stringify(state)],
           );
         }
