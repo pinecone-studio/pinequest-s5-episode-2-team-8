@@ -61,6 +61,8 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 ### Chat log
 Each room keeps its last **30** lines: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. The server saves this bounded log alongside room lots every 5 seconds when changed and on shutdown. Without `DATABASE_URL`, the store is `DATA_DIR/rooms.json`; with `DATABASE_URL`, it is the `naadamy_rooms` PostgreSQL table. PostgreSQL startup imports room codes missing from the database from the legacy JSON file without overwriting existing database rows. Older room records without a `chat` field start with an empty log. On load, entries are validated against the preset phrase/emote lists and cleaned before being sent to players.
 
+When PostgreSQL is configured, each server also records its active players in `naadamy_players` and uses PostgreSQL `LISTEN`/`NOTIFY` to share room joins, leaves, moves, looks, jumps and preset chat with the other instances. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, the existing in-process WebSocket room behavior is unchanged. This synchronization does not make ger snapshots or live wrestling state shared; those still require a single server instance.
+
 A log line is `{ k, id, n, i? }`:
 - `k`: `'p'` phrase, `'e'` emote, `'join'`, `'leave'`.
 - `id` / `n`: the player's id and name at that moment.

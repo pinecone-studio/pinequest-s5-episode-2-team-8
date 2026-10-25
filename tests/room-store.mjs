@@ -18,7 +18,7 @@ class FakePool {
       query: async (sql, values = []) => {
         const statement = sql.replace(/\s+/g, ' ').trim();
         this.calls.push(statement);
-        if (/^CREATE TABLE/.test(statement) || /^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
+        if (/^CREATE (TABLE|INDEX)/.test(statement) || /^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
         if (/^INSERT INTO naadamy_rooms/.test(statement)) {
           if (this.failOnUpsert && /DO UPDATE/.test(statement)) throw new Error('injected database outage');
           if (/DO NOTHING/.test(statement) && this.state.has(values[0])) return { rows: [] };

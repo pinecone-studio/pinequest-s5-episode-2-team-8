@@ -18,6 +18,7 @@ const basar = require('./basar-ai.js')(__dirname);
 const { createRoomStore } = require('./room-store');
 
 const ROOT = __dirname;
+const INSTANCE_ID = crypto.randomUUID();
 const PORT = Number(process.env.PORT || process.argv[2] || 8000);
 const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
 let actualPort = PORT;
@@ -70,7 +71,7 @@ function room(code) {
   if (!rooms.has(code)) {
     const lots = Array.isArray(saved[code] && saved[code].lots) ? saved[code].lots.slice(0, R.LOTS) : [];
     while (lots.length < R.LOTS) lots.push(null);
-    rooms.set(code, { code, players: new Map(), lots, matches: new Map(), chat: restoreChat(saved[code] && saved[code].chat) });
+    rooms.set(code, { code, players: new Map(), remotePlayers: new Map(), lots, matches: new Map(), chat: restoreChat(saved[code] && saved[code].chat) });
   }
   return rooms.get(code);
 }
@@ -103,9 +104,10 @@ let stopping = false;
 async function shutdown() {
   if (stopping) return;
   stopping = true;
+  await Promise.all([...conns].map((connection) => leave(connection)));
   const savedOnShutdown = await persist();
   try {
-    await roomStore.close();
+    await roomStore.close(INSTANCE_ID);
   } catch (e) {
     console.error('Could not close room storage:', e.message);
     process.exit(1);
@@ -166,6 +168,7 @@ setInterval(() => {
     c.alive = false;
     try { c.socket.write(frame(9, Buffer.alloc(0))); } catch { c.socket.destroy(); }
   }
+  refreshPresence().catch((error) => console.error('Could not refresh multiplayer presence:', error.message));
 }, Number(process.env.HEARTBEAT_MS) || 20000).unref(); // a phone that drops off Wi-Fi without saying goodbye is removed after one or two missed pings
 
 // ---------------------------------------------------------------- game protocol
@@ -174,9 +177,73 @@ const numf = (v, lo, hi) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math
 const cleanName = (s) => String(s || '').replace(/[<>]/g, '').trim().slice(0, 16) || 'Найз';
 const pub = (p) => ({ id: p.id, name: p.name, look: p.look, lvl: p.lvl, x: p.x, y: p.y, dir: p.dir });
 /** How many people are on the whole server and in the main village, so players in different rooms can find each other. */
-function counts() { let total = 0; for (const r of rooms.values()) total += r.players.size; const main = rooms.get('NUTAG'); return { total, nutag: main ? main.players.size : 0 }; }
+function counts() {
+  let total = 0, nutag = 0;
+  for (const r of rooms.values()) {
+    total += r.players.size + r.remotePlayers.size;
+    if (r.code === 'NUTAG') nutag = r.players.size + r.remotePlayers.size;
+  }
+  return { total, nutag };
+}
 function census() { const c = counts(); for (const r of rooms.values()) if (r.players.size) broadcast(r, { t: 'census', ...c }); }
-function broadcast(r, msg, except) { for (const p of r.players.values()) if (p.conn !== except) p.conn.send(msg); }
+const REALTIME_TYPES = new Set(['join', 'leave', 'move', 'jump', 'look', 'say', 'replaced']);
+function broadcastLocal(r, msg, except) {
+  for (const p of r.players.values()) if (p.conn !== except) p.conn.send(msg);
+}
+function broadcast(r, msg, except) {
+  broadcastLocal(r, msg, except);
+  if (roomStore.sharedRealtime && REALTIME_TYPES.has(msg.t)) {
+    roomStore.publishRealtime({ room: r.code, instanceId: INSTANCE_ID, message: msg }).catch((error) => {
+      console.error('Could not publish multiplayer event:', error.message);
+    });
+  }
+}
+function handleRealtime(event) {
+  if (!event || !R.ROOM_RE.test(event.room || '') || !event.message || typeof event.message.t !== 'string') return;
+  const { room: code, message } = event;
+  if (message.t === 'replaced') {
+    for (const r of rooms.values()) {
+      if (r.remotePlayers.delete(message.id)) broadcastLocal(r, { t: 'leave', id: message.id });
+    }
+    for (const connection of conns) {
+      if (connection.player && connection.player.id === message.id) {
+        connection.send({ t: 'replaced' });
+        setTimeout(() => connection.socket.destroy(), 50);
+      }
+    }
+    return;
+  }
+  if (!REALTIME_TYPES.has(message.t)) return;
+  const r = room(code);
+  if (message.t === 'join' && message.p) {
+    r.remotePlayers.set(message.p.id, message.p);
+    if (!message.replace) logChat(r, { k: 'join', id: message.p.id, n: cleanName(message.p.name) });
+  } else if (message.t === 'leave') {
+    const player = r.remotePlayers.get(message.id);
+    r.remotePlayers.delete(message.id);
+    if (player) logChat(r, { k: 'leave', id: player.id, n: cleanName(player.name) });
+  } else if (message.t === 'move') {
+    const player = r.remotePlayers.get(message.id);
+    if (player) Object.assign(player, { x: message.x, y: message.y, dir: message.dir });
+  } else if (message.t === 'look') {
+    const player = r.remotePlayers.get(message.id);
+    if (player) Object.assign(player, { look: message.look, lvl: message.lvl });
+  } else if (message.t === 'say' && Number.isInteger(message.i) && typeof message.id === 'string') {
+    const kind = message.k === 'e' ? 'e' : 'p';
+    const max = kind === 'e' ? R.EMOTES.length : R.PHRASES.length;
+    if (message.i >= 0 && message.i < max) logChat(r, { k: kind, id: message.id, n: cleanName(message.n), i: message.i });
+  }
+  broadcastLocal(r, message);
+  if (message.t === 'join' || message.t === 'leave') census();
+}
+async function refreshPresence() {
+  if (!roomStore.sharedRealtime) return;
+  const stale = await roomStore.refreshPresence(INSTANCE_ID);
+  for (const player of stale) {
+    const r = rooms.get(player.room_code);
+    if (r && r.remotePlayers.delete(player.id)) broadcast(r, { t: 'leave', id: player.id });
+  }
+}
 /** The room's bounded history of phrases, emotes, joins and leaves. */
 const CHAT_KEEP = 30, SAY_GAP = 1000;
 function cleanChatLine(line) {
@@ -201,6 +268,50 @@ function logChat(r, line) {
   if (r.chat.length > CHAT_KEEP) r.chat.splice(0, r.chat.length - CHAT_KEEP);
   markDirty();
 }
+function updatePresence(p) {
+  const now = Date.now();
+  if (now - (p.presenceUpdatedAt || 0) < 500) return;
+  p.presenceUpdatedAt = now;
+  roomStore.updatePresence(INSTANCE_ID, pub(p)).catch((error) => console.error('Could not update player presence:', error.message));
+}
+
+async function joinPlayer(conn, message, code, id, now) {
+  await leave(conn);
+  const r = room(code);
+  const old = r.players.get(id);
+  const replacingRemote = r.remotePlayers.has(id);
+  if (old) {
+    old.conn.player = null; old.conn.room = null;
+    old.conn.send({ t: 'replaced' });
+    setTimeout(() => old.conn.socket.destroy(), 50);
+  }
+  const p = { id, conn, name: cleanName(message.name), look: R.cleanLook(message.look), lvl: num(message.lvl, 1, 99), x: numf(message.x, 0.5, R.W - 2), y: numf(message.y, 0.5, R.H - 2), dir: num(message.dir, 0, 3) };
+  const previousInstance = await roomStore.registerPresence(INSTANCE_ID, code, pub(p));
+  if (conn.socket.destroyed) {
+    await roomStore.removePresence(INSTANCE_ID, p.id);
+    return;
+  }
+  if (previousInstance && previousInstance !== INSTANCE_ID) {
+    await roomStore.publishRealtime({ room: code, instanceId: INSTANCE_ID, message: { t: 'replaced', id } });
+  }
+  const online = await roomStore.listPresence(code);
+  if (conn.socket.destroyed) {
+    await roomStore.removePresence(INSTANCE_ID, p.id);
+    return;
+  }
+  r.remotePlayers.clear();
+  for (const player of online) if (player.id !== id && !r.players.has(player.id)) r.remotePlayers.set(player.id, player);
+  r.players.set(id, p); conn.player = p; conn.room = r;
+  if (!old && !replacingRemote && !previousInstance) logChat(r, { k: 'join', id, n: p.name });
+  const players = [
+    ...[...r.players.values()].filter((player) => player !== p).map(pub),
+    ...r.remotePlayers.values(),
+  ];
+  conn.send({ t: 'welcome', v: R.VERSION, now, room: code, players, lots: r.lots, chat: r.chat });
+  const replacing = Boolean(old || replacingRemote || previousInstance);
+  broadcast(r, { t: 'join', p: pub(p), ...(replacing ? { replace: true } : {}) }, conn);
+  census();
+}
 
 function onMessage(conn, text) {
   const t = Date.now();                                     // simple rate limit: ~20 messages per second
@@ -213,16 +324,10 @@ function onMessage(conn, text) {
     const code = String(m.room || '').toUpperCase();
     const id = String(m.id || '').slice(0, 24);
     if (!R.ROOM_RE.test(code) || !/^[\w-]{4,24}$/.test(id)) return conn.send({ t: 'error', why: 'bad-join' });
-    leave(conn);
-    const r = room(code);
-    const old = r.players.get(id);
-    if (old) { old.conn.player = null; old.conn.room = null; old.conn.send({ t: 'replaced' }); setTimeout(() => old.conn.socket.destroy(), 50); } // same player in another tab: keep the newest, and tell the old one why
-    const p = { id, conn, name: cleanName(m.name), look: R.cleanLook(m.look), lvl: num(m.lvl, 1, 99), x: numf(m.x, 0.5, R.W - 2), y: numf(m.y, 0.5, R.H - 2), dir: num(m.dir, 0, 3) };
-    r.players.set(id, p); conn.player = p; conn.room = r;
-    if (!old) logChat(r, { k: 'join', id, n: p.name }); // a second tab of the same player is not a new arrival
-    conn.send({ t: 'welcome', v: R.VERSION, now: t, room: code, players: [...r.players.values()].filter((x) => x !== p).map(pub), lots: r.lots, chat: r.chat });
-    broadcast(r, { t: 'join', p: pub(p) }, conn);
-    census();
+    joinPlayer(conn, m, code, id, t).catch((error) => {
+      console.error('Could not join multiplayer room:', error.message);
+      conn.send({ t: 'error', why: 'storage' });
+    });
     return;
   }
   const p = conn.player, r = conn.room;
@@ -230,6 +335,7 @@ function onMessage(conn, text) {
   switch (m.t) {
     case 'move':
       p.x = numf(m.x, 0.5, R.W - 2); p.y = numf(m.y, 0.5, R.H - 2); p.dir = num(m.dir, 0, 3);
+      updatePresence(p);
       broadcast(r, { t: 'move', id: p.id, x: p.x, y: p.y, dir: p.dir }, conn);
       break;
     case 'jump': { // show other players your jump, at most a few times a second
@@ -239,6 +345,7 @@ function onMessage(conn, text) {
     }
     case 'look':
       p.look = R.cleanLook(m.look); p.lvl = num(m.lvl, 1, 99);
+      updatePresence(p);
       broadcast(r, { t: 'look', id: p.id, look: p.look, lvl: p.lvl }, conn);
       break;
     case 'say': {
@@ -246,7 +353,7 @@ function onMessage(conn, text) {
       if (!Number.isInteger(m.i) || m.i < 0 || m.i >= max) return;
       const t = Date.now(); if (t - (p.st || 0) < SAY_GAP) return; p.st = t; // one phrase a second, so nobody floods the room
       logChat(r, { k: kind, id: p.id, n: p.name, i: m.i });
-      broadcast(r, { t: 'say', id: p.id, k: kind, i: m.i });   // to everyone, including the sender
+      broadcast(r, { t: 'say', id: p.id, n: p.name, k: kind, i: m.i });   // to everyone, including the sender
       break;
     }
     // ---- own ger
@@ -340,12 +447,14 @@ function endMatch(r, match, winner, reason) {
 function leave(conn) {
   const p = conn.player, r = conn.room;
   conn.player = null; conn.room = null;
-  if (!p || !r || r.players.get(p.id) !== p) return;
+  if (!p || !r || r.players.get(p.id) !== p) return Promise.resolve();
   if (p.match && r.matches.get(p.match)) { const match = r.matches.get(p.match); endMatch(r, match, match.a === p.id ? match.b : match.a, 'left'); }
   r.players.delete(p.id);
+  const removed = roomStore.removePresence(INSTANCE_ID, p.id).catch((error) => console.error('Could not remove player presence:', error.message));
   logChat(r, { k: 'leave', id: p.id, n: p.name });
   broadcast(r, { t: 'leave', id: p.id });
   census();
+  return removed;
 }
 
 // ---------------------------------------------------------------- start
@@ -375,8 +484,9 @@ server.on('listening', () => {
   console.log('\n  Press Ctrl+C to stop.\n');
   if (process.send) process.send({ port });
 });
-roomStore.load().then((state) => {
+roomStore.load().then(async (state) => {
   saved = state;
+  await roomStore.startRealtime(INSTANCE_ID, handleRealtime);
   server.listen(PORT, '0.0.0.0');
 }).catch(async (error) => {
   console.error('Could not initialize room storage:', error.message);
