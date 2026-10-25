@@ -108,6 +108,32 @@ try {
   if (!(await jumpedRecently())) fail(step, 'a keyboard click (element.click) on Jump did not jump');
   await liftAll();
 
+  // the phone locks or another app comes to the front while a thumb is steering: the page never hears the finger lift
+  const setHidden = (hidden) => V((hidden) => {
+    Object.defineProperty(document, 'visibilityState', { value: hidden ? 'hidden' : 'visible', configurable: true });
+    Object.defineProperty(document, 'hidden', { value: hidden, configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, hidden);
+
+  step = 'hidden page stops walking';
+  await place(open.x, open.y);
+  await touch('touchStart', [[250, 500, 1]]); for (let i = 1; i <= 6; i++) { await touch('touchMove', [[250 - i * 10, 500, 1]]); await sleep(16); }
+  await sleep(150); await setHidden(true); await setHidden(false); await sleep(100);
+  { const a = await state(); await sleep(500); const b = await state();
+    if (b.stick || b.drag) fail(step, 'the joystick was still held after the page was hidden and shown again');
+    if (Math.abs(b.x - a.x) > 0.05) fail(step, `the player kept walking with no finger down (${a.x.toFixed(2)} → ${b.x.toFixed(2)})`); }
+  await liftAll();
+
+  step = 'hidden page clears both sticks';
+  await place(open.x, open.y); await V(() => TG._village.together('')); await sleep(300);
+  await touch('touchStart', [[100, 500, 1]]); await touch('touchStart', [[100, 500, 1], [300, 500, 2]]);
+  for (let i = 1; i <= 6; i++) { await touch('touchMove', [[100 + i * 10, 500, 1], [300 + i * 10, 500, 2]]); await sleep(16); }
+  await sleep(150);
+  if (!(await V(() => !!TG._village.live().p2.stick))) fail(step, "player 2's joystick did not start (test setup)");
+  await setHidden(true);
+  if (await V(() => !!TG._village.live().drag2 || !!TG._village.live().p2.stick)) fail(step, "player 2's joystick was still held after the page was hidden");
+  await setHidden(false); await liftAll(); await V(() => TG._village.together(null)); await sleep(200);
+
   step = 'tap still walks';
   await place(open.x, open.y);
   await touch('touchStart', [[300, 420, 1]]); await sleep(60); await touch('touchEnd', [[300, 420, 1]]); await sleep(80);

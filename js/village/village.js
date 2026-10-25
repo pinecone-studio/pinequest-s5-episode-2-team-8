@@ -453,6 +453,7 @@
       view: null, ctxTimer: 0, sel: null };
     document.fonts && document.fonts.load('10px Tiny5', 'Нутаг ӨҮ');
     window.addEventListener('keydown', onKey, true); window.addEventListener('keyup', onKeyUp, true); window.addEventListener('blur', clearKeys);
+    document.addEventListener('visibilitychange', onHide); window.addEventListener('pagehide', clearKeys); // phones lock or switch apps without a blur, and the lifted finger is never heard
     root.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) b.blur(); }); // HUD buttons never keep focus
     live.miniBase = miniBase();
     els.mini.addEventListener('pointerdown', onMiniTap);
@@ -464,13 +465,15 @@
     else if (!v.tips) tips();
     setCleanup(stop);
   }
-  const clearKeys = () => { if (live) { live.keys.clear(); live.run = false; endStick(); } };
+  const clearKeys = () => { if (live) { live.keys.clear(); live.run = false; endStick(); if (live.p2) { live.p2.keys.clear(); live.p2.running = false; endStick2(); } } };
+  const onHide = () => { if (document.hidden) clearKeys(); };
   function stop() {
     if (!live) return;
     live.race = null;
     if (TG.tutorial) TG.tutorial.stop();
     live.view.destroy();
     window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); window.removeEventListener('blur', clearKeys);
+    document.removeEventListener('visibilitychange', onHide); window.removeEventListener('pagehide', clearKeys);
     net.close();
     if (live.unMusic) live.unMusic();
     const v = V(); if (v) { v.pos = { x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2) }; v.energy = Math.round(v.energy * 10) / 10; S.save(); }
