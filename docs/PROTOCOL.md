@@ -1,7 +1,7 @@
 # Naadamy multiplayer protocol
 
 This is how a game client (the web game today, maybe a Unity client later) talks to `server.js`.
-It describes protocol **version 7** (`VERSION` in `js/village/rules.js`).
+It describes protocol **version 8** (`VERSION` in `js/village/rules.js`).
 
 - Transport: WebSocket at `ws://<host>/ws` (`wss://` on HTTPS).
 - Every message is one JSON text frame: an object with a `t` (type) field.
@@ -44,6 +44,8 @@ Shared lists (phrases, emotes, looks, roofs, moves…) live in `js/village/rules
 
 Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 
+`welcome` includes `day` in the `Asia/Ulaanbaatar` timezone, which the client uses to keep daily quest assignments consistent with the server.
+
 ## Client → server
 
 ### Presence
@@ -56,6 +58,7 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 | `wallet-op` | `op, action, coins, xp` | Authenticated wallet transaction. `op` is a 32-character hex idempotency key. `action: 'spend'` requires 1–10,000 coins and zero XP; `action: 'reward'` accepts 0–10,000 coins and 0–100 XP, with at least one positive amount. Spending is rejected if the server balance is too low. |
 | `shop-buy` | `op, item` | Buy a catalog shop item. The server looks up its price and level requirement in `rules.js`, checks canonical ownership and wallet balance, then atomically records ownership and deducts the price. |
 | `progress-save` | `revision, state` | Save bounded `produce`, `fish` and daily `quests` state. Revisions use optimistic concurrency: stale writes are rejected and the canonical server state is returned. Values are sanitized but remain client-reported gameplay progress, not proof of earned items or completed actions. |
+| `quest-claim` | `quest, revision, state` | Save the latest bounded snapshot, verify the quest is assigned to this player for the current Mongolia day and its reported progress reached the target, then grant the catalog reward once. The server calculates the reward and records a namespaced idempotency key; reported progress is still not proof of gameplay. |
 
 ### Chat (preset only)
 | `t` | Fields | What it does |
@@ -70,7 +73,7 @@ When PostgreSQL is configured, each server records active players in `naadamy_pl
 ### Wallet (coins and XP)
 The server returns canonical `{ coins, xp, revision }` in `welcome.wallet` and after every `wallet-op` as `wallet-result { op, accepted, reason?, wallet }`. A successful `shop-buy` returns `inventory-result { op, accepted, wallet, inventory }`. Shop inventory is limited to owned wardrobe/pet item ids plus the fishing-rod level; official item cost and level requirements are read from `rules.js`. A successful shop purchase checks canonical balance and ownership and changes both atomically. Wallet and shop records persist across server restarts and, with PostgreSQL, across server instances. Older profiles import their local wallet and the whitelisted portion of their owned shop items once. These migration values are client-reported and are not proof of prior earnings or ownership.
 
-The server enforces non-negative balances, operation size limits, shop catalog prices/levels, duplicate ownership checks and idempotency. However, the browser still reports reward amounts after local lessons and minigames, so reward eligibility is **not cheat-proof**: a modified client can request capped rewards repeatedly. The one-time inventory and progress seeds are also client-reported. The server persists bounded dairy/produce counts, fish counts and daily quest state, but sanitizing and synchronizing a snapshot does not verify how those items or quest progress were earned. Energy and most other gameplay outcomes remain local.
+The server enforces non-negative balances, operation size limits, shop catalog prices/levels, duplicate ownership checks and idempotency. Daily quest payouts are calculated from the shared reward catalog and can be claimed only once for an assigned quest on the Mongolia day. However, the browser still reports progress and reward amounts for local lessons and minigames, so reward eligibility is **not cheat-proof**: a modified client can claim unverified progress or request capped generic rewards repeatedly. The one-time inventory and progress seeds are also client-reported. The server persists bounded dairy/produce counts, fish counts and daily quest state, but sanitizing and synchronizing a snapshot does not verify how those items or quest progress were earned. Energy and most other gameplay outcomes remain local.
 
 A log line is `{ k, id, n, i? }`:
 - `k`: `'p'` phrase, `'e'` emote, `'join'`, `'leave'`.

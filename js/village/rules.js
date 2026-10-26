@@ -6,7 +6,7 @@
   else { root.TG = root.TG || {}; root.TG.vrules = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
   const W = 56, H = 40, LOTS = 8;
-  const VERSION = 7; // bump when the game and server must change together (moves, messages), so an old running server is noticed
+  const VERSION = 8; // bump when the game and server must change together (moves, messages), so an old running server is noticed
   const T = (mn, en) => ({ mn, en });
 
   // The herding and dairy yard (хот айл): animals you milk, and the white foods (цагаан идээ) you make from the milk.
@@ -36,6 +36,40 @@
     milk: 3, dairy: 2, fish: 2, basar: 2, quiz: 3, lesson: 1, together: 1, pet: 3, sell: 5,
     race: 1, archery: 3, wrestle: 1, etiquette: 1, defend: 1, eat: 3,
   };
+  const DAILY_QUEST_REWARDS = {
+    milk: { coins: 20, xp: 25 }, dairy: { coins: 25, xp: 35 }, fish: { coins: 25, xp: 30 },
+    basar: { coins: 15, xp: 25 }, quiz: { coins: 25, xp: 35 }, lesson: { coins: 30, xp: 40 },
+    together: { coins: 40, xp: 50 }, pet: { coins: 10, xp: 20 }, sell: { coins: 15, xp: 20 },
+    race: { coins: 25, xp: 35 }, archery: { coins: 25, xp: 35 }, wrestle: { coins: 25, xp: 35 },
+    etiquette: { coins: 30, xp: 40 }, defend: { coins: 40, xp: 60 }, eat: { coins: 15, xp: 20 },
+  };
+  const DAILY_QUEST_POOL = ['milk', 'dairy', 'milk', 'fish', 'basar', 'quiz', 'pet', 'sell', 'basar', 'quiz', 'eat'];
+  const SEASON_TASKS = {
+    spring: ['pet', 'milk'], summer: ['race', 'archery', 'fish'],
+    autumn: ['dairy', 'sell'], winter: ['quiz', 'wrestle'],
+  };
+  function dailyQuests(playerId, day) {
+    if (typeof playerId !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return [];
+    const dayTime = Date.parse(`${day}T00:00:00Z`);
+    if (!Number.isFinite(dayTime) || new Date(dayTime).toISOString().slice(0, 10) !== day) return [];
+    let hash = 0;
+    for (const ch of day + playerId) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+    const pool = [...DAILY_QUEST_POOL], selected = [];
+    while (selected.length < 3 && pool.length) {
+      hash = (hash * 1103515245 + 12345) >>> 0;
+      const key = pool.splice(hash % pool.length, 1)[0];
+      if (!selected.includes(key)) selected.push(key);
+    }
+    const [year, month, date] = day.split('-').map(Number);
+    const season = ['spring', 'summer', 'autumn', 'winter'][Math.floor(Date.UTC(year, month - 1, date) / 864e5) % 4];
+    const options = SEASON_TASKS[season].filter((key) => !selected.includes(key));
+    if (options.length) selected.unshift({ k: options[hash % options.length], season });
+    else {
+      const seasonal = selected.find((key) => SEASON_TASKS[season].includes(key));
+      if (seasonal) selected[selected.indexOf(seasonal)] = { k: seasonal, season };
+    }
+    return selected.map((entry) => typeof entry === 'string' ? { k: entry } : entry);
+  }
 
   // Preset, kid-safe phrases only. No free-text chat.
   const PHRASES = [
@@ -223,5 +257,5 @@
   }
 
   return { GER_STEPS, GER_DONE, GER_NEEDS, gerTry, gerUse, TRADES, COVER_PRICE, tradeCost, SHEAR_WOOL, SHEAR_REGROW_MS, FELT_WOOL, lotStage, unisTilt, HANDS_ON, handsOn,
-    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
+    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, DAILY_QUEST_REWARDS, dailyQuests, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
 });

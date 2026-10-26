@@ -158,10 +158,17 @@ try {
   assert.deepEqual(pgSpend.inventory, { owned: ['deel-blue', 'hat-cap'], rod: 1 }, 'PostgreSQL mutations persist a whitelisted inventory with the wallet');
   const pgReplay = await store.mutateWallet('identity-player', pgOperation, () => { throw new Error('duplicate operation was applied twice'); });
   assert.equal(pgReplay.duplicate, true, 'PostgreSQL wallet operations are idempotent');
+  const pgQuestClaim = await store.mutateWallet('identity-player', 'quest:2026-10-26:fish', (wallet) => ({
+    changed: true, wallet: { ...wallet, coins: wallet.coins + 25 }, result: { accepted: true },
+  }));
+  assert.equal(pgQuestClaim.wallet.coins, 400, 'PostgreSQL stores namespaced daily quest claims');
+  assert.equal((await store.mutateWallet('identity-player', 'quest:2026-10-26:fish', () => {
+    throw new Error('daily quest reward was applied twice');
+  })).duplicate, true, 'PostgreSQL daily quest claims remain idempotent');
   assert.deepEqual(pgReplay.wallet, pgSpend.wallet, 'a replay returns the current canonical wallet');
   assert.deepEqual(pgReplay.inventory, pgSpend.inventory, 'a replay returns the current canonical inventory');
   const pgRejected = await store.mutateWallet('identity-player', '2'.repeat(32), () => ({ changed: false, result: { accepted: false, reason: 'insufficient' } }));
-  assert.equal(pgRejected.wallet.coins, 375, 'rejected PostgreSQL spends leave the wallet unchanged');
+  assert.equal(pgRejected.wallet.coins, 400, 'rejected PostgreSQL spends leave the wallet unchanged');
   assert.equal((await store.mutateWallet('identity-player', '2'.repeat(32), () => { throw new Error('rejected operation was retried'); })).duplicate, true,
     'rejected PostgreSQL operations are also idempotent');
   const pgProgress = await store.getProgress('identity-player', { produce: { milk: 2 } });
@@ -238,6 +245,10 @@ try {
   assert.deepEqual(jsonReward.inventory, { owned: ['deel-blue', 'pet-lamb'], rod: 2 }, 'JSON mode atomically saves shop ownership with the wallet');
   assert.deepEqual(await restartedJsonStore.getWallet('json-player'), jsonReward.wallet, 'JSON wallet balances survive a server restart');
   assert.deepEqual((await restartedJsonStore.getAccount('json-player')).inventory, jsonReward.inventory, 'JSON inventory survives a server restart');
+  const jsonQuestClaim = await jsonStore.mutateWallet('json-player', 'quest:2026-10-26:fish', (wallet) => ({
+    changed: true, wallet: { ...wallet, coins: wallet.coins + 25 }, result: { accepted: true },
+  }));
+  assert.equal(jsonQuestClaim.wallet.coins, 120, 'JSON mode stores namespaced daily quest claims');
   const jsonProgress = await jsonStore.getProgress('json-player', { fish: { perch: 1 } });
   const jsonProgressSaved = await jsonStore.saveProgress('json-player', jsonProgress.revision, { fish: { perch: 2 } });
   assert.deepEqual(jsonProgressSaved, { accepted: true, revision: 1, state: { fish: { perch: 2 } } }, 'JSON mode persists revisioned player progress');
@@ -247,6 +258,10 @@ try {
     { revision: 1, state: { fish: { perch: 2 } } }, 'JSON progress survives a server restart');
   const jsonReplay = await restartedJsonStore.mutateWallet('json-player', jsonOperation, () => { throw new Error('duplicate operation was applied twice'); });
   assert.equal(jsonReplay.duplicate, true, 'JSON wallet operations are idempotent');
+  const jsonQuestReplay = await restartedJsonStore.mutateWallet('json-player', 'quest:2026-10-26:fish', () => {
+    throw new Error('daily quest reward was applied twice');
+  });
+  assert.equal(jsonQuestReplay.duplicate, true, 'JSON daily quest claims remain idempotent after restart');
   await jsonStore.save({ NUTAG: { lots: [], chat: [] } });
   assert.deepEqual(await jsonStore.load(), { NUTAG: { lots: [], chat: [] } }, 'JSON storage still saves snapshots');
   const jsonMutation = await jsonStore.mutateRoom('NUTAG', { lots: [], chat: [] }, (state) => {

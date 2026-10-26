@@ -14,4 +14,9 @@ assert.deepEqual(R.tradeCost('uni', 'coins'), { coins: 15 });
 assert.equal(R.lotStage(null), 0); assert.equal(R.lotStage({ by: 'u1' }), 9); assert.equal(R.lotStage({ by: 'u1', stage: 4 }), 4); assert.equal(R.lotStage({ by: 'u1', stage: 12 }), 9);
 assert.equal(R.unisTilt([0, 2, 0]), false); assert.equal(R.unisTilt([1, 1, 1]), true); assert.equal(R.unisTilt([1, 1]), false);
 assert.equal(R.GER_PRICE, undefined); // gers are built by hand now, never bought
+const daily = R.dailyQuests('player-test', '2026-10-26');
+assert.deepEqual(R.dailyQuests('player-test', '2026-10-26'), daily, 'daily quests are deterministic for a profile and date');
+assert.ok(daily.length >= 3 && daily.length <= 4, 'daily assignments contain the standard quests and optional seasonal quest');
+assert.equal(new Set(daily.map((quest) => quest.k)).size, daily.length, 'daily assignments do not repeat a quest');
+assert.deepEqual(R.dailyQuests('player-test', '2026-02-31'), [], 'invalid dates do not create assignments');
 console.log('Ger rules: all checks passed.');

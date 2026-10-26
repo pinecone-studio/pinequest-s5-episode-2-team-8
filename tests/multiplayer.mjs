@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import rules from '../js/village/rules.js';
 
 const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const chrome = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome');
@@ -51,6 +52,9 @@ async function player(name, look, room, ctxIn) {
 try {
   const a = await player('Бат', { deel: 'red', hat: 'mongol', pet: 'lamb' });
   const b = await player('Сарнай', { deel: 'green', hat: 'flower', neck: 'khadag' });
+  if (!(await a.evaluate(() => TG._village.questsState().day === TG._village.live().serverDay))) {
+    throw new Error('daily quest assignments did not use the server day');
+  }
   ok('both players connected to the server');
   await a.evaluate(() => {
     const v = TG.store.active().village;
@@ -215,6 +219,78 @@ try {
   }
   await walletProbe.close();
   ok('wallet overspending is denied and transaction replays do not duplicate changes');
+  const questProbe = await browser.newPage();
+  await questProbe.goto(`${base}/api/hello`);
+  const questPlayerId = 'quest-test-' + crypto.randomBytes(4).toString('hex');
+  const questTicket = crypto.randomBytes(32).toString('hex');
+  const todayParts = Object.fromEntries(new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date()).map(({ type, value }) => [type, value]));
+  const questDay = `${todayParts.year}-${todayParts.month}-${todayParts.day}`;
+  const assignedQuests = rules.dailyQuests(questPlayerId, questDay);
+  const questKey = assignedQuests[0].k;
+  const questTarget = rules.QUEST_TARGETS[questKey];
+  await questProbe.evaluate((url, id, ticket) => {
+    window.questEvents = [];
+    window.questSocket = new WebSocket(url);
+    window.questSocket.addEventListener('message', (event) => window.questEvents.push(JSON.parse(event.data)));
+    window.questSocket.addEventListener('open', () => window.questSocket.send(JSON.stringify({
+      t: 'join', room: 'NUTAG', id, ticket, name: 'Quest test', look: {}, wallet: { coins: 40, xp: 0 },
+    })));
+  }, `ws://${new URL(base).host}/ws`, questPlayerId, questTicket);
+  await questProbe.waitForFunction(() => window.questEvents.some((message) => message.t === 'welcome'), { timeout: 5000 });
+  const reservedOperation = `quest:${questDay}:${questKey}`;
+  await questProbe.evaluate((op) => window.questSocket.send(JSON.stringify({
+    t: 'wallet-op', op, action: 'reward', coins: 1000, xp: 100,
+  })), reservedOperation);
+  await until(() => questProbe.evaluate((op) => window.questEvents.some((message) => message.t === 'wallet-result' && message.op === op), reservedOperation), 'reserved quest operation rejection');
+  const rejectedReservedOperation = await questProbe.evaluate((op) => window.questEvents.find((message) => message.t === 'wallet-result' && message.op === op), reservedOperation);
+  if (rejectedReservedOperation.accepted || rejectedReservedOperation.reason !== 'invalid'
+    || rejectedReservedOperation.wallet.coins !== 40) throw new Error('a client wallet operation collided with the server quest claim key');
+  const claimDailyQuest = async (quest, revision, state) => {
+    const previous = await questProbe.evaluate(() => window.questEvents.filter((message) => message.t === 'quest-claim-result').length);
+    await questProbe.evaluate((payload) => window.questSocket.send(JSON.stringify({ t: 'quest-claim', ...payload })), { quest, revision, state });
+    await until(() => questProbe.evaluate((count) => window.questEvents.filter((message) => message.t === 'quest-claim-result').length > count, previous), 'daily quest claim response');
+    return questProbe.evaluate(() => {
+      const events = window.questEvents.filter((message) => message.t === 'quest-claim-result');
+      return events[events.length - 1];
+    });
+  };
+  const completedQuestState = {
+    produce: {}, fish: {},
+    quests: { d: questDay, list: assignedQuests.map((entry) => ({ ...entry, p: entry.k === questKey ? questTarget : 0, done: false })) },
+  };
+  const claimedQuest = await claimDailyQuest(questKey, 0, completedQuestState);
+  const questMultiplier = assignedQuests[0].season ? 1.5 : 1;
+  const expectedQuestCoins = Math.round(rules.DAILY_QUEST_REWARDS[questKey].coins * questMultiplier);
+  const expectedQuestXp = Math.round(rules.DAILY_QUEST_REWARDS[questKey].xp * questMultiplier);
+  if (!claimedQuest.accepted || claimedQuest.wallet.coins !== 40 + expectedQuestCoins || claimedQuest.wallet.xp !== expectedQuestXp) {
+    throw new Error(`the server did not grant the canonical daily quest reward: ${JSON.stringify(claimedQuest)}`);
+  }
+  const questReplay = await claimDailyQuest(questKey, claimedQuest.progress.revision, completedQuestState);
+  if (!questReplay.accepted || !questReplay.duplicate || questReplay.wallet.coins !== claimedQuest.wallet.coins
+    || questReplay.wallet.xp !== claimedQuest.wallet.xp || questReplay.wallet.revision !== claimedQuest.wallet.revision) {
+    throw new Error('daily quest reward was not idempotent');
+  }
+  const incompleteState = {
+    produce: {}, fish: {},
+    quests: { d: questDay, list: assignedQuests.map((entry) => ({ ...entry, p: entry.k === questKey ? questTarget - 1 : 0, done: false })) },
+  };
+  const incompleteClaim = await claimDailyQuest(questKey, questReplay.progress.revision, incompleteState);
+  if (incompleteClaim.accepted || incompleteClaim.reason !== 'incomplete' || incompleteClaim.wallet.coins !== claimedQuest.wallet.coins) {
+    throw new Error('the server paid an incomplete daily quest');
+  }
+  const unassignedKey = Object.keys(rules.DAILY_QUEST_REWARDS).find((key) => !assignedQuests.some((entry) => entry.k === key));
+  const unassignedState = {
+    produce: {}, fish: {},
+    quests: { d: questDay, list: [{ k: unassignedKey, p: rules.QUEST_TARGETS[unassignedKey], done: false }] },
+  };
+  const unassignedClaim = await claimDailyQuest(unassignedKey, incompleteClaim.progress.revision, unassignedState);
+  if (unassignedClaim.accepted || unassignedClaim.reason !== 'not-assigned' || unassignedClaim.wallet.coins !== claimedQuest.wallet.coins) {
+    throw new Error('the server paid a quest that was not assigned to the player');
+  }
+  await questProbe.close();
+  ok('daily quest payouts are assigned, server-priced, and idempotent');
   if (!(await a.evaluate(() => {
     const v = TG.store.active().village;
     const saved = JSON.parse(localStorage.getItem(TG.store.KEY) || 'null');

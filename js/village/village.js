@@ -42,6 +42,11 @@
   const myLot = () => lotsArr().findIndex((l) => l && l.by === V().id);
   const now = () => Date.now() + (live && live.online ? live.offset : 0);
   const lvl = () => R.level(V().xp).l;
+  function announceLevelUp(before, after) {
+    if (after <= before) return;
+    setTimeout(() => { TG.sfx.win(); TG.confetti(80); TG.toast(`🎉 ${L('Түвшин ахилаа!', 'Level up!')} ${L('Түвшин', 'Level')} ${after}`); }, 400);
+    net.send({ t: 'look', look: V().look, lvl: after });
+  }
 
   // ================================================================ rewards + quests (also used by the rest of Naadamy)
   function reward(coins, xp) {
@@ -54,45 +59,36 @@
       });
     }
     const after = R.level(v.xp).l;
-    if (after > before) {
-      setTimeout(() => { TG.sfx.win(); TG.confetti(80); TG.toast(`🎉 ${L('Түвшин ахилаа!', 'Level up!')} ${L('Түвшин', 'Level')} ${after}`); }, 400);
-      net.send({ t: 'look', look: v.look, lvl: after });
-    }
+    announceLevelUp(before, after);
     if (live) hud();
     setTimeout(() => TG.achievements && TG.achievements.check(), 0);
     return { coins, xp, level: after > before ? after : 0 };
   }
+  const dailyQuest = (k, mn, en) => ({
+    n: R.QUEST_TARGETS[k], c: R.DAILY_QUEST_REWARDS[k].coins, x: R.DAILY_QUEST_REWARDS[k].xp, t: Tx(mn, en),
+  });
+  const questDay = () => live && live.serverDay || S.dkey();
   const QUESTS = {
-    milk: { n: R.QUEST_TARGETS.milk, c: 20, x: 25, t: Tx('3 удаа мал саах', 'Milk the animals 3 times') },
-    dairy: { n: R.QUEST_TARGETS.dairy, c: 25, x: 35, t: Tx('2 цагаан идээ хийх', 'Make 2 dairy foods') },
-    fish: { n: R.QUEST_TARGETS.fish, c: 25, x: 30, t: Tx('2 загас барих', 'Catch 2 fish') },
-    basar: { n: R.QUEST_TARGETS.basar, c: 15, x: 25, t: Tx('Басараас 2 асуулт асуух', 'Ask Basar 2 questions') },
-    quiz: { n: R.QUEST_TARGETS.quiz, c: 25, x: 35, t: Tx('Басарын 3 асуултад зөв хариулах', 'Answer 3 of Basar’s questions right') },
-    lesson: { n: R.QUEST_TARGETS.lesson, c: 30, x: 40, t: Tx('Өв соёлын 1 хичээл дуусгах', 'Finish 1 heritage lesson') },
-    together: { n: R.QUEST_TARGETS.together, c: 40, x: 50, t: Tx('Гэр бүлтэйгээ бодит ажил хийх', 'Do a real activity with family') },
-    pet: { n: R.QUEST_TARGETS.pet, c: 10, x: 20, t: Tx('Хонийг 3 удаа илбэх', 'Pet the sheep 3 times') },
-    sell: { n: R.QUEST_TARGETS.sell, c: 15, x: 20, t: Tx('5 зүйл зарах', 'Sell 5 items') },
-    race: { n: R.QUEST_TARGETS.race, c: 25, x: 35, t: Tx('Морин уралдаанд 1 удаа оролцох', 'Ride in 1 horse race') },
-    archery: { n: R.QUEST_TARGETS.archery, c: 25, x: 35, t: Tx('Сур харваанд 3 бай онох', 'Hit 3 archery targets') },
-    wrestle: { n: R.QUEST_TARGETS.wrestle, c: 25, x: 35, t: Tx('Бөхийн барилдаанд 1 удаа давах', 'Win 1 wrestling round') },
-    etiquette: { n: R.QUEST_TARGETS.etiquette, c: 30, x: 40, t: Tx('Эмээгийн гэрт ёсоор зочлох', 'Visit Grandma’s ger with good manners') },
-    defend: { n: R.QUEST_TARGETS.defend, c: 40, x: 60, t: Tx('Нутгаа хамгаалах тулаанд ялах', 'Win a defend-the-homeland battle') },
-    eat: { n: R.QUEST_TARGETS.eat, c: 15, x: 20, t: Tx('3 удаа хоол идэх, ундаа уух', 'Eat or drink 3 times') },
+    milk: dailyQuest('milk', '3 удаа мал саах', 'Milk the animals 3 times'),
+    dairy: dailyQuest('dairy', '2 цагаан идээ хийх', 'Make 2 dairy foods'),
+    fish: dailyQuest('fish', '2 загас барих', 'Catch 2 fish'),
+    basar: dailyQuest('basar', 'Басараас 2 асуулт асуух', 'Ask Basar 2 questions'),
+    quiz: dailyQuest('quiz', 'Басарын 3 асуултад зөв хариулах', 'Answer 3 of Basar’s questions right'),
+    lesson: dailyQuest('lesson', 'Өв соёлын 1 хичээл дуусгах', 'Finish 1 heritage lesson'),
+    together: dailyQuest('together', 'Гэр бүлтэйгээ бодит ажил хийх', 'Do a real activity with family'),
+    pet: dailyQuest('pet', 'Хонийг 3 удаа илбэх', 'Pet the sheep 3 times'),
+    sell: dailyQuest('sell', '5 зүйл зарах', 'Sell 5 items'),
+    race: dailyQuest('race', 'Морин уралдаанд 1 удаа оролцох', 'Ride in 1 horse race'),
+    archery: dailyQuest('archery', 'Сур харваанд 3 бай онох', 'Hit 3 archery targets'),
+    wrestle: dailyQuest('wrestle', 'Бөхийн барилдаанд 1 удаа давах', 'Win 1 wrestling round'),
+    etiquette: dailyQuest('etiquette', 'Эмээгийн гэрт ёсоор зочлох', 'Visit Grandma’s ger with good manners'),
+    defend: dailyQuest('defend', 'Нутгаа хамгаалах тулаанд ялах', 'Win a defend-the-homeland battle'),
+    eat: dailyQuest('eat', '3 удаа хоол идэх, ундаа уух', 'Eat or drink 3 times'),
   };
-  const POOL = ['milk', 'dairy', 'milk', 'fish', 'basar', 'quiz', 'pet', 'sell', 'basar', 'quiz', 'eat'];
   function quests() {
-    const v = V(), d = S.dkey();
+    const v = V(), d = questDay();
     if (v.quests.d !== d || v.quests.list.some((q) => !QUESTS[q.k])) { // new day, or quests from an older version
-      let hs = 0; for (const ch of d + v.id) hs = (hs * 31 + ch.charCodeAt(0)) >>> 0;
-      const pool = [...POOL], pick = [];
-      while (pick.length < 3) { hs = (hs * 1103515245 + 12345) >>> 0; const k = pool.splice(hs % pool.length, 1)[0]; if (!pick.includes(k)) pick.push(k); }
-      // one extra quest from today's season, worth +50%
-      const sea = TG.seasons ? TG.seasons.current() : null, list = pick.map((k) => ({ k, p: 0, done: false }));
-      if (sea) {
-        const opts = sea.tasks.filter((k) => !pick.includes(k));
-        if (opts.length) list.unshift({ k: opts[hs % opts.length], p: 0, done: false, season: sea.id });
-        else { const q = list.find((x) => sea.tasks.includes(x.k)); if (q) q.season = sea.id; } // every season task was already picked: make one of them the season quest
-      }
+      const list = R.dailyQuests(v.id, d).map((q) => ({ ...q, p: 0, done: false }));
       v.quests = { d, list };
       v.pets = {};
       S.save();
@@ -113,7 +109,7 @@
   const checkAch = () => { if (TG.achievements) TG.achievements.check(); };
   TG._village = { wardrobe: () => wardrobe(), hud: () => hud(), recipes: () => Object.values(RECIPES).flat(), phaser: () => live && live.view, battle: (id) => startBattle(id), battleState: () => live && live.battle, shootNearest: () => shootNearest(), general: () => generalModal(), fp: () => openFP(), live: () => live, milk: (id) => milkGame(id), station: (st) => dairyStation(st), goTo: (...a) => goTo(...a), lots: () => lotsArr(), build: (i) => TG.gerwork.build(i), together: (id) => together(id), reconnect: () => net.rejoin(), shear: (i) => TG.gerwork.shear(i), shearable: (i) => TG.gerwork.shearable(i), felt: () => TG.gerwork.felt(), invite: (id) => net.send({ t: 'wr-invite', to: id }), context: () => contextAction(), arena: () => arenaModal(), school: () => wrestleSchool(), practice: () => practiceBout(), tournament: (r) => tournament(r), dog: () => live && live.dog, lot: (i) => lotAction(i), archery: () => archeryGame(), emee: () => emeeVisit(), npc: (id) => npcTalk(id), enterGer: (i) => enterGer(i), mount: (c) => mount(c), dismount: () => dismount(), race: (c) => raceStart(c), raceState: () => live && live.race,
     tut: (st) => { if (live) live.tut = st; }, nomin: (cmd) => nomin(cmd), basar: () => openBasar(),
-    questsState: () => ({ day: S.dkey(), list: quests(), defs: QUESTS, seen: V().questsSeen }),
+    questsState: () => ({ day: questDay(), list: quests(), defs: QUESTS, seen: V().questsSeen }),
     npcs: () => WD.objects.filter((o) => o.kind === 'npcq' && NPCS[o.id]).map((o) => ({ id: o.id, x: o.x, y: o.y, mark: npcMark(o.id), name: NPCS[o.id].name })), objects: () => WD.objects, jump: () => jump() }; // used by automated tests and the tutorial
   TG.villageInfo = () => { const v = V(); return v ? { coins: v.coins, ...R.level(v.xp) } : null; };
 
@@ -276,6 +272,7 @@
     },
     pendingWallet: new Map(),
     pendingPurchase: new Map(),
+    pendingQuestClaims: new Map(),
     walletOperation(action, coins, xp) {
       if (!this.ws || this.ws.readyState !== 1 || !live || !live.online) return Promise.resolve(null);
       const op = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -303,6 +300,29 @@
           console.error('Could not send shop purchase:', error.message);
         }
       });
+    },
+    claimQuest(quest) {
+      if (!this.ws || this.ws.readyState !== 1 || !live || !live.online || !progressProfileMatches()) return Promise.resolve(null);
+      if (this.pendingQuestClaims.has(quest)) return this.pendingQuestClaims.get(quest).promise;
+      let pending;
+      const promise = new Promise((resolve) => {
+        pending = { resolve, promise: null };
+        pending.timer = setTimeout(() => {
+          this.pendingQuestClaims.delete(quest);
+          resolve(null);
+        }, 8000);
+        this.pendingQuestClaims.set(quest, pending);
+        try {
+          this.ws.send(JSON.stringify({
+            t: 'quest-claim', quest, revision: live.progressRevision, state: progressSnapshot(),
+          }));
+        } catch (error) {
+          clearTimeout(pending.timer); this.pendingQuestClaims.delete(quest); resolve(null);
+          console.error('Could not send daily quest claim:', error.message);
+        }
+      });
+      pending.promise = promise;
+      return promise;
     },
     send(m) { if (this.ws && this.ws.readyState === 1 && live && live.online) this.ws.send(JSON.stringify(m)); },
     close() { this.closed = true; clearTimeout(this.timer); if (this.ws) { const w = this.ws; this.ws = null; try { w.close(); } catch (e) { /* closing */ } } },
@@ -396,7 +416,8 @@
     const v = V();
     switch (m.t) {
       case 'welcome':
-        live.online = true; live.offset = m.now - Date.now(); live.lots = m.lots || new Array(R.LOTS).fill(null); live.room = m.room; live.serverV = m.v;
+        live.online = true; live.serverDay = /^\d{4}-\d{2}-\d{2}$/.test(m.day || '') ? m.day : S.dkey();
+        live.offset = m.now - Date.now(); live.lots = m.lots || new Array(R.LOTS).fill(null); live.room = m.room; live.serverV = m.v;
         applyWallet(m.wallet);
         applyInventory(m.inventory);
         if (m.progress && Number.isSafeInteger(m.progress.revision) && m.progress.revision >= 0) {
@@ -405,6 +426,7 @@
           if (progressSignature() !== live.progressJoinSeedSignature) scheduleProgressSync();
           else applyProgress(m.progress.state);
         }
+        quests();
         live.others.clear(); (m.players || []).forEach(addOther);
         live.chat = (m.chat || []).slice(-CHAT_KEEP); renderChat();
         setStatus('online');
@@ -426,6 +448,19 @@
         applyInventory(m.inventory);
         const pending = net.pendingPurchase.get(m.op);
         if (pending) { clearTimeout(pending.timer); net.pendingPurchase.delete(m.op); pending.resolve(m); }
+        break;
+      }
+      case 'quest-claim-result': {
+        const pending = net.pendingQuestClaims.get(m.quest);
+        if (m.progress && Number.isSafeInteger(m.progress.revision) && m.progress.revision >= 0 && m.progress.state) {
+          live.progressRevision = m.progress.revision;
+          live.progressSignature = progressSignature(m.progress.state);
+          if (!m.accepted && progressSignature() !== live.progressSignature) applyProgress(m.progress.state);
+        }
+        applyWallet(m.wallet);
+        if (pending) {
+          clearTimeout(pending.timer); net.pendingQuestClaims.delete(m.quest); pending.resolve(m);
+        }
         break;
       }
       case 'progress-result': {
@@ -1510,14 +1545,31 @@
 
   function questModal() {
     const v = V(), body = h('div');
-    v.questsSeen = S.dkey(); S.save(); // Nomin stops reminding you about today's new quests
+    v.questsSeen = questDay(); S.save(); // Nomin stops reminding you about today's new quests
     const draw = () => rc(body, h('h2', null, L('Өнөөдрийн даалгавар', "Today's quests")),
       h('p', { class: 'muted' }, L('Даалгавар өдөр бүр шинэчлэгдэнэ.', 'Quests refresh every day.')),
       h('div', { class: 'v-list' }, quests().map((q) => {
         const d = QUESTS[q.k], ready = q.p >= d.n && !q.done;
         return h('div', { class: 'v-row' + (q.done ? ' done' : '') }, icon(q.done ? 'ui:star' : 'ui:scroll'),
           h('div', { class: 'v-row-b' }, h('b', null, q.season ? `${TG.seasons.byId(q.season).icon} ` : '', tx(d.t), q.season ? h('small', { class: 'v-season-tag' }, ` ${tx(TG.seasons.byId(q.season).name)} ×1.5`) : null), h('div', { class: 'meter' }, h('span', { style: { width: (q.p / d.n) * 100 + '%' } })), h('small', null, `${q.p}/${d.n} · +${d.c} ${L('зоос', 'coins')} · +${d.x} XP`)),
-          ready ? h('button', { class: 'btn sm primary', onclick: () => { q.done = true; if (q.season) { v.seasonDone = v.seasonDone || {}; v.seasonDone[q.season] = Date.now(); } reward(Math.round(d.c * (q.season ? 1.5 : 1)), Math.round(d.x * (q.season ? 1.5 : 1))); TG.confetti(40); draw(); } }, L('Авах', 'Claim')) : q.done ? h('span', { class: 'v-owned' }, '✓') : null);
+          ready ? h('button', { class: 'btn sm primary', onclick: async (e) => {
+            e.currentTarget.disabled = true;
+            let accepted = true;
+            const beforeLevel = lvl();
+            if (live && live.online) {
+              const result = await net.claimQuest(q.k);
+              accepted = Boolean(result && result.accepted);
+              if (!accepted) {
+                TG.toast(L('Даалгаврын шагналыг сервер баталгаажуулж чадсангүй. Ахиц синк хийсний дараа дахин оролдоорой.', 'The server could not confirm this quest reward. Sync progress and try again.'));
+                draw();
+                return;
+              }
+              announceLevelUp(beforeLevel, lvl());
+            } else reward(Math.round(d.c * (q.season ? 1.5 : 1)), Math.round(d.x * (q.season ? 1.5 : 1)));
+            q.done = true;
+            if (q.season) { v.seasonDone = v.seasonDone || {}; v.seasonDone[q.season] = Date.now(); }
+            S.save(); TG.confetti(40); setTimeout(() => TG.achievements && TG.achievements.check(), 0); draw();
+          } }, L('Авах', 'Claim')) : q.done ? h('span', { class: 'v-owned' }, '✓') : null);
       })),
       h('button', { class: 'btn block', onclick: () => { close(); TG.go('learn'); } }, '📚 ', L('Өв соёлын сургууль', 'Heritage school')));
     draw();

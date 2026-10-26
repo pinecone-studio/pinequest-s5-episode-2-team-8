@@ -567,7 +567,7 @@ async function joinPlayer(conn, message, code, id, now) {
   conn.wallet = account.wallet;
   conn.inventory = account.inventory;
   conn.progressRevision = progress.revision;
-  conn.send({ t: 'welcome', v: R.VERSION, now, room: code, players, lots: r.lots, chat: r.chat, wallet: account.wallet, inventory: account.inventory, progress });
+  conn.send({ t: 'welcome', v: R.VERSION, now, day: villageDay(), room: code, players, lots: r.lots, chat: r.chat, wallet: account.wallet, inventory: account.inventory, progress });
   const replacing = Boolean(old || replacingRemote || previousInstance);
   broadcast(r, { t: 'join', p: pub(p), ...(replacing ? { replace: true } : {}) }, conn);
   census();
@@ -605,6 +605,88 @@ async function handleWalletOperation(conn, message) {
   } catch (error) {
     console.error('Could not update player wallet:', error.message);
     conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'storage', wallet: conn.wallet });
+  }
+}
+
+function villageDay(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date).map(({ type, value }) => [type, value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+function villageSeason(day) {
+  const [year, month, date] = day.split('-').map(Number);
+  const index = Math.floor(Date.UTC(year, month - 1, date) / 864e5) % 4;
+  return ['spring', 'summer', 'autumn', 'winter'][index];
+}
+async function handleQuestClaim(conn, message) {
+  const p = conn.player;
+  if (!p) return;
+  const quest = typeof message.quest === 'string' && message.quest.length <= 16 ? message.quest : '';
+  const reward = Object.hasOwn(R.DAILY_QUEST_REWARDS, quest) ? R.DAILY_QUEST_REWARDS[quest] : null;
+  if (!reward || !Number.isSafeInteger(message.revision) || message.revision < 0
+    || !message.state || typeof message.state !== 'object' || Array.isArray(message.state)) {
+    return conn.send({ t: 'quest-claim-result', quest, accepted: false, reason: 'invalid', wallet: conn.wallet });
+  }
+  let progress;
+  try {
+    progress = await roomStore.saveProgress(p.id, message.revision, sanitizeProgress(message.state));
+    conn.progressRevision = progress.revision;
+    if (!progress.accepted) {
+      return conn.send({
+        t: 'quest-claim-result', quest, accepted: false, reason: 'stale',
+        wallet: conn.wallet, progress: { revision: progress.revision, state: progress.state },
+      });
+    }
+    const day = villageDay();
+    const daily = progress.state.quests;
+    if (daily.d !== day) {
+      return conn.send({
+        t: 'quest-claim-result', quest, accepted: false, reason: 'day',
+        wallet: conn.wallet, progress: { revision: progress.revision, state: progress.state },
+      });
+    }
+    const task = daily.list.find((entry) => entry.k === quest);
+    const assigned = R.dailyQuests(p.id, day).find((entry) => entry.k === quest);
+    const target = R.QUEST_TARGETS[quest];
+    if (!assigned) {
+      return conn.send({
+        t: 'quest-claim-result', quest, accepted: false, reason: 'not-assigned',
+        wallet: conn.wallet, progress: { revision: progress.revision, state: progress.state },
+      });
+    }
+    if (!task || task.p < target) {
+      return conn.send({
+        t: 'quest-claim-result', quest, accepted: false, reason: 'incomplete',
+        wallet: conn.wallet, progress: { revision: progress.revision, state: progress.state },
+      });
+    }
+    const multiplier = assigned.season && assigned.season === villageSeason(day) ? 1.5 : 1;
+    const coins = Math.round(reward.coins * multiplier), xp = Math.round(reward.xp * multiplier);
+    const operation = `quest:${day}:${quest}`;
+    const outcome = await roomStore.mutateWallet(p.id, operation, (wallet) => {
+      if (wallet.coins > WALLET_MAX - coins || wallet.xp > WALLET_MAX - xp) {
+        return { changed: false, result: { accepted: false, reason: 'limit' } };
+      }
+      return {
+        changed: true,
+        wallet: { coins: wallet.coins + coins, xp: wallet.xp + xp },
+        result: { accepted: true },
+      };
+    });
+    conn.wallet = outcome.wallet;
+    conn.inventory = outcome.inventory;
+    conn.send({
+      t: 'quest-claim-result', quest, ...outcome.result, duplicate: outcome.duplicate, wallet: outcome.wallet,
+      progress: { revision: progress.revision, state: progress.state },
+      reward: outcome.result.accepted ? { coins, xp } : undefined,
+    });
+  } catch (error) {
+    console.error('Could not claim daily quest reward:', error.message);
+    conn.send({
+      t: 'quest-claim-result', quest, accepted: false, reason: 'storage', wallet: conn.wallet,
+      ...(progress && { progress: { revision: progress.revision, state: progress.state } }),
+    });
   }
 }
 
@@ -765,6 +847,9 @@ function onMessage(conn, text) {
     }
     case 'wallet-op':
       handleWalletOperation(conn, m);
+      break;
+    case 'quest-claim':
+      handleQuestClaim(conn, m);
       break;
     case 'shop-buy':
       handleShopPurchase(conn, m);
