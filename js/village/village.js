@@ -923,12 +923,12 @@
 
   // ---------------------------------------------------------------- update + draw
   const follow = (p, x, y, dt) => { p.x += (x - p.x) * Math.min(1, dt * 4); p.y += (y - p.y) * Math.min(1, dt * 4); };
-  // ---------------------------------------------------------------- Nomin pops in and out (tutorial.js decides when)
+  // ---------------------------------------------------------------- Bolormaa pops in and out (tutorial.js decides when)
   const POOF_MS = 420;
   /** Somewhere open right beside you for her to appear. */
   function besideMe() {
     const m = live.me;
-    for (const [dx, dy] of [[-1.2, 0.15], [1.25, 0.15], [0, 1.1], [-1.1, -0.9], [1.1, -0.9], [-2.2, 0.2], [2.2, 0.2]]) {
+    for (const [dx, dy] of [[-1.6, 0.15], [1.65, 0.15], [0, 1.1], [-1.1, -0.9], [1.1, -0.9], [-2.2, 0.2], [2.2, 0.2]]) { // far enough that her name and yours don't touch
       const x = m.px + dx, y = m.py + dy;
       if (!WD.blocked(Math.floor(x + 0.5), Math.floor(y + 0.82))) return { x, y };
     }
@@ -1062,7 +1062,7 @@
       if (dg.bubble && nowP - dg.bubble.t0 > 12000) dg.bubble = null;
     }
     const tg = live.tut && live.tut.guide;
-    if (tg) { // Nomin doesn't follow you: she pops in beside you when she has something to say, turns to face you, then pops out again
+    if (tg) { // Bolormaa doesn't follow you: she pops in beside you when she has something to say, turns to face you, then pops out again
       tg.moving = false; tg.dir = Math.abs(m.px - tg.x) < 0.3 ? 0 : m.px < tg.x ? 1 : 2;
       if (tg.out && performance.now() - tg.out > POOF_MS) live.tut.guide = null;
     }
@@ -1143,12 +1143,12 @@
     }
     battleModel(F, rider, text);
     const tg = live.tut && live.tut.guide;
-    if (tg && TG.tutorial) { // Nomin: a hop and a puff when she pops in, a puff when she pops out
+    if (tg && TG.tutorial) { // Bolormaa: a hop and a puff when she pops in, a puff when she pops out
       const qi = Math.min(1, (pn - tg.in) / POOF_MS), qo = tg.out ? (pn - tg.out) / POOF_MS : 0;
       if (qi > 0.2 && qo < 0.35) { const hop = qi < 1 ? Math.round(Math.sin(qi * Math.PI) * 7) : 0; shadow('nomin', tg.x * T, tg.y * T); sprite('nomin', PX.char(TG.tutorial.LOOK, tg.dir || 0, 0), tg.x * T, tg.y * T - 12 - hop, tg.y); }
       if (qi < 1) F.marks.push({ id: 'nomin:in', kind: 'poof', x: tg.x * T + 8, y: tg.y * T + 6, q: qi });
       if (tg.out) F.marks.push({ id: 'nomin:out', kind: 'poof', x: tg.x * T + 8, y: tg.y * T + 6, q: Math.min(1, qo) });
-      if (!tg.out && pn - tg.in > POOF_MS * 0.6) text('nomin', L('Номин', 'Nomin'), tg.x * T + 8, tg.y * T - 16, 0.8, '#f7c646');
+      if (!tg.out && pn - tg.in > POOF_MS * 0.6) text('nomin', L('Болормаа', 'Bolormaa'), tg.x * T + 8, tg.y * T - 16, 0.8, '#f7c646');
     }
     const gn = WD.objects.find((q) => q.kind === 'general'), hs0 = WD.objects.find((q) => q.kind === 'historian');
     if (gn) { still('general', gn, GENERAL, Math.floor(t / 3 + gn.x) % 5 === 4 ? 2 : 0); text('general', L('Жанжин', 'General'), gn.x * T + 8, gn.y * T - 16, 0.8, '#f7c646'); }
@@ -1278,7 +1278,7 @@
 
   function questModal() {
     const v = V(), body = h('div');
-    v.questsSeen = S.dkey(); S.save(); // Nomin stops reminding you about today's new quests
+    v.questsSeen = S.dkey(); S.save(); // Bolormaa stops reminding you about today's new quests
     const draw = () => rc(body, h('h2', null, L('Өнөөдрийн даалгавар', "Today's quests")),
       h('p', { class: 'muted' }, L('Даалгавар өдөр бүр шинэчлэгдэнэ.', 'Quests refresh every day.')),
       h('div', { class: 'v-list' }, quests().map((q) => {

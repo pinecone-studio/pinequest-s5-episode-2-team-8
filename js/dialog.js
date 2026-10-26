@@ -279,7 +279,7 @@
   // ---------------------------------------------------------------- the dialogue box
   // SPEAKERS: id → { name: {mn,en} | fn, voice, art: [w, h], portrait(expr, open, blink, t) → canvas, bob: bounce while talking }
   const SPEAKERS = {
-    guide: { name: { mn: 'Хөтөч Номин', en: 'Guide Nomin' }, voice: 'guide', art: [48, 48], portrait: (e, o, b) => guideFace(e, o, b) },
+    guide: { name: { mn: 'Хөтөч Болормаа', en: 'Guide Bolormaa' }, voice: 'guide', art: [48, 48], portrait: (e, o, b) => guideFace(e, o, b) },
   };
   const register = (id, spec) => { SPEAKERS[id] = Object.assign({ voice: id, art: [16, 28] }, SPEAKERS[id] || {}, spec); };
 

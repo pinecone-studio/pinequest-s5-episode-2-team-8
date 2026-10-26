@@ -80,7 +80,7 @@ try {
   const prof = await page.evaluate(() => { const p = TG.store.active(); return p && { name: p.name, age: p.age, avatar: p.avatar, code: p.code }; });
   if (!prof || prof.name !== 'Тест' || prof.age !== 8 || !prof.code) errors.push(`register: profile not saved correctly: ${JSON.stringify(prof)}`);
 
-  // the tutorial: Guide Nomin talks in the story box (portrait, typed text, voice), asks questions, and walks the player
+  // the tutorial: Guide Bolormaa talks in the story box (portrait, typed text, voice), asks questions, and walks the player
   // through walking, jumping, talking to Basar and using the well, then answers questions and gives a gift
   step = 'tutorial';
   for (let i = 0; i < 40 && !(await page.evaluate(() => TG.dialog.active())); i++) await sleep(100);
