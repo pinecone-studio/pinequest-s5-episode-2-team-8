@@ -22,7 +22,7 @@ class FakePool {
       query: async (sql, values = []) => {
         const statement = sql.replace(/\s+/g, ' ').trim();
         this.calls.push(statement);
-        if (/^CREATE (TABLE|INDEX)/.test(statement) || /^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
+        if (/^(CREATE (TABLE|INDEX)|ALTER TABLE)/.test(statement) || /^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
         if (/^INSERT INTO naadamy_rooms/.test(statement)) {
           if (this.failOnUpsert && /DO UPDATE/.test(statement)) throw new Error('injected database outage');
           if (/DO NOTHING/.test(statement) && this.state.has(values[0])) return { rows: [] };
@@ -51,10 +51,21 @@ class FakePool {
           return { rows: ticketHash ? [{ ticket_hash: ticketHash }] : [] };
         }
         if (/^INSERT INTO naadamy_wallets/.test(statement)) {
-          if (!this.wallets.has(values[0])) this.wallets.set(values[0], { coins: values[1], xp: values[2], revision: 0 });
+          if (!this.wallets.has(values[0])) this.wallets.set(values[0], {
+            coins: values[1], xp: values[2], revision: 0, inventory: JSON.parse(values[3]), inventoryMigrated: true,
+          });
           return { rows: [] };
         }
-        if (/^SELECT coins, xp, revision FROM naadamy_wallets/.test(statement)) {
+        if (/^UPDATE naadamy_wallets SET inventory =/.test(statement)) {
+          const wallet = this.wallets.get(values[0]);
+          if (wallet && !wallet.inventoryMigrated) {
+            wallet.inventory = JSON.parse(values[1]);
+            wallet.inventoryMigrated = true;
+            return { rows: [{ inventory: wallet.inventory }] };
+          }
+          return { rows: [] };
+        }
+        if (/^SELECT coins, xp, revision, inventory FROM naadamy_wallets/.test(statement)) {
           const wallet = this.wallets.get(values[0]);
           return { rows: wallet ? [{ ...wallet }] : [] };
         }
@@ -63,7 +74,10 @@ class FakePool {
           return { rows: result ? [{ result }] : [] };
         }
         if (/^UPDATE naadamy_wallets SET coins =/.test(statement)) {
-          this.wallets.set(values[0], { coins: values[1], xp: values[2], revision: values[3] });
+          this.wallets.set(values[0], {
+            coins: values[1], xp: values[2], revision: values[3],
+            inventory: JSON.parse(values[4]), inventoryMigrated: true,
+          });
           return { rows: [] };
         }
         if (/^INSERT INTO naadamy_wallet_ops/.test(statement)) {
@@ -110,16 +124,28 @@ try {
   assert.equal(await store.authenticatePlayer('__proto__', 'b'.repeat(64)), false, 'special object-property names remain protected');
   const pgWallet = await store.getWallet('identity-player', { coins: 500, xp: 250 });
   assert.deepEqual(pgWallet, { coins: 500, xp: 250, revision: 0 }, 'PostgreSQL creates the wallet from the one-time profile migration');
+  const pgAccount = await store.getAccount('inventory-player', { coins: 500, xp: 250 }, { owned: ['deel-blue', 'hat-cap', 'not-a-real-item'], rod: 2 });
+  assert.deepEqual(pgAccount.inventory, { owned: ['deel-blue', 'hat-cap'], rod: 2 }, 'PostgreSQL inventory migration accepts only known shop items');
+  pool.wallets.set('legacy-inventory', {
+    coins: 80, xp: 10, revision: 0, inventory: { owned: ['deel-blue'], rod: 1 }, inventoryMigrated: false,
+  });
+  const legacyInventory = await store.getAccount('legacy-inventory', {}, { owned: ['deel-blue', 'pet-lamb'], rod: 1 });
+  assert.deepEqual(legacyInventory.inventory, { owned: ['deel-blue', 'pet-lamb'], rod: 1 }, 'existing PostgreSQL wallets import inventory once');
+  assert.deepEqual((await store.getAccount('legacy-inventory', {}, { owned: ['deel-blue'], rod: 1 })).inventory, legacyInventory.inventory,
+    'PostgreSQL ignores later client inventory seeds after migration');
   const pgOperation = '1'.repeat(32);
-  const pgSpend = await store.mutateWallet('identity-player', pgOperation, (wallet) => ({
+  const pgSpend = await store.mutateWallet('identity-player', pgOperation, (wallet, inventory) => ({
     changed: true,
     wallet: { ...wallet, coins: wallet.coins - 125 },
+    inventory: { ...inventory, owned: [...inventory.owned, 'hat-cap'] },
     result: { accepted: true },
   }));
   assert.deepEqual(pgSpend.wallet, { coins: 375, xp: 250, revision: 1 }, 'PostgreSQL wallet mutations advance the revision');
+  assert.deepEqual(pgSpend.inventory, { owned: ['deel-blue', 'hat-cap'], rod: 1 }, 'PostgreSQL mutations persist a whitelisted inventory with the wallet');
   const pgReplay = await store.mutateWallet('identity-player', pgOperation, () => { throw new Error('duplicate operation was applied twice'); });
   assert.equal(pgReplay.duplicate, true, 'PostgreSQL wallet operations are idempotent');
   assert.deepEqual(pgReplay.wallet, pgSpend.wallet, 'a replay returns the current canonical wallet');
+  assert.deepEqual(pgReplay.inventory, pgSpend.inventory, 'a replay returns the current canonical inventory');
   const pgRejected = await store.mutateWallet('identity-player', '2'.repeat(32), () => ({ changed: false, result: { accepted: false, reason: 'insufficient' } }));
   assert.equal(pgRejected.wallet.coins, 375, 'rejected PostgreSQL spends leave the wallet unchanged');
   assert.equal((await store.mutateWallet('identity-player', '2'.repeat(32), () => { throw new Error('rejected operation was retried'); })).duplicate, true,
@@ -174,17 +200,22 @@ try {
   const restartedJsonStore = createRoomStore({ dataDir, databaseUrl: '' });
   assert.equal(await restartedJsonStore.authenticatePlayer('json-player', jsonTicket), true, 'JSON identity credentials survive a server restart');
   assert.equal(await restartedJsonStore.authenticatePlayer('json-player', 'd'.repeat(64)), false, 'JSON mode rejects a different ticket');
-  const jsonWallet = await jsonStore.getWallet('json-player', { coins: 80, xp: 10 });
+  const jsonAccount = await jsonStore.getAccount('json-player', { coins: 80, xp: 10 }, { owned: ['deel-blue', 'pet-lamb'], rod: 1 });
+  const jsonWallet = jsonAccount.wallet;
   assert.deepEqual(jsonWallet, { coins: 80, xp: 10, revision: 0 }, 'JSON mode seeds a profile wallet');
+  assert.deepEqual(jsonAccount.inventory, { owned: ['deel-blue', 'pet-lamb'], rod: 1 }, 'JSON mode imports only whitelisted shop ownership');
   const jsonOperation = '3'.repeat(32);
-  const jsonReward = await jsonStore.mutateWallet('json-player', jsonOperation, (wallet) => ({
+  const jsonReward = await jsonStore.mutateWallet('json-player', jsonOperation, (wallet, inventory) => ({
     changed: true,
     wallet: { ...wallet, coins: wallet.coins + 15, xp: wallet.xp + 20 },
+    inventory: { ...inventory, rod: 2 },
     result: { accepted: true },
   }));
   assert.deepEqual(jsonReward.wallet, { coins: 95, xp: 30, revision: 1 }, 'JSON mode persists wallet balances and revisions');
   assert.deepEqual(jsonReward.result, { accepted: true }, 'JSON mutations return the operation result separately from the wallet envelope');
+  assert.deepEqual(jsonReward.inventory, { owned: ['deel-blue', 'pet-lamb'], rod: 2 }, 'JSON mode atomically saves shop ownership with the wallet');
   assert.deepEqual(await restartedJsonStore.getWallet('json-player'), jsonReward.wallet, 'JSON wallet balances survive a server restart');
+  assert.deepEqual((await restartedJsonStore.getAccount('json-player')).inventory, jsonReward.inventory, 'JSON inventory survives a server restart');
   const jsonReplay = await restartedJsonStore.mutateWallet('json-player', jsonOperation, () => { throw new Error('duplicate operation was applied twice'); });
   assert.equal(jsonReplay.duplicate, true, 'JSON wallet operations are idempotent');
   await jsonStore.save({ NUTAG: { lots: [], chat: [] } });

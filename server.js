@@ -185,6 +185,22 @@ function walletSeed(value) {
   const integer = (amount, fallback, maximum) => Number.isSafeInteger(amount) ? Math.max(0, Math.min(maximum, amount)) : fallback;
   return { coins: integer(value && value.coins, 40, 100_000), xp: integer(value && value.xp, 0, 1_000_000) };
 }
+function inventorySeed(value) {
+  return {
+    owned: value && Array.isArray(value.owned) ? value.owned.slice(0, R.ITEMS.length) : [],
+    rod: value && Number.isInteger(value.rod) ? Math.max(1, Math.min(2, value.rod)) : 1,
+  };
+}
+function ownedLook(look, inventory) {
+  const clean = R.cleanLook(look);
+  for (const slot of ['deel', 'hat', 'face', 'neck', 'pet']) {
+    const value = clean[slot];
+    if (value === null || value === undefined) continue;
+    const item = R.ITEMS.find((candidate) => candidate.slot === slot && candidate.val === value);
+    if (!item || !inventory.owned.includes(item.id)) clean[slot] = slot === 'deel' ? 'blue' : null;
+  }
+  return clean;
+}
 /** How many people are on the whole server and in the main village, so players in different rooms can find each other. */
 function counts() {
   let total = 0, nutag = 0;
@@ -478,7 +494,7 @@ function updatePresence(p) {
 }
 
 async function joinPlayer(conn, message, code, id, now) {
-  const wallet = await roomStore.getWallet(id, walletSeed(message.wallet));
+  const account = await roomStore.getAccount(id, walletSeed(message.wallet), inventorySeed(message.inventory));
   await leave(conn);
   const r = room(code);
   const latestState = await roomStore.getRoomState(code);
@@ -494,7 +510,7 @@ async function joinPlayer(conn, message, code, id, now) {
     old.conn.send({ t: 'replaced' });
     setTimeout(() => old.conn.socket.destroy(), 50);
   }
-  const p = { id, conn, name: cleanName(message.name), look: R.cleanLook(message.look), lvl: num(message.lvl, 1, 99), x: numf(message.x, 0.5, R.W - 2), y: numf(message.y, 0.5, R.H - 2), dir: num(message.dir, 0, 3) };
+  const p = { id, conn, name: cleanName(message.name), look: ownedLook(message.look, account.inventory), lvl: num(message.lvl, 1, 99), x: numf(message.x, 0.5, R.W - 2), y: numf(message.y, 0.5, R.H - 2), dir: num(message.dir, 0, 3) };
   const previousInstance = await roomStore.registerPresence(INSTANCE_ID, code, pub(p));
   if (conn.socket.destroyed) {
     await roomStore.removePresence(INSTANCE_ID, p.id);
@@ -519,8 +535,9 @@ async function joinPlayer(conn, message, code, id, now) {
     ...[...r.players.values()].filter((player) => player !== p).map(pub),
     ...r.remotePlayers.values(),
   ];
-  conn.wallet = wallet;
-  conn.send({ t: 'welcome', v: R.VERSION, now, room: code, players, lots: r.lots, chat: r.chat, wallet });
+  conn.wallet = account.wallet;
+  conn.inventory = account.inventory;
+  conn.send({ t: 'welcome', v: R.VERSION, now, room: code, players, lots: r.lots, chat: r.chat, wallet: account.wallet, inventory: account.inventory });
   const replacing = Boolean(old || replacingRemote || previousInstance);
   broadcast(r, { t: 'join', p: pub(p), ...(replacing ? { replace: true } : {}) }, conn);
   census();
@@ -553,10 +570,46 @@ async function handleWalletOperation(conn, message) {
       };
     });
     conn.wallet = outcome.wallet;
+    conn.inventory = outcome.inventory;
     conn.send({ t: 'wallet-result', op: operation, ...outcome.result, wallet: outcome.wallet });
   } catch (error) {
     console.error('Could not update player wallet:', error.message);
     conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'storage', wallet: conn.wallet });
+  }
+}
+
+async function handleShopPurchase(conn, message) {
+  const p = conn.player;
+  if (!p) return;
+  const operation = String(message.op || '');
+  const itemId = message.item;
+  if (!/^[a-f0-9]{32}$/i.test(operation)) {
+    return conn.send({ t: 'inventory-result', op: operation.slice(0, 40), accepted: false, reason: 'invalid', wallet: conn.wallet, inventory: conn.inventory });
+  }
+  const item = typeof itemId === 'string' && itemId.length <= 32 ? R.ITEMS.find((entry) => entry.id === itemId) : null;
+  if (!item) return conn.send({ t: 'inventory-result', op: operation, accepted: false, reason: 'invalid', wallet: conn.wallet, inventory: conn.inventory });
+  try {
+    const outcome = await roomStore.mutateWallet(p.id, operation, (wallet, inventory) => {
+      const alreadyOwned = item.cat === 'tool' ? inventory.rod >= item.val : inventory.owned.includes(item.id);
+      if (alreadyOwned) return { changed: false, result: { accepted: false, reason: 'owned' } };
+      if (R.level(wallet.xp).l < item.lvl) return { changed: false, result: { accepted: false, reason: 'level' } };
+      if (wallet.coins < item.price) return { changed: false, result: { accepted: false, reason: 'insufficient' } };
+      const nextInventory = item.cat === 'tool'
+        ? { ...inventory, rod: item.val }
+        : { ...inventory, owned: [...inventory.owned, item.id] };
+      return {
+        changed: true,
+        wallet: { ...wallet, coins: wallet.coins - item.price },
+        inventory: nextInventory,
+        result: { accepted: true },
+      };
+    });
+    conn.wallet = outcome.wallet;
+    conn.inventory = outcome.inventory;
+    conn.send({ t: 'inventory-result', op: operation, ...outcome.result, wallet: outcome.wallet, inventory: outcome.inventory });
+  } catch (error) {
+    console.error('Could not purchase player shop item:', error.message);
+    conn.send({ t: 'inventory-result', op: operation, accepted: false, reason: 'storage', wallet: conn.wallet, inventory: conn.inventory });
   }
 }
 
@@ -652,7 +705,7 @@ function onMessage(conn, text) {
       break;
     }
     case 'look':
-      p.look = R.cleanLook(m.look); p.lvl = num(m.lvl, 1, 99);
+      p.look = ownedLook(m.look, conn.inventory); p.lvl = num(m.lvl, 1, 99);
       updatePresence(p);
       broadcast(r, { t: 'look', id: p.id, look: p.look, lvl: p.lvl }, conn);
       break;
@@ -666,6 +719,9 @@ function onMessage(conn, text) {
     }
     case 'wallet-op':
       handleWalletOperation(conn, m);
+      break;
+    case 'shop-buy':
+      handleShopPurchase(conn, m);
       break;
     // ---- own ger
     case 'ger-claim':

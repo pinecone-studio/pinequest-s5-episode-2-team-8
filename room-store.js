@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const R = require('./js/village/rules.js');
 
 const ROOM_CODE = /^[A-Z0-9]{3,8}$/;
 const PLAYER_ID = /^[\w-]{4,24}$/;
@@ -84,6 +85,24 @@ function initialWallet(wallet) {
   return { coins: integer(wallet && wallet.coins, 40), xp: integer(wallet && wallet.xp, 0), revision: 0 };
 }
 
+function cleanInventory(inventory) {
+  if (!inventory || typeof inventory !== 'object' || Array.isArray(inventory)
+    || !Array.isArray(inventory.owned) || !Number.isInteger(inventory.rod) || inventory.rod < 1 || inventory.rod > 2) {
+    throw new Error('Invalid stored player inventory');
+  }
+  const allowed = new Set(R.ITEMS.filter((item) => item.cat !== 'tool').map((item) => item.id));
+  const owned = [...new Set(inventory.owned.filter((id) => typeof id === 'string' && allowed.has(id)))];
+  if (!owned.includes('deel-blue')) owned.unshift('deel-blue');
+  return { owned: owned.slice(0, allowed.size), rod: inventory.rod };
+}
+
+function initialInventory(inventory) {
+  const seed = inventory && typeof inventory === 'object' && !Array.isArray(inventory) ? inventory : {};
+  const owned = Array.isArray(seed.owned) ? seed.owned.slice(0, R.ITEMS.length) : [];
+  const rod = Number.isInteger(seed.rod) ? Math.max(1, Math.min(2, seed.rod)) : 1;
+  return cleanInventory({ owned, rod });
+}
+
 function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolOverride } = {}) {
   const dataFile = path.join(dataDir, 'rooms.json');
   const identityFile = path.join(dataDir, 'identities.json');
@@ -112,39 +131,50 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         writeIdentityFile(identityFile, identities);
         return true;
       },
-      async getWallet(id, initial = {}) {
+      async getAccount(id, initial = {}, inventorySeed = {}) {
         if (!PLAYER_ID.test(id || '')) throw new Error('Invalid player id for wallet');
         const wallets = readLegacyFile(walletFile, 'player wallets');
-        if (Object.hasOwn(wallets, id)) return cleanWallet(wallets[id]);
-        const wallet = initialWallet(initial);
-        Object.defineProperty(wallets, id, { value: { ...wallet, operations: {} }, writable: true, configurable: true, enumerable: true });
+        const stored = Object.hasOwn(wallets, id) ? wallets[id] : null;
+        if (stored && (!stored.operations || typeof stored.operations !== 'object' || Array.isArray(stored.operations))) {
+          throw new Error('Invalid stored player wallet operations');
+        }
+        const wallet = stored ? cleanWallet(stored) : initialWallet(initial);
+        const migrated = stored && !stored.inventory;
+        const inventory = migrated ? initialInventory(inventorySeed) : stored ? cleanInventory(stored.inventory) : initialInventory(inventorySeed);
+        if (stored) stored.inventory = inventory;
+        else Object.defineProperty(wallets, id, { value: { ...wallet, inventory, operations: {} }, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(walletFile, wallets);
-        return wallet;
+        return { wallet, inventory };
+      },
+      async getWallet(id, initial = {}) {
+        return (await this.getAccount(id, initial)).wallet;
       },
       async mutateWallet(id, operation, mutate) {
         if (!PLAYER_ID.test(id || '') || !/^[a-f0-9]{32}$/i.test(operation || '')) throw new Error('Invalid player wallet operation');
         const wallets = readLegacyFile(walletFile, 'player wallets');
-        const stored = Object.hasOwn(wallets, id) ? wallets[id] : { ...initialWallet({}), operations: {} };
+        const stored = Object.hasOwn(wallets, id) ? wallets[id] : { ...initialWallet({}), inventory: initialInventory({}), operations: {} };
         if (!stored || typeof stored !== 'object' || Array.isArray(stored)
           || !stored.operations || typeof stored.operations !== 'object' || Array.isArray(stored.operations)) {
           throw new Error('Invalid stored player wallet operations');
         }
+        const inventory = stored.inventory ? cleanInventory(stored.inventory) : initialInventory({});
         if (Object.hasOwn(stored.operations, operation)) {
-          return { wallet: cleanWallet(stored), result: stored.operations[operation], duplicate: true };
+          return { wallet: cleanWallet(stored), inventory, result: stored.operations[operation], duplicate: true };
         }
-        const outcome = mutate(cleanWallet(stored));
+        const outcome = mutate(cleanWallet(stored), inventory);
         const current = cleanWallet(stored);
         const wallet = {
           ...cleanWallet(outcome && outcome.changed ? { ...outcome.wallet, revision: current.revision + 1 } : stored),
           operations: stored.operations,
         };
+        wallet.inventory = outcome && outcome.changed && outcome.inventory ? cleanInventory(outcome.inventory) : inventory;
         const result = outcome && outcome.result ? outcome.result : { accepted: false };
         wallet.operations[operation] = result;
         const oldOperations = Object.keys(wallet.operations);
         for (const old of oldOperations.slice(0, Math.max(0, oldOperations.length - 200))) delete wallet.operations[old];
         Object.defineProperty(wallets, id, { value: wallet, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(walletFile, wallets);
-        return { wallet: cleanWallet(wallet), result, duplicate: false };
+        return { wallet: cleanWallet(wallet), inventory: wallet.inventory, result, duplicate: false };
       },
       async mutateRoom(roomCode, initialState, mutate, instanceId) {
         const rooms = readLegacyFile(dataFile);
@@ -210,9 +240,13 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             coins bigint NOT NULL CHECK (coins >= 0),
             xp bigint NOT NULL CHECK (xp >= 0),
             revision bigint NOT NULL DEFAULT 0,
+            inventory jsonb NOT NULL DEFAULT '{"owned":["deel-blue"],"rod":1}'::jsonb,
+            inventory_migrated boolean NOT NULL DEFAULT false,
             updated_at timestamptz NOT NULL DEFAULT now()
           )
         `);
+        await client.query(`ALTER TABLE naadamy_wallets ADD COLUMN IF NOT EXISTS inventory jsonb NOT NULL DEFAULT '{"owned":["deel-blue"],"rod":1}'::jsonb`);
+        await client.query('ALTER TABLE naadamy_wallets ADD COLUMN IF NOT EXISTS inventory_migrated boolean NOT NULL DEFAULT false');
         await client.query(`
           CREATE TABLE IF NOT EXISTS naadamy_wallet_ops (
             player_id text NOT NULL,
@@ -285,41 +319,51 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         client.release();
       }
     },
-    async getWallet(id, initial = {}) {
+    async getAccount(id, initial = {}, inventorySeed = {}) {
       if (!PLAYER_ID.test(id || '')) throw new Error('Invalid player id for wallet');
       const wallet = initialWallet(initial);
+      const inventory = initialInventory(inventorySeed);
       const client = await pool.connect();
       try {
         await client.query(
-          'INSERT INTO naadamy_wallets (id, coins, xp) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
-          [id, wallet.coins, wallet.xp],
+          'INSERT INTO naadamy_wallets (id, coins, xp, inventory, inventory_migrated) VALUES ($1, $2, $3, $4::jsonb, true) ON CONFLICT (id) DO NOTHING',
+          [id, wallet.coins, wallet.xp, JSON.stringify(inventory)],
         );
-        const selected = await client.query('SELECT coins, xp, revision FROM naadamy_wallets WHERE id = $1', [id]);
+        const migration = await client.query(
+          'UPDATE naadamy_wallets SET inventory = $2::jsonb, inventory_migrated = true WHERE id = $1 AND inventory_migrated = false RETURNING inventory',
+          [id, JSON.stringify(inventory)],
+        );
+        const selected = await client.query('SELECT coins, xp, revision, inventory FROM naadamy_wallets WHERE id = $1', [id]);
         if (!selected.rows[0]) throw new Error('wallet record was not created');
-        return cleanWallet(selected.rows[0]);
+        const storedInventory = migration.rows[0] ? migration.rows[0].inventory : selected.rows[0].inventory;
+        return { wallet: cleanWallet(selected.rows[0]), inventory: cleanInventory(storedInventory) };
       } catch (error) {
         throw new Error(`Could not load player wallet: ${error.message}`, { cause: error });
       } finally {
         client.release();
       }
     },
+    async getWallet(id, initial = {}) {
+      return (await this.getAccount(id, initial)).wallet;
+    },
     async mutateWallet(id, operation, mutate) {
       if (!PLAYER_ID.test(id || '') || !/^[a-f0-9]{32}$/i.test(operation || '')) throw new Error('Invalid player wallet operation');
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const selected = await client.query('SELECT coins, xp, revision FROM naadamy_wallets WHERE id = $1 FOR UPDATE', [id]);
+        const selected = await client.query('SELECT coins, xp, revision, inventory FROM naadamy_wallets WHERE id = $1 FOR UPDATE', [id]);
         if (!selected.rows[0]) throw new Error('wallet record does not exist');
         const previous = cleanWallet(selected.rows[0]);
+        const inventory = cleanInventory(selected.rows[0].inventory);
         const priorOperation = await client.query(
           'SELECT result FROM naadamy_wallet_ops WHERE player_id = $1 AND operation_id = $2',
           [id, operation],
         );
         if (priorOperation.rows[0]) {
           await client.query('COMMIT');
-          return { wallet: previous, result: priorOperation.rows[0].result, duplicate: true };
+          return { wallet: previous, inventory, result: priorOperation.rows[0].result, duplicate: true };
         }
-        const outcome = mutate(previous);
+        const outcome = mutate(previous, inventory);
         if (!outcome || !outcome.changed) {
           const result = outcome || { accepted: false };
           await client.query(
@@ -327,19 +371,20 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             [id, operation, JSON.stringify(result)],
           );
           await client.query('COMMIT');
-          return { wallet: previous, result, duplicate: false };
+          return { wallet: previous, inventory, result, duplicate: false };
         }
         const wallet = cleanWallet({ ...outcome.wallet, revision: previous.revision + 1 });
+        const nextInventory = outcome.inventory ? cleanInventory(outcome.inventory) : inventory;
         await client.query(
-          'UPDATE naadamy_wallets SET coins = $2, xp = $3, revision = $4, updated_at = now() WHERE id = $1',
-          [id, wallet.coins, wallet.xp, wallet.revision],
+          'UPDATE naadamy_wallets SET coins = $2, xp = $3, revision = $4, inventory = $5::jsonb, updated_at = now() WHERE id = $1',
+          [id, wallet.coins, wallet.xp, wallet.revision, JSON.stringify(nextInventory)],
         );
         await client.query(
           'INSERT INTO naadamy_wallet_ops (player_id, operation_id, result) VALUES ($1, $2, $3::jsonb)',
           [id, operation, JSON.stringify(outcome.result)],
         );
         await client.query('COMMIT');
-        return { wallet, result: outcome.result, duplicate: false };
+        return { wallet, inventory: nextInventory, result: outcome.result, duplicate: false };
       } catch (error) {
         try {
           await client.query('ROLLBACK');

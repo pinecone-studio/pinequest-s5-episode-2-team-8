@@ -36,7 +36,8 @@ async function player(name, look, room, ctxIn) {
     localStorage.clear();
     const p = TG.store.addProfile({ name, age: 9, avatar: '🐎' }); TG.store.state.loggedIn = true;
     TG.store.state.settings.sound = false;
-    p.village = { tips: true, tutorial: true, look, xp: 200, coins: 600, room: room || 'NUTAG' };
+    const owned = ['deel-blue', 'deel-red', 'deel-green', 'hat-mongol', 'hat-flower', 'pet-lamb', 'neck-khadag'];
+    p.village = { tips: true, tutorial: true, look, owned, xp: 200, coins: 600, room: room || 'NUTAG' };
     TG.go('village');
   }, name, look, room);
   await until(() => page.evaluate(() => TG._village.live() && TG._village.live().online), `${name} online`);
@@ -66,11 +67,29 @@ try {
   await until(() => a.evaluate(() => TG._village.live().walletRevision === 3), 'server confirms spending and first-taste reward');
   const spentWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
   if (spentWallet.coins !== 612 - food.price || spentWallet.xp !== 212) throw new Error('the server did not persist the wallet spend and XP');
+  await a.$eval('.v-pill', (button) => button.click());
+  await a.waitForSelector('.v-shop');
+  await a.$eval('[data-buy="hat-cap"]', (button) => button.click());
+  await until(() => a.evaluate(() => TG.store.active().village.owned.includes('hat-cap') && TG._village.live().walletRevision === 4), 'server confirms shop purchase');
+  const purchased = await a.evaluate(() => ({
+    coins: TG.store.active().village.coins,
+    ownsItem: TG.store.active().village.owned.includes('hat-cap'),
+    wearingItem: TG.store.active().village.look.hat === 'cap',
+  }));
+  if (purchased.coins !== spentWallet.coins - 40 || !purchased.ownsItem || !purchased.wearingItem) {
+    throw new Error(`the server did not atomically confirm shop ownership and payment: ${JSON.stringify(purchased)}`);
+  }
+  await a.evaluate(() => {
+    TG.store.active().village.owned = ['deel-blue'];
+    TG._village.reconnect();
+  });
+  await until(() => a.evaluate(() => TG._village.live().online && TG.store.active().village.owned.includes('hat-cap')), 'shop ownership restores from server');
+  ok('online shop purchases atomically persist canonical ownership and wallet balance');
   await a.evaluate(() => TG._village.reconnect());
   await until(() => a.evaluate(() => TG._village.live().online), 'player reconnects');
   const restoredWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
-  if (restoredWallet.coins !== spentWallet.coins || restoredWallet.xp !== spentWallet.xp) throw new Error('wallet balances did not survive reconnect');
-  ok('authenticated wallets persist rewards, confirmed purchases and reconnects');
+  if (restoredWallet.coins !== purchased.coins || restoredWallet.xp !== spentWallet.xp) throw new Error('wallet balances did not survive reconnect');
+  ok('authenticated wallet and inventory survive reconnect');
   const walletProbe = await browser.newPage();
   await walletProbe.goto(`${base}/api/hello`);
   const probeId = 'wallet-test-' + crypto.randomBytes(4).toString('hex');
@@ -102,6 +121,27 @@ try {
   if (!repeatedReward.accepted || repeatedReward.wallet.coins !== 50 || repeatedReward.wallet.xp !== 5 || repeatedReward.wallet.revision !== 1) {
     throw new Error('a repeated reward operation changed the wallet twice');
   }
+  const sendShopPurchase = async (op, item) => {
+    const previous = await walletProbe.evaluate((id) => window.walletEvents.filter((message) => message.t === 'inventory-result' && message.op === id).length, op);
+    await walletProbe.evaluate((purchase) => window.walletSocket.send(JSON.stringify({ t: 'shop-buy', ...purchase })), { op, item });
+    await until(() => walletProbe.evaluate(({ op, previous }) => window.walletEvents.filter((message) => message.t === 'inventory-result' && message.op === op).length > previous, { op, previous }), `shop purchase ${op}`);
+    return walletProbe.evaluate((id) => {
+      const events = window.walletEvents.filter((message) => message.t === 'inventory-result' && message.op === id);
+      return events[events.length - 1];
+    }, op);
+  };
+  const boughtCap = await sendShopPurchase('d'.repeat(32), 'hat-cap');
+  if (!boughtCap.accepted || boughtCap.wallet.coins !== 10 || !boughtCap.inventory.owned.includes('hat-cap')) {
+    throw new Error('the server did not validate and persist a shop purchase');
+  }
+  const repeatedCap = await sendShopPurchase('e'.repeat(32), 'hat-cap');
+  if (repeatedCap.accepted || repeatedCap.reason !== 'owned' || repeatedCap.wallet.coins !== 10) {
+    throw new Error('the server allowed a second purchase of an already-owned item');
+  }
+  const lockedCrown = await sendShopPurchase('f'.repeat(32), 'hat-crown');
+  if (lockedCrown.accepted || lockedCrown.reason !== 'level' || lockedCrown.wallet.coins !== 10) {
+    throw new Error('the server allowed a purchase above the player level');
+  }
   await walletProbe.close();
   ok('wallet overspending is denied and transaction replays do not duplicate changes');
   if (!(await a.evaluate(() => {
@@ -130,7 +170,7 @@ try {
   ok('an invalid ticket cannot take over a profile identity');
 
   await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Сарнай')), 'A sees B');
-  await until(() => b.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Бат' && o.look.hat === 'mongol')), 'B sees A with hat');
+  await until(() => b.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Бат' && o.look.hat === 'cap')), 'B sees A with purchased hat');
   ok('players see each other (names and outfits)');
 
   await a.evaluate(() => TG._village.mount('black'));
@@ -170,7 +210,7 @@ try {
   for (const s of ['shal', 'khana', 'khaalga']) { await a.evaluate((x) => TG.tasks.pick(x), s); await sleep(250); await a.evaluate(() => TG.tasks.finish()); await sleep(350); }
   await until(() => b.evaluate(() => { const l = TG._village.lots()[2]; return l && l.n === 'Бат' && TG.vrules.lotStage(l) === 3; }), 'B sees A\'s ger at stage 3');
   await a.evaluate(() => TG.tasks.cancel());
-  if ((await a.evaluate(() => TG.store.active().village.coins)) !== 600) throw new Error('building a ger should not cost coins');
+  if ((await a.evaluate(() => TG.store.active().village.coins)) !== purchased.coins) throw new Error('building a ger should not cost coins');
   // B started a ger on plot 2 while offline: plot 2 is A's now, so B's half-built ger moves to a free plot
   await b.evaluate(() => { const v = TG.store.active().village; v.ger.stage = 1; v.ger.lot = 2; });
   await b.evaluate(() => TG._village.reconnect());

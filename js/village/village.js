@@ -252,7 +252,7 @@
       const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + location.pathname.replace(/[^/]*$/, '') + 'ws';
       let ws; try { ws = new WebSocket(url); } catch (e) { return setStatus('solo'); }
       this.ws = ws;
-      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, ticket, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir, wallet: { coins: v.coins, xp: v.xp } })); };
+      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, ticket, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir, wallet: { coins: v.coins, xp: v.xp }, inventory: { owned: v.owned, rod: v.rod } })); };
       ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } if (live) handle(m); };
       ws.onclose = () => {
         if (this.ws !== ws) return;
@@ -265,6 +265,7 @@
       };
     },
     pendingWallet: new Map(),
+    pendingPurchase: new Map(),
     walletOperation(action, coins, xp) {
       if (!this.ws || this.ws.readyState !== 1 || !live || !live.online) return Promise.resolve(null);
       const op = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -276,6 +277,20 @@
         } catch (error) {
           clearTimeout(timer); this.pendingWallet.delete(op); resolve(null);
           console.error('Could not send player wallet update:', error.message);
+        }
+      });
+    },
+    purchaseItem(item) {
+      if (!this.ws || this.ws.readyState !== 1 || !live || !live.online) return Promise.resolve(null);
+      const op = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => { this.pendingPurchase.delete(op); resolve(null); }, 8000);
+        this.pendingPurchase.set(op, { resolve, timer });
+        try {
+          this.ws.send(JSON.stringify({ t: 'shop-buy', op, item }));
+        } catch (error) {
+          clearTimeout(timer); this.pendingPurchase.delete(op); resolve(null);
+          console.error('Could not send shop purchase:', error.message);
         }
       });
     },
@@ -291,12 +306,23 @@
     v.coins = wallet.coins; v.xp = wallet.xp; live.walletRevision = wallet.revision;
     S.save(); hud();
   }
+  function applyInventory(inventory) {
+    if (!inventory || !Array.isArray(inventory.owned) || !Number.isInteger(inventory.rod) || inventory.rod < 1 || inventory.rod > 2) return;
+    const allowed = new Set(R.ITEMS.filter((item) => item.cat !== 'tool').map((item) => item.id));
+    const owned = [...new Set(inventory.owned.filter((id) => typeof id === 'string' && allowed.has(id)))];
+    if (!owned.includes('deel-blue')) owned.unshift('deel-blue');
+    const v = V(); if (!v) return;
+    v.owned = owned;
+    v.rod = inventory.rod;
+    S.save(); hud();
+  }
   function handle(m) {
     const v = V();
     switch (m.t) {
       case 'welcome':
         live.online = true; live.offset = m.now - Date.now(); live.lots = m.lots || new Array(R.LOTS).fill(null); live.room = m.room; live.serverV = m.v;
         applyWallet(m.wallet);
+        applyInventory(m.inventory);
         live.others.clear(); (m.players || []).forEach(addOther);
         live.chat = (m.chat || []).slice(-CHAT_KEEP); renderChat();
         setStatus('online');
@@ -311,6 +337,13 @@
         applyWallet(m.wallet);
         const pending = net.pendingWallet.get(m.op);
         if (pending) { clearTimeout(pending.timer); net.pendingWallet.delete(m.op); pending.resolve(m); }
+        break;
+      }
+      case 'inventory-result': {
+        applyWallet(m.wallet);
+        applyInventory(m.inventory);
+        const pending = net.pendingPurchase.get(m.op);
+        if (pending) { clearTimeout(pending.timer); net.pendingPurchase.delete(m.op); pending.resolve(m); }
         break;
       }
       case 'wr-invite': case 'wr-declined': case 'wr-start': case 'wr-wait': case 'wr-result': case 'wr-end': onWrestleMsg(m); break;
@@ -1295,10 +1328,26 @@
         return h('div', { class: 'v-row' + (locked && !owned ? ' locked' : '') }, icon(itemKey(it)), h('div', { class: 'v-row-b' }, h('b', null, tx(it.name)), h('small', null, owned ? (worn ? L('Өмссөн', 'Wearing') : L('Танд байгаа', 'Owned')) : `${it.price} ${L('зоос', 'coins')}`)),
           owned ? (it.cat === 'tool' ? h('span', { class: 'v-owned' }, '✓') : h('button', { class: 'btn sm' + (worn ? ' done' : ''), onclick: () => equip(it.slot, worn && it.slot !== 'deel' ? null : it.val, draw) }, worn ? (it.slot === 'deel' ? '✓' : L('Тайлах', 'Remove')) : L('Өмсөх', 'Wear')))
             : locked ? h('span', { class: 'v-lock' }, '🔒 ', L('Түвшин', 'Lv'), ' ', it.lvl)
-              : h('button', { class: 'btn sm primary', onclick: async () => {
+              : h('button', { class: 'btn sm primary', 'data-buy': it.id, onclick: async () => {
+                if (live && live.online) {
+                  const result = await net.purchaseItem(it.id);
+                  if (!result) {
+                    TG.toast(L('Худалдан авалтыг сервер баталгаажуулж чадсангүй.', 'The server could not confirm this purchase.'));
+                    return;
+                  }
+                  if (!result.accepted) {
+                    const reason = result.reason === 'owned' ? L('Танд энэ зүйл байгаа.', 'You already own this item.')
+                      : result.reason === 'level' ? L('Түвшин хүрэхгүй байна.', 'Your level is too low.')
+                        : result.reason === 'insufficient' ? L('Зоос хүрэлцэхгүй байна.', 'Not enough coins.')
+                          : L('Худалдан авалт амжилтгүй боллоо.', 'The purchase was rejected.');
+                    TG.sfx.bad(); TG.toast(reason); return;
+                  }
+                } else {
                   if (!(await pay(it.price))) return;
-                if (it.cat === 'tool') v.rod = it.val;
-                else { v.owned.push(it.id); v.look[it.slot] = it.val; sendLook(); }
+                  if (it.cat === 'tool') v.rod = it.val;
+                  else v.owned.push(it.id);
+                }
+                if (it.cat !== 'tool') { v.look[it.slot] = it.val; sendLook(); }
                 TG.toast(`${tx(it.name)}: ${L('худалдаж авлаа!', 'purchased!')}`); save();
               } }, `${it.price}`, pic('ui:coin', 14)));
       });
