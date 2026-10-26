@@ -26,7 +26,7 @@ public sealed partial class Game
             if (g.Btn(rested ? Loc.L("Өнөөдөр амарсан", "Rested today") : Loc.L("Амрах", "Rest"), true, 40, !rested)) g.Later(() => { V.rest = today; V.energy = Rules.ENERGY_MAX; V.Save(); g.Reward(5, 10); Sfx.Chime(); g.Toast(Loc.L("Гэртээ амарлаа: +10 XP, хүч дүүрлээ.", "You rested at home: +10 XP, energy full.")); });
             GUILayout.EndHorizontal();
             GUILayout.Label(Loc.L("Тавилга", "Furniture"), g.sSmall);
-            scroll = GUILayout.BeginScrollView(scroll, GUILayout.Height(Screen.height * 0.3f));
+            scroll = g.BeginScroll(scroll, Screen.height * 0.3f);
             foreach (var f in Rules.FURNITURE)
             {
                 bool owned = l.furn.Contains(f.id), locked = g.Lvl < f.lvl;
@@ -36,7 +36,7 @@ public sealed partial class Game
                 else if (g.SmallBtn(f.price.ToString())) { var ff = f; g.Later(() => { if (!g.Pay(ff.price)) return; l.furn.Add(ff.id); V.Save(); }); }
                 g.EndRow();
             }
-            GUILayout.EndScrollView();
+            g.EndScroll();
             GUILayout.Label(Loc.L("Өнгө солих (үнэгүй)", "Change colours (free)"), g.sSmall);
             Swatches(g, Px.ROOF, l.roof, k => { l.roof = k; V.Save(); g.net.StyleGer(l.roof, l.door, l.furn); });
             Swatches(g, Px.DOOR, l.door, k => { l.door = k; V.Save(); g.net.StyleGer(l.roof, l.door, l.furn); });

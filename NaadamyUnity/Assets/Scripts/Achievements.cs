@@ -101,7 +101,7 @@ public sealed partial class Game
         float slide = Mathf.Clamp01(age / 0.3f) * Mathf.Clamp01((3.6f - age) / 0.3f);
         var r = new Rect(Screen.width / 2f - U(150), U(8) - (1 - slide) * U(90), U(300), U(70)); GUI.Box(r, "", sToast);
         GUI.DrawTexture(new Rect(r.x + U(8), r.y + U(5), U(60), U(60)), Tex(Emo.Badge(achShow.emblem, achShow.cat)));
-        GUI.Label(new Rect(r.x + U(76), r.y + U(8), r.width - U(84), U(20)), Loc.L("Шинэ амжилт!", "New achievement!"), new GUIStyle(sChipText) { fontSize = Mathf.RoundToInt(U(11)) });
+        GUI.Label(new Rect(r.x + U(76), r.y + U(8), r.width - U(84), U(20)), Loc.L("Шинэ амжилт!", "New achievement!"), new GUIStyle(sChipText) { fontSize = PxSize(U(11f) * 1.3f) });
         GUI.Label(new Rect(r.x + U(76), r.y + U(28), r.width - U(84), U(34)), "<b>" + achShow.name + "</b>", new GUIStyle(sChipText) { wordWrap = true });
     }
     static PxCanvas Grey(PxCanvas c)
@@ -119,7 +119,7 @@ public sealed partial class Game
         foreach (var (cat, name) in Achievements.CATS)
         {
             var list = Achievements.LIST.Where(a => a.cat == cat).ToList();
-            GUILayout.Label($"<b>{name}</b>  <size={Mathf.RoundToInt(U(11))}>{list.Count(a => v.ach.Exists(x => x.k == a.id))}/{list.Count}</size>", sTitle);
+            GUILayout.Label($"<b>{name}</b>  <size={PxSize(U(11f) * 1.3f)}>{list.Count(a => v.ach.Exists(x => x.k == a.id))}/{list.Count}</size>", sTitle);
             int cols = Mathf.Max(2, Mathf.FloorToInt(Mathf.Min(Screen.safeArea.width, U(720)) / U(170)));
             for (int i = 0; i < list.Count; i += cols)
             {

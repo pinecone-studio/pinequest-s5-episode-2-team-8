@@ -34,17 +34,17 @@ public sealed partial class Game
         {
             var s = Seasons.Current(); var r = Seasons.Real(); var next = Seasons.All[(Seasons.All.IndexOf(s) + 1) % 4];
             g.Small(Loc.L("Нутгийн улирал", "Season in Nutag"));
-            g.Title($"{s.name}  <size={Mathf.RoundToInt(g.U(12))}>{s.months} · {s.camp}</size>");
-            scroll = GUILayout.BeginScrollView(scroll, GUILayout.Height(Screen.height * 0.55f));
+            g.Title($"{s.name}  <size={Game.PxSize(g.U(12f) * 1.3f)}>{s.months} · {s.camp}</size>");
+            scroll = g.BeginScroll(scroll, Screen.height * 0.55f);
             g.Text(s.intro.ToString());
-            GUILayout.BeginHorizontal(); foreach (var x in Seasons.All) GUILayout.Label((x == s ? "<b>" : "") + x.name + (x == s ? "</b>" : "") + $"\n<size={Mathf.RoundToInt(g.U(9))}>{x.camp}</size>", x == s ? g.sPrimary : g.sBtn); GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal(); foreach (var x in Seasons.All) GUILayout.Label((x == s ? "<b>" : "") + x.name + (x == s ? "</b>" : "") + $"\n<size={Game.PxSize(g.U(9f) * 1.3f)}>{x.camp}</size>", x == s ? g.sPrimary : g.sBtn); GUILayout.EndHorizontal();
             void List(string head, List<Tx> items) { GUILayout.Label("<b>" + head + "</b>", g.sLabel); foreach (var i in items) GUILayout.Label("• " + i, g.sLabel); }
             List(Loc.L("Энэ улиралд малчид юу хийдэг вэ?", "What do herders do this season?"), s.todo);
             List(Loc.L("Сонирхолтой баримт", "Fun facts"), s.facts);
             List(Loc.L("Түүх, уламжлал", "History & tradition"), s.history);
             g.Fact(s.game.ToString(), true, Loc.L("Улирлын даалгавар", "Season task"));
             g.Small(Loc.L($"Нутагт улирал өдөр бүр солигдоно. Маргааш: {next.name}. Жинхэнэ Монголд яг одоо {r.name} байна.", $"Seasons in Nutag change every day. Tomorrow: {next.name}. In real Mongolia it is {r.name} right now."));
-            GUILayout.EndScrollView();
+            g.EndScroll();
             if (g.Btn(Loc.L("Хаах", "Close"), true, 34)) g.Later(g.Close);
         }
         public override void Press(Game g) => g.Close();

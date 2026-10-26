@@ -281,7 +281,7 @@ public sealed partial class Game
         {
             var n = g.net; code ??= n.room;
             g.Title(Loc.L("Хамт тоглох өрөө", "Play-together room"));
-            if (string.IsNullOrEmpty(g.V.server)) { g.Text(Loc.L("Компьютер дээр “node server.js” ажиллуулаад, Тохиргоонд түүний хаягийг бичвэл нэг Wi-Fi-д байгаа найзуудтайгаа хамт тоглоно.", "Run “node server.js” on a computer and write its address in Settings to play with friends on the same Wi-Fi.")); if (g.Btn(Loc.L("Тохиргоо", "Settings"), true, 40)) g.Later(() => g.Swap(new SettingsModal())); }
+            if (string.IsNullOrEmpty(g.V.server)) { g.Text(Loc.L("Найзуудтайгаа хамт тоглохын тулд том хүнээс ☰ → Тохиргоо хэсэгт серверийн хаягийг бичүүлээрэй.", "To play with friends, ask a grown-up to add the server address in ☰ → Settings.")); if (g.Btn(Loc.L("Тохиргоо", "Settings"), true, 40)) g.Later(() => g.Swap(new SettingsModal())); }
             if (!string.IsNullOrEmpty(g.V.server))
             {
                 g.Small(n.Online ? Loc.L($"“{n.room}” өрөөнд {n.others.Count + 1} хүн байна. Ижил кодтой хүмүүс нэг нутагт хамт тоглоно.", $"{n.others.Count + 1} people in room “{n.room}”. Everyone with the same code plays in one village.")

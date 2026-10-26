@@ -157,7 +157,7 @@ public sealed partial class Game
             foreach (var f in Rules.FOODS.Where(x => x.kind == cur))
             {
                 bool mine = Rules.DAIRY.ContainsKey(f.id) && V.Have(f.id) > 0, free = home || mine || f.price == 0;
-                g.Row(Rules.DAIRY.ContainsKey(f.id) ? Px.Icon("dairy:" + f.id) : null, $"{f.name}  <size={Mathf.RoundToInt(g.U(11))}>+{f.energy}</size>", f.fact.ToString());
+                g.Row(Rules.DAIRY.ContainsKey(f.id) ? Px.Icon("dairy:" + f.id) : null, $"{f.name}  <size={Game.PxSize(g.U(11f) * 1.3f)}>+{f.energy}</size>", f.fact.ToString());
                 if (g.SmallBtn(free ? Loc.L("Идэх", "Eat") : f.price.ToString())) { var ff = f; g.Later(() => g.Eat(ff.id, home)); }
                 g.EndRow();
             }

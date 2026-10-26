@@ -55,21 +55,26 @@ public sealed partial class Game
         TargetDraw();
         GoalDraw(vw);
         var d = dialog; if (d == null) return;
-        float w = Mathf.Min(vw - 16, 640), lines = Mathf.Ceil(d.text.Length / (w / 9.5f)), h = 66 + lines * 19 + (d.choices != null ? d.choices.Length * 44 + 6 : 0);
+        // the story box, as on the web version: black with a white pixel border, her portrait on the left, white pixel text typing out
+        float w = Mathf.Min(vw - 16, 680), pad = 12, pic = 72, tx = pad * 2 + pic, tw = w - tx - pad;
+        var st = new GUIStyle(sLabel) { wordWrap = true, fontSize = PxSize(U(16)), normal = { textColor = Color.white } };
+        float th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
+        float h = Mathf.Max(pic + pad * 2, pad + 24 + th + (n > 0 ? 8 + n * 46 : 18) + pad);
         float x = vw / 2 - w / 2, y = d.top ? 60 : vh - h - 70;
         var r = UR(x, y, w, h); Ui(r);
-        GUI.Box(r, GUIContent.none, sPanel);
-        if (GUI.Button(r, GUIContent.none, GUIStyle.none)) Later(DialogNext);
+        Box(r, Color.white); Box(UR(x + 3, y + 3, w - 6, h - 6), Px.Col("#08060e"));
+        if (n == 0 && GUI.Button(r, GUIContent.none, GUIStyle.none)) Later(DialogNext); // tapping the box goes on; with answers, only the answers do
         // the portrait: her mouth moves while the words type out, and she blinks now and then
-        PxCanvas pic = d.who == "basar" ? Px.BankharFace(d.Typing && (int)(Time.time * 8) % 2 == 0 ? 1 : 0) : NominFace(d.face, d.Typing && (int)(Time.time * 9) % 2 == 0, Time.time % 3.7f < 0.12f);
-        GUI.DrawTexture(UR(x + 10, y + 10, 64, 64), Tex(pic));
-        GUI.Label(UR(x + 84, y + 6, w - 94, 22), "<b>" + d.name + "</b>", new GUIStyle(sLabel) { normal = { textColor = Px.Col(d.who == "basar" ? "#8a5a2b" : "#c2427e") } });
+        PxCanvas face = d.who == "basar" ? Px.BankharFace(d.Typing && (int)(Time.time * 8) % 2 == 0 ? 1 : 0) : NominFace(d.face, d.Typing && (int)(Time.time * 9) % 2 == 0, Time.time % 3.7f < 0.12f);
+        Box(UR(x + pad - 2, y + pad - 2, pic + 4, pic + 4), Color.white); Box(UR(x + pad, y + pad, pic, pic), Px.Col("#2b2140"));
+        GUI.DrawTexture(UR(x + pad, y + pad, pic, pic), Tex(face));
+        GUI.Label(UR(x + tx, y + pad - 2, tw, 24), d.name.ToUpper(), new GUIStyle(sLabel) { wordWrap = false, fontSize = PxSize(U(16)), normal = { textColor = Px.Col(d.who == "basar" ? "#e9a91f" : "#f7c646") } });
         string vis = d.text.Substring(0, Mathf.Min(d.text.Length, (int)d.shown));
-        GUI.Label(UR(x + 84, y + 28, w - 94, lines * 19 + 12), vis + "<color=#00000000>" + d.text.Substring(vis.Length) + "</color>", new GUIStyle(sLabel) { wordWrap = true });
-        if (!d.Typing && d.choices == null) GUI.Label(UR(x + w - 30, y + h - 26, 20, 20), (int)(Time.time * 2) % 2 == 0 ? "▼" : "", sLabel);
-        if (d.choices != null && !d.Typing)
-            for (int i = 0; i < d.choices.Length; i++)
-                if (Button(UR(x + 84, y + 34 + lines * 19 + 6 + i * 44, w - 98, 40), d.choices[i], i == 0 ? sPrimary : sBtn)) { int k = i; Later(() => { d.picked = k; d.done = true; if (dialog == d) dialog = null; Sfx.Tap(); }); }
+        GUI.Label(UR(x + tx, y + pad + 24, tw, th + 4), vis + "<color=#00000000>" + d.text.Substring(vis.Length) + "</color>", st);
+        if (!d.Typing && n == 0) GUI.Label(UR(x + w - 30, y + h - 28, 20, 20), (int)(Time.time * 2) % 2 == 0 ? "▼" : "", st);
+        if (n > 0 && !d.Typing)
+            for (int i = 0; i < n; i++)
+                if (Button(UR(x + tx, y + pad + 24 + th + 8 + i * 46, tw, 40), d.choices[i], sOpt)) { int k = i; Later(() => { d.picked = k; d.done = true; if (dialog == d) dialog = null; Sfx.Tap(); }); }
     }
     /** A pulsing yellow frame round the button Nomin is talking about. */
     void GlowAt(string key, Rect r)
@@ -149,7 +154,7 @@ public sealed partial class Game
 
     IEnumerator Lesson(int r, bool replay)
     {
-        string name = V.name; bool touch = Input.touchSupported;
+        string name = V.name; bool touch = Game.TouchUI;
         if (replay)
         {
             yield return Ask("happy", $"Дахиад уулзлаа, {name}! Юу сонсмоор байна?", $"Hi again, {name}! What would you like to hear about?",

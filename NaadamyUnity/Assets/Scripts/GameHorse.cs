@@ -40,7 +40,7 @@ public sealed partial class Game
                 var c = Rules.CLASSES[i]; bool open = i <= hs.cls;
                 if (i == 3) { GUILayout.EndHorizontal(); GUILayout.BeginHorizontal(); }
                 bool was = GUI.enabled; GUI.enabled = open;
-                if (GUILayout.Button($"<b>{c.name}</b>\n<size={Mathf.RoundToInt(g.U(10))}>{c.age} · {c.laps} {Loc.L("тойрог", c.laps > 1 ? "laps" : "lap")}</size>", cls == i ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(44)))) { int k = i; g.Later(() => cls = k); }
+                if (GUILayout.Button($"<b>{c.name}</b>\n<size={Game.PxSize(g.U(10f) * 1.3f)}>{c.age} · {c.laps} {Loc.L("тойрог", c.laps > 1 ? "laps" : "lap")}</size>", cls == i ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(44)))) { int k = i; g.Later(() => cls = k); }
                 GUI.enabled = was;
             }
             GUILayout.EndHorizontal();
@@ -234,11 +234,11 @@ public sealed partial class Game
             float tt = (r.phase == "done" ? r.finishT : Time.time) - r.go;
             var st = new GUIStyle(sChipText) { alignment = TextAnchor.MiddleCenter };
             GUI.Label(UR(vw / 2 - 140, 60, 90, 24), $"{Mathf.Min(r.lap, r.C.laps)}/{r.C.laps}", st);
-            GUI.Label(UR(vw / 2 - 45, 60, 90, 24), $"<size={Mathf.RoundToInt(U(18))}>{RacePlace()}/{r.npcs.Count + 1}</size>", st);
+            GUI.Label(UR(vw / 2 - 45, 60, 90, 24), $"<size={PxSize(U(18f) * 1.3f)}>{RacePlace()}/{r.npcs.Count + 1}</size>", st);
             GUI.Label(UR(vw / 2 + 50, 60, 90, 24), tt.ToString("0.0"), st);
             Bar(UR(vw / 2 - 130, 88, 260, 10), r.stam, r.stam < 0.2f ? Px.Col("#e14b3d") : Px.Col("#f7c646"));
         }
-        GUI.Label(UR(vw / 2 - 145, r.phase == "count" ? 110 : 100, 290, 36), r.say, new GUIStyle(sChipText) { alignment = TextAnchor.UpperCenter, wordWrap = true, fontSize = Mathf.RoundToInt(U(11)) });
+        GUI.Label(UR(vw / 2 - 145, r.phase == "count" ? 110 : 100, 290, 36), r.say, new GUIStyle(sChipText) { alignment = TextAnchor.UpperCenter, wordWrap = true, fontSize = PxSize(U(11f) * 1.3f) });
         sprintRect = Rect.zero;
         if (r.phase == "go")
         {

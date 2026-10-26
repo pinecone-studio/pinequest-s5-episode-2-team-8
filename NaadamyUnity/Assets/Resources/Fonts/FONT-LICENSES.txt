@@ -1,13 +1,13 @@
-NaadamyNunito.ttf is Nunito SemiBold (weight 600) with the Latin, Cyrillic and Cyrillic-ext parts joined (all Mongolian letters, Ө Ү included),
-plus a few symbols (→ √ ● ► ■ ₮ …) from Noto Sans, Noto Sans Math and Noto Sans Symbols 2. Only the web build uses it: a browser
-has no system fonts for Unity to fall back on. All three fonts are under the SIL Open Font License 1.1:
+NaadamyPixel.ttf is the pixel font Tiny5 (as on the web version) with its Latin, Cyrillic and Cyrillic-ext parts joined (all Mongolian
+letters, Ө Ү included), plus a few symbols (→ √ ● ► ■ ₮ …) from Noto Sans, Noto Sans Math and Noto Sans Symbols 2, scaled to fit.
+Unity draws it as hard pixels (Editor/NaadamyFontImport.cs). All fonts are under the SIL Open Font License 1.1:
 
-===== Nunito =====
-Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
+===== Tiny5 =====
+Copyright 2022-2024 The Tiny5 Project Authors (https://github.com/Gissio/font_tiny5)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
-http://scripts.sil.org/OFL
+https://openfontlicense.org
 
 
 -----------------------------------------------------------

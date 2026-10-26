@@ -223,7 +223,7 @@ public sealed partial class Game : MonoBehaviour
         running = wantRun && V.energy > 0;
         float SP = riding ? (race != null ? RaceSpeed() : running ? 11 : 7.2f) : running ? RUN_SPEED : SPEED, tvx = 0, tvy = 0;
         float sm = stickOn ? stick.magnitude : 0;
-        if (ix == 0 && iy == 0 && sm > 0.18f && !block && !counting) { ix = stick.x; iy = stick.y; mag = Mathf.Clamp((sm - 0.18f) / 0.45f, 0.45f, 1); } // a gentle push walks slowly, a full push walks at full speed
+        if (ix == 0 && iy == 0 && sm > 0.12f && !block && !counting) { ix = stick.x; iy = stick.y; mag = Mathf.Clamp((sm - 0.12f) / 0.5f, 0.4f, 1); } // a gentle push walks slowly, a full push walks at full speed
         if (counting) path.Clear();
         if (ix != 0 || iy != 0) { path.Clear(); pending = null; float n = Mathf.Sqrt(ix * ix + iy * iy); tvx = ix / n * SP * mag; tvy = iy / n * SP * mag; }
         else if (path.Count > 0)

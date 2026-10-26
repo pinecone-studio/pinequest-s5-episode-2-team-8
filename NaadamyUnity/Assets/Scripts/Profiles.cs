@@ -81,7 +81,7 @@ public sealed partial class Game
     /** Big number buttons (easier than the phone keyboard for little ones). */
     public string NumPad(string v)
     {
-        GUILayout.Label(v == "" ? " " : v, new GUIStyle(sBtn) { fontSize = Mathf.RoundToInt(U(22)), fontStyle = FontStyle.Bold }, GUILayout.MinHeight(U(44)));
+        GUILayout.Label(v == "" ? " " : v, new GUIStyle(sBtn) { fontSize = PxSize(U(22f) * 1.3f), fontStyle = FontStyle.Bold }, GUILayout.MinHeight(U(44)));
         string[] keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "←", "0", "OK" };
         for (int r = 0; r < 4; r++)
         {
@@ -105,16 +105,16 @@ public sealed partial class Game
         {
             g.Box(new Rect(0, 0, Screen.width, Screen.height), Px.Col(Bg));
             var safe = Screen.safeArea; var area = new Rect(safe.x, Screen.height - safe.yMax, safe.width, safe.height);
-            float w = Mathf.Min(area.width - g.U(16), g.U(720));
+            float w = Mathf.Min(area.width - g.U(16), g.U(760)); // wide pages, but not edge to edge on a laptop
             GUILayout.BeginArea(new Rect(area.x + (area.width - w) / 2, area.y + g.U(8), w, area.height - g.U(16)));
             GUILayout.BeginHorizontal();
             if (Back && GUILayout.Button("←", g.sBtn, GUILayout.Width(g.U(48)), GUILayout.Height(g.U(44)))) g.Later(g.Close);
             GUILayout.Label(Title, new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleLeft }, GUILayout.Height(g.U(44)));
             GUILayout.FlexibleSpace(); Header(g);
             GUILayout.EndHorizontal();
-            scroll = GUILayout.BeginScrollView(scroll);
+            scroll = g.BeginScroll(scroll);
             Body(g);
-            GUILayout.EndScrollView();
+            g.EndScroll();
             GUILayout.EndArea();
         }
     }
@@ -140,7 +140,7 @@ public sealed partial class Game
             float run = (t * 22) % 220 - 30; int f = 1 + (int)(t * 8) % 2;
             x.Blit(Px.Animal("foal", f), Js.Round(run), 64); x.Blit(Px.Animal("foal", 3 - f), Js.Round(run - 18), 67); x.Blit(Px.Bankhar(f), Js.Round(run - 42), 66);
             float k = Mathf.Max(Screen.width / 160f, Screen.height / 90f); live.ShowAt(new Rect((Screen.width - 160 * k) / 2, (Screen.height - 90 * k) / 2, 160 * k, 90 * k));
-            var safe = Screen.safeArea; float w = Mathf.Min(safe.width - g.U(16), g.U(460));
+            var safe = Screen.safeArea; float w = Mathf.Min(safe.width - g.U(16), g.U(600));
             GUILayout.BeginArea(new Rect(safe.x + (safe.width - w) / 2, Screen.height - safe.yMax + g.U(8), w, safe.height - g.U(16)));
             GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace(); Header(g); GUILayout.EndHorizontal();
             GUILayout.FlexibleSpace();
@@ -152,9 +152,9 @@ public sealed partial class Game
             GUI.enabled = was;
             if (GUILayout.Button(Loc.L("Бүртгүүлэх", "Register"), tab == "register" ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) g.Later(() => { tab = "register"; step = 0; });
             GUILayout.EndHorizontal();
-            scroll = GUILayout.BeginScrollView(scroll, GUILayout.MaxHeight(safe.height * 0.62f));
+            scroll = g.BeginScroll(scroll, safe.height - g.U(200)); // whatever is left under the header; the rest scrolls
             if (tab == "login" && g.App.profiles.Count > 0) Login(g); else Register(g);
-            GUILayout.EndScrollView();
+            g.EndScroll();
             GUILayout.EndVertical();
             if (GUILayout.Button(Loc.L("Төслийн тухай", "About the project"), g.sSmall)) g.Later(() => g.Open(new AboutPage()));
             GUILayout.FlexibleSpace();
@@ -180,7 +180,7 @@ public sealed partial class Game
                 var p = SaveData.Load(id);
                 GUILayout.BeginHorizontal(g.sBtn);
                 g.IconAt(Px.Mascot(p.avatar), 40);
-                GUILayout.Label($"<b>{p.name}</b>\n<size={Mathf.RoundToInt(g.U(11))}>{p.age} {Loc.L("нас", "yrs")}{(p.code != "" ? " · " + Loc.L("нууцтай", "locked") : "")}</size>", g.sLabel);
+                GUILayout.Label($"<b>{p.name}</b>\n<size={Game.PxSize(g.U(11f) * 1.3f)}>{p.age} {Loc.L("нас", "yrs")}{(p.code != "" ? " · " + Loc.L("нууцтай", "locked") : "")}</size>", g.sLabel);
                 GUILayout.FlexibleSpace();
                 if (g.SmallBtn(Loc.L("Тоглох", "Play"))) { var pp = p; g.Later(() => { if (pp.code == "") g.Enter(pp); else { picking = pp; sel.Clear(); } }); }
                 GUILayout.EndHorizontal();
@@ -210,24 +210,23 @@ public sealed partial class Game
             if (step == 0)
             {
                 Basar(g, Loc.L("Вуф! Би Басар. Чиний нэрийг хэн гэдэг вэ?", "Woof! I’m Basar. What’s your name?"));
-                name = GUILayout.TextField(name, 20, new GUIStyle(g.sBtn) { fontSize = Mathf.RoundToInt(g.U(18)) }, GUILayout.MinHeight(g.U(44)));
+                name = GUILayout.TextField(name, 20, new GUIStyle(g.sBtn) { fontSize = Game.PxSize(g.U(18f) * 1.3f) }, GUILayout.MinHeight(g.U(44)));
                 if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel);
                 if (g.Btn(Loc.L("Цааш →", "Next →"), true, 46)) g.Later(() => { if (name.Trim() == "") err = Loc.L("Нэрээ бичээрэй", "Please write your name"); else { err = ""; name = name.Trim(); step = 1; } });
             }
             else if (step == 1)
             {
-                Basar(g, Loc.L($"Сайн уу, {name}! Хэдэн настай вэ? Том хүмүүс ч тоглож болно!", $"Hi {name}! How old are you? Grown-ups can play too!"));
-                for (int r = 0; r < 4; r++)
-                {
-                    GUILayout.BeginHorizontal();
-                    for (int c = 0; c < 4; c++) { int a = 3 + r * 4 + c; if (GUILayout.Button(a.ToString(), a == age ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) { age = a; ageText = ""; Sfx.Tap(); } }
-                    GUILayout.EndHorizontal();
-                }
-                GUILayout.Label(Loc.L("Том хүн", "Grown-ups"), g.sSmall);
-                GUILayout.BeginHorizontal(); foreach (int a in new[] { 20, 25, 30, 40, 50, 60, 70, 80 }) if (GUILayout.Button(a.ToString(), a == age ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(34)))) { age = a; Sfx.Tap(); } GUILayout.EndHorizontal();
+                Basar(g, Loc.L($"Сайн уу, {name}! Хэдэн настай вэ? Насаа бичээрэй. Том хүмүүс ч тоглож болно!", $"Hi {name}! How old are you? Write your age. Grown-ups can play too!"));
+                // the age is written, not picked from a list: any age from 3 to 120
+                ageText = new string(GUILayout.TextField(ageText, 3, new GUIStyle(g.sBtn) { fontSize = Game.PxSize(g.U(18f) * 1.3f) }, GUILayout.MinHeight(g.U(44))).Where(char.IsDigit).ToArray());
+                if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel);
                 GUILayout.BeginHorizontal();
-                if (g.Btn("←")) g.Later(() => step = 0);
-                if (g.Btn(Loc.L("Цааш →", "Next →"), true)) g.Later(() => step = 2);
+                if (g.Btn("←")) g.Later(() => { err = ""; step = 0; });
+                if (g.Btn(Loc.L("Цааш →", "Next →"), true)) g.Later(() =>
+                {
+                    if (int.TryParse(ageText, out int a) && a >= 3 && a <= 120) { age = a; err = ""; step = 2; }
+                    else err = ageText == "" ? Loc.L("Насаа бичээрэй", "Please write your age") : Loc.L("3-аас 120 хүртэлх насаа бичээрэй", "Write an age from 3 to 120");
+                });
                 GUILayout.EndHorizontal();
             }
             else if (step == 2)
@@ -241,7 +240,7 @@ public sealed partial class Game
                         int i = r * 4 + c; var rr = GUILayoutUtility.GetRect(g.U(70), g.U(64), GUILayout.ExpandWidth(true));
                         if (GUI.Button(rr, "", i == avatar ? g.sPrimary : g.sBtn)) { avatar = i; Sfx.Pop(); }
                         GUI.DrawTexture(new Rect(rr.center.x - g.U(18), rr.y + g.U(4), g.U(36), g.U(36)), g.Tex(Px.Mascot(i)));
-                        GUI.Label(new Rect(rr.x, rr.y + g.U(40), rr.width, g.U(22)), Profiles.MASCOTS[i].name.ToString(), new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Mathf.RoundToInt(g.U(9)) });
+                        GUI.Label(new Rect(rr.x, rr.y + g.U(40), rr.width, g.U(22)), Profiles.MASCOTS[i].name.ToString(), new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Game.PxSize(g.U(12)) });
                     }
                     GUILayout.EndHorizontal();
                 }

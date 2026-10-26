@@ -18,7 +18,14 @@ public sealed partial class Game
             GUILayout.BeginVertical(); GUILayout.Label("<b>" + V.name + "</b>", g.sTitle);
             g.Small($"{V.age} {Loc.L("настай", "years old")}" + (e != null ? " · " + e.name : " · " + Profiles.MASCOTS[V.avatar].name) + (a != null ? " · " + a.name : ""));
             GUILayout.EndVertical(); GUILayout.EndHorizontal();
-            void Item(string emoji, string label, Action run) { g.Row(Emo.Icon(emoji), label, null); if (g.SmallBtn("›", false, 44)) g.Later(() => { g.Close(); run(); }); g.EndRow(); }
+            void Item(string emoji, string label, Action run) // the whole row is the button, not only the arrow at its end
+            {
+                var r = GUILayoutUtility.GetRect(g.U(10), g.U(46), GUILayout.ExpandWidth(true));
+                if (GUI.Button(r, "", g.sBtn)) g.Later(() => { g.Close(); run(); });
+                float s = g.U(30); GUI.DrawTexture(new Rect(r.x + g.U(8), r.center.y - s / 2, s, s), g.Tex(Emo.Icon(emoji) ?? Px.Icon("ui:star")));
+                GUI.Label(new Rect(r.x + g.U(46), r.y, r.width - g.U(80), r.height), label, new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
+                GUI.Label(new Rect(r.xMax - g.U(30), r.y, g.U(22), r.height), ">", new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter });
+            }
             Item("📚", Loc.L("Өв соёлын сургууль", "Heritage school"), () => g.Open(new LearnPage()));
             Item("✍️", Loc.L("Монгол бичгийн академи", "Mongol script academy"), () => g.Open(new BichigPage()));
             Item("🐕", Loc.L("Басартай ярилцах", "Talk with Basar"), () => g.OpenBasar());
@@ -144,14 +151,14 @@ public sealed partial class Game
             if (done.Count == 0 && handIds.Count == 0) g.Small(Loc.L("Одоохондоо юу ч сураагүй байна.", "Nothing learned yet."));
             foreach (var a in GerRules.HANDS_ON.Where(x => handIds.Contains(x.id))) // done by hand in Нутаг
             {
-                GUILayout.Label("<b>" + a.name + "</b>" + $" <size={Mathf.RoundToInt(g.U(10))}>· {Loc.L("Нутагт гараараа", "by hand in Нутаг")}</size>", g.sLabel);
+                GUILayout.Label("<b>" + a.name + "</b>" + $" <size={Game.PxSize(g.U(10f) * 1.3f)}>· {Loc.L("Нутагт гараараа", "by hand in Нутаг")}</size>", g.sLabel);
                 foreach (var t in a.learned) GUILayout.Label("• " + t, g.sSmall);
             }
             foreach (var l in done)
             {
                 var pr = child.learn.Find(x => x.id == l["id"].S);
                 string with = string.Join(", ", new[] { ("family", Loc.L("гэр бүлтэйгээ", "with family")), ("friends", Loc.L("найзуудтайгаа", "with friends")), ("solo", Loc.L("ганцаараа", "alone")) }.Where(w => SaveData.Get(pr.with, w.Item1) > 0).Select(w => $"{w.Item2} {SaveData.Get(pr.with, w.Item1)}×"));
-                GUILayout.Label("<b>" + l["title"].T + "</b>" + (with != "" ? $" <size={Mathf.RoundToInt(g.U(10))}>· {with}</size>" : ""), g.sLabel);
+                GUILayout.Label("<b>" + l["title"].T + "</b>" + (with != "" ? $" <size={Game.PxSize(g.U(10f) * 1.3f)}>· {with}</size>" : ""), g.sLabel);
                 foreach (var t in l["learned"]) GUILayout.Label("• " + t.T, g.sSmall);
             }
             if (child.quizTopicTotal.Count > 0)
@@ -163,7 +170,7 @@ public sealed partial class Game
             if (logs.Count > 0)
             {
                 GUILayout.Label("<b>" + Loc.L("Сүүлийн үйл ажиллагаа", "Recent activity") + "</b>", g.sLabel);
-                foreach (var x in logs) GUILayout.Label($"{LogLine(x)}  <size={Mathf.RoundToInt(g.U(9))}>{x.d}</size>", g.sSmall);
+                foreach (var x in logs) GUILayout.Label($"{LogLine(x)}  <size={Game.PxSize(g.U(9f) * 1.3f)}>{x.d}</size>", g.sSmall);
             }
             GUILayout.EndVertical();
         }
@@ -366,8 +373,8 @@ public sealed partial class Game
             GUILayout.BeginVertical(note != null ? g.sPrimary : g.sBtn);
             var st = note != null ? g.sPrimary.Clean() : g.sLabel;
             GUILayout.Label($"<b>{name}</b>  {amount}", st);
-            foreach (var i in items) GUILayout.Label("√ " + i, new GUIStyle(st) { fontSize = Mathf.RoundToInt(g.U(11)) });
-            if (note != null) GUILayout.Label(note, new GUIStyle(st) { fontSize = Mathf.RoundToInt(g.U(10)) });
+            foreach (var i in items) GUILayout.Label("√ " + i, new GUIStyle(st) { fontSize = Game.PxSize(g.U(11f) * 1.3f) });
+            if (note != null) GUILayout.Label(note, new GUIStyle(st) { fontSize = Game.PxSize(g.U(10f) * 1.3f) });
             GUILayout.EndVertical();
         }
     }

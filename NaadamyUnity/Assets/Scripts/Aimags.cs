@@ -98,7 +98,7 @@ public sealed partial class Game
             GUILayout.BeginVertical(g.sBtn); GUILayout.Label("<b>" + Loc.L("Болормаа", "Bolormaa") + ":</b> " + say, g.sLabel); GUILayout.EndVertical();
             if (done) { if (g.Btn((a != null ? Loc.L($"{a.name.mn} руу аялах", $"Travel to {a.name.en}") : Loc.L("Аялах", "Travel")), true, 48)) g.Later(() => { g.Close(); after?.Invoke(); }); return; }
             GUILayout.BeginVertical(g.sBtn);
-            GUILayout.Label($"<b>{Loc.L("Аймгийн аяллын эрх", "Aimag Travel Pass")} · {Fmt(PASS_PRICE)}</b> <size={Mathf.RoundToInt(g.U(10))}>{Loc.L("нэг удаа төлнө", "one-time")}</size>", g.sLabel);
+            GUILayout.Label($"<b>{Loc.L("Аймгийн аяллын эрх", "Aimag Travel Pass")} · {Fmt(PASS_PRICE)}</b> <size={Game.PxSize(g.U(10f) * 1.3f)}>{Loc.L("нэг удаа төлнө", "one-time")}</size>", g.sLabel);
             int left = Aimags.ORDER.Count - PASS_FREE;
             foreach (var t in new[] { Loc.L($"Үлдсэн {left} аймаг бүгд нээгдэнэ", $"Opens all {left} remaining provinces"), Loc.L("Аймаг бүрээр 3D-ээр аялна", "Travel every province in 3D"), Loc.L("Тамга бүрээр зоос, оноо", "Coins and XP for every stamp"), Loc.L("Нэг худалдан авалт = хөдөөгийн нэг хүүхдэд үнэгүй эрх", "Each pass = a free pass for one rural child") })
                 GUILayout.Label("• " + t, g.sSmall);
@@ -157,10 +157,10 @@ public sealed partial class Game
                     var old = GUI.color; if (!open) GUI.color = new Color(1, 1, 1, 0.45f);
                     GUI.Label(new Rect(r.x + g.U(6), r.y + g.U(4), g.U(30), g.U(18)), (k + 1).ToString(), g.sSmall);
                     GUI.DrawTexture(new Rect(r.center.x - g.U(16), r.y + g.U(10), g.U(32), g.U(32)), g.Tex(Aimags.Icon(id)));
-                    var st = new GUIStyle(got ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Mathf.RoundToInt(g.U(11)) };
+                    var st = new GUIStyle(got ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Game.PxSize(g.U(11f) * 1.3f) };
                     GUI.Label(new Rect(r.x, r.y + g.U(44), r.width, g.U(20)), "<b>" + a.name + "</b>", st);
                     string sub = got ? DateTimeOffset.FromUnixTimeMilliseconds(g.V.stamps.Find(s => s.k == id).v).LocalDateTime.ToString("yyyy.MM.dd") : open ? Loc.L("Аялах →", "Visit →") : !paid && k == PASS_FREE ? Fmt(PASS_PRICE) : "";
-                    GUI.Label(new Rect(r.x, r.y + g.U(62), r.width, g.U(16)), sub + (home ? " · " + Loc.L("Миний нутаг", "Home") : ""), new GUIStyle(st) { fontSize = Mathf.RoundToInt(g.U(9)) });
+                    GUI.Label(new Rect(r.x, r.y + g.U(62), r.width, g.U(16)), sub + (home ? " · " + Loc.L("Миний нутаг", "Home") : ""), new GUIStyle(st) { fontSize = Game.PxSize(g.U(9f) * 1.3f) });
                     GUI.color = old;
                 }
                 GUILayout.EndHorizontal();
@@ -215,7 +215,7 @@ public sealed partial class Game
         public override bool CanEscape => !first;
         protected override bool Back => !first;
         protected override string Title => Loc.L("Дүрээ бүтээ", "Create your character");
-        protected override void Header(Game g) { if (first && GUILayout.Button(Loc.L("Дараа нь", "Later"), g.sBtn, GUILayout.Height(g.U(40)))) g.Later(() => { if (string.IsNullOrEmpty(g.V.eth)) g.V.eth = "skip"; g.V.Save(); g.Close(); if (!g.V.tips && g.V.tutorialSeen > 0) g.Open(new TipsModal()); }); }
+        protected override void Header(Game g) { if (first && GUILayout.Button(Loc.L("Дараа нь", "Later"), g.sBtn, GUILayout.Height(g.U(40)), GUILayout.MinWidth(g.U(130)))) g.Later(() => { if (string.IsNullOrEmpty(g.V.eth)) g.V.eth = "skip"; g.V.Save(); g.Close(); if (!g.V.tips && g.V.tutorialSeen > 0) g.Open(new TipsModal()); }); }
         void Basar(Game g, string t) { GUILayout.BeginHorizontal(g.sBtn); g.IconAt(Px.BankharFace(1), 40); GUILayout.Label(t, g.sLabel); GUILayout.EndHorizontal(); }
         void Nav(Game g, int back, Action next, string label = null, bool enabled = true)
         {
@@ -241,7 +241,7 @@ public sealed partial class Game
                         if (GUI.Button(r, "", eth == x.id ? g.sPrimary : g.sBtn)) { var xx = x; g.Later(() => { eth = xx.id; look.hat = xx.hat; look.deel = xx.deel; if (!xx.aimags.Contains(aimag)) aimag = xx.aimags[0]; Sfx.Tap(); }); }
                         var l2 = look.Copy(); l2.hat = x.hat; l2.deel = x.deel;
                         GUI.DrawTexture(new Rect(r.center.x - g.U(11), r.y + g.U(4), g.U(22), g.U(38)), g.Tex(Px.Char(l2, 0, 0)));
-                        GUI.Label(new Rect(r.x, r.y + g.U(46), r.width, g.U(28)), x.name.ToString(), new GUIStyle(eth == x.id ? g.sPrimary.Clean() : g.sSmall) { alignment = TextAnchor.UpperCenter, fontSize = Mathf.RoundToInt(g.U(10)) });
+                        GUI.Label(new Rect(r.x, r.y + g.U(46), r.width, g.U(28)), x.name.ToString(), new GUIStyle(eth == x.id ? g.sPrimary.Clean() : g.sSmall) { alignment = TextAnchor.UpperCenter, fontSize = Game.PxSize(g.U(10f) * 1.3f) });
                     }
                     GUILayout.EndHorizontal();
                 }
@@ -264,7 +264,7 @@ public sealed partial class Game
                         var x = Aimags.ById(allowed[k]); var r = GUILayoutUtility.GetRect(g.U(110), g.U(40), GUILayout.ExpandWidth(true));
                         if (GUI.Button(r, "", aimag == x.id ? g.sPrimary : g.sBtn)) { var id = x.id; g.Later(() => { aimag = id; Sfx.Tap(); }); }
                         GUI.DrawTexture(new Rect(r.x + g.U(6), r.center.y - g.U(12), g.U(24), g.U(24)), g.Tex(Aimags.Icon(x.id)));
-                        GUI.Label(new Rect(r.x + g.U(34), r.y, r.width - g.U(36), r.height), x.name.ToString(), new GUIStyle(aimag == x.id ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false, fontSize = Mathf.RoundToInt(g.U(11)) });
+                        GUI.Label(new Rect(r.x + g.U(34), r.y, r.width - g.U(36), r.height), x.name.ToString(), new GUIStyle(aimag == x.id ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false, fontSize = Game.PxSize(g.U(11f) * 1.3f) });
                     }
                     GUILayout.EndHorizontal();
                 }

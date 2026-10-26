@@ -24,7 +24,7 @@ public sealed partial class Game
         var at = BesideMe();
         p2 = new Player2 { name = f != null ? f.Name.ToString() : Loc.L("Найз", "Friend"), look = look, px = at.x, py = at.y };
         Sfx.Chime();
-        Toast(p2.name + (Input.touchSupported ? Loc.L(" хамт тоглож байна! Дэлгэцийн баруун тал бол түүний джойстик.", " is playing too! The right half of the screen is their joystick.")
+        Toast(p2.name + (Game.TouchUI ? Loc.L(" хамт тоглож байна! Дэлгэцийн баруун тал бол түүний джойстик.", " is playing too! The right half of the screen is their joystick.")
             : Loc.L(" хамт тоглож байна! Сум товч, баруун Shift, Enter: тэр.", " is playing too! Arrow keys, right Shift and Enter are theirs.")));
     }
     bool P2Busy => riding || race != null || battle != null || modal != null;

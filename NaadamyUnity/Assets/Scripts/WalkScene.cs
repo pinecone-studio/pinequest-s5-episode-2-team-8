@@ -102,14 +102,14 @@ public sealed partial class Game
             var safe = Screen.safeArea; float sx = safe.x, sy = Screen.height - safe.yMax, sw2 = safe.width / g.UiScale, sh = safe.height / g.UiScale;
             GUI.BeginGroup(new Rect(sx, sy, safe.width, safe.height));
             if (g.Button(g.URect(8, 8, 48, 44), "X")) g.Later(g.Close);
-            var tr = g.URect(64, 8, Mathf.Min(360, sw2 - 72), 44); GUI.Box(tr, $"<b>{title}</b>" + (sub != null ? $"  <size={Mathf.RoundToInt(g.U(11))}>{sub}</size>" : ""), g.sToast);
-            if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, sh - 130, Mathf.Min(520, sw2 - 16), 62); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sToast) { alignment = TextAnchor.MiddleLeft, fontSize = Mathf.RoundToInt(g.U(12)) }); }
+            var tr = g.URect(64, 8, Mathf.Min(360, sw2 - 72), 44); GUI.Box(tr, $"<b>{title}</b>" + (sub != null ? $"  <size={Game.PxSize(g.U(11f) * 1.3f)}>{sub}</size>" : ""), g.sToast);
+            if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, sh - 130, Mathf.Min(520, sw2 - 16), 62); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sToast) { alignment = TextAnchor.MiddleLeft, fontSize = Game.PxSize(g.U(12f) * 1.3f) }); }
             float bx = 8;
             foreach (var (label, run) in buttons) { string l = label(); float w = Mathf.Max(90, l.Length * 8 + 24); if (g.Button(g.URect(bx, sh - 60, w, 52), l)) g.Later(run); bx += w + 6; }
             if (g.Button(g.URect(sw2 - 290, sh - 60, 56, 52), runLock ? Loc.L("Алхах", "Walk") : Loc.L("Гүйх", "Run"), runLock ? g.sPrimary : g.sBtn)) runLock = !runLock;
             if (g.Button(g.URect(sw2 - 228, sh - 60, 56, 52), Loc.L("Үсрэх", "Jump"))) { if (Time.time - jt >= JUMP_S) { jt = Time.time; Sfx.Pop(); } }
             bool was = GUI.enabled; GUI.enabled = near != null;
-            string act = near != null ? near.label() + (Input.touchSupported ? "" : " (E)") : Loc.L("Ойртоод E дар", "Walk up and press E");
+            string act = near != null ? near.label() + (Game.TouchUI ? "" : " (E)") : Loc.L("Ойртоод E дар", "Walk up and press E");
             var nn = near; if (g.Button(g.URect(sw2 - 166, sh - 64, 158, 56), act, g.sPrimary)) g.Later(() => nn?.run());
             GUI.enabled = was;
             if (mini != null) DrawMini(g, sw2);
