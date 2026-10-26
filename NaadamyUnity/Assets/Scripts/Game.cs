@@ -392,7 +392,8 @@ public sealed partial class Game : MonoBehaviour
         Vector3 w = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, 10));
         float wx = w.x, wy = -w.y; int tx0 = Mathf.FloorToInt(wx), ty0 = Mathf.FloorToInt(wy);
         if (battle != null) { var e = NearestEnemy(wx, wy + 0.4f, 1.4f); if (e != null) { ShootAt(e.x, e.y); return; } } // tap a raider to loose a whistling arrow
-        if (Mathf.Abs(dgx + 0.55f - wx) < 0.8f && wy > dgy - 0.6f && wy < dgy + 1.1f) { DoAction(new Act { type = "basar" }); return; }
+        // only a tap right on Basar opens his chat; he walks beside you, so a wide area kept stealing taps meant for walking (the 🐕 button opens him too)
+        if (Mathf.Abs(dgx + 0.55f - wx) < 0.4f && wy > dgy - 0.1f && wy < dgy + 0.8f) { DoAction(new Act { type = "basar" }); return; }
         var sh = sheep.Find(q => Mathf.Abs(q.px + 0.5f - wx) < 0.7f && Mathf.Abs(q.py + 0.5f - wy) < 0.7f);
         if (sh != null) { var n = World.NearestOpen(sh.x, sh.y, mx, my); if (n != null) GoTo(n.Value.x, n.Value.y, new Act { type = ShearSheep(sh) ? "shear" : "sheep", s = sh }); return; }
         var o = World.ObjAt(tx0, ty0);

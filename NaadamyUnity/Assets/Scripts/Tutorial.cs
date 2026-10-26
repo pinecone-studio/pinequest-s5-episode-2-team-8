@@ -204,7 +204,7 @@ public sealed partial class Game
         yield return Say("neutral", "Энэ ногоон зурвас бол хүч. Гүйхэд багасна. Ядарвал хоол идэж, ундаа уугаарай.", "This green bar is your energy. Running uses it up. When you’re tired, eat or drink something.", "energy");
         yield return Say("happy", "Ном дээр дарвал Өв соёлын сургууль нээгдэнэ: гэр барих, цагаан идээ хийх, Нууц товчоо...", "The book opens the Heritage School: building a ger, making dairy, the Secret History...", "learn");
         yield return Say("wink", "Энэ товчийг дарвал өдрийн даалгаврууд гарна. Өдөр бүр шинэ!", "This button shows your daily quests. New ones every day!", "quests");
-        yield return Say("surprised", "Энэ 3D товч бол хамгийн гайхалтай нь: бүх Нутгийг 3D-ээр өөрийн нүдээр харна!", "And the 3D button is the coolest: see the whole village in 3D, through your own eyes!", "fp");
+        yield return Say("surprised", "Энэ нүд товч бол хамгийн гайхалтай нь: бүх Нутгийг 3D-ээр өөрийн нүдээр харна!", "And the eye button is the coolest: see the whole village in 3D, through your own eyes!", "fp");
         yield return Say("tease", "Мартчихвал энэ ? товчийг дар. Би дахиад гүйгээд ирнэ!", "If you forget anything, tap this ?. I’ll come running back!", "help");
         glowKey = null;
         yield return Questions();

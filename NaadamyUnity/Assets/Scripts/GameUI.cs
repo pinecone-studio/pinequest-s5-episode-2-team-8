@@ -187,6 +187,7 @@ public sealed partial class Game
         if (pixelFont == null) pixelFont = Resources.Load<Font>("Fonts/NaadamyPixel");
         if (pixelFont != null) GUI.skin.font = pixelFont;
         BuildStyles(); scrollN = 0; scrollOpen.Clear();
+        if (Event.current.type == EventType.Repaint) { var t = drawRects; drawRects = drawNext; drawNext = t; drawNext.Clear(); }
         if (Event.current.type == EventType.Repaint) uiNext.Clear();
         var safe = Screen.safeArea; float sx = safe.x, sy = Screen.height - safe.yMax, vw = safe.width / UiScale, vh = safe.height / UiScale;
         guiOX = sx; guiOY = sy;
@@ -314,15 +315,18 @@ public sealed partial class Game
         if (IconButton(UR(vw - 220, 8, 50, 40), Px.Icon("ui:scroll"))) Later(() => Open(new QuestModal()));
         if (IconButton(UR(vw - 274, 8, 50, 40), Px.Icon("ui:book"))) Later(() => Open(new LearnPage()));
         if (Button(UR(vw - 314, 8, 36, 40), "?")) Later(() => StartTutorial(true));
-        if (race == null && battle == null && IconButton(UR(8, 78, 50, 44), Px.BankharFace(0))) Later(() => OpenBasar());
-        if (race == null && battle == null && Button(UR(62, 78, 50, 44), "3D")) Later(() => TryFirstPerson(null));
-        { // playing together: who is here, the room
-            var nr = UR(116, 78, 150, 44); string nt = net.Online ? $"● {net.others.Count + 1} · {net.room}" + (net.unread > 0 ? $"  ({net.unread})" : "") : net.status == "solo" ? "○ " + Loc.L("Ганцаараа", "Solo") : "◌ " + Loc.L("Холбогдож…", "Connecting…");
-            if (race == null && battle == null && Button(nr, nt, net.Online ? sPrimary : sBtn)) Later(() => Open(new RoomModal()));
-            if (race == null && battle == null && Button(UR(270, 78, 110, 44), p2 != null ? "● " + p2.name : Loc.L("Хамтдаа", "Together"), p2 != null ? sPrimary : sBtn)) Later(() => Open(new TogetherModal()));
+        // small square buttons under the coins: Basar, the 3D eye, playing online and playing together on one screen
+        if (race == null && battle == null)
+        {
+            if (IconButton(UR(8, 78, 40, 40), Px.BankharFace(0))) Later(() => OpenBasar());
+            if (IconButton(UR(52, 78, 40, 40), Emo.Icon("👁"))) Later(() => TryFirstPerson(null));
+            if (IconButton(UR(96, 78, 40, 40), Emo.Icon("🌐"), null, net.Online ? sPrimary : sBtn)) Later(() => Open(new RoomModal()));
+            if (net.Online || net.status != "solo") Box(UR(126, 82, 7, 7), Px.Col(net.Online ? "#7fe07a" : "#f7c646")); // green: online, yellow: connecting
+            if (net.unread > 0) Outlined(U(132), U(110), net.unread.ToString(), U(11), Color.white);
+            if (IconButton(UR(140, 78, 40, 40), Emo.Icon("🤝"), null, p2 != null ? sPrimary : sBtn)) Later(() => Open(new TogetherModal()));
         }
         GlowAt("coins", UR(8, 8, 110, 30)); GlowAt("energy", UR(8, 50, 190, 18)); GlowAt("quests", UR(vw - 220, 8, 50, 40)); GlowAt("learn", UR(vw - 274, 8, 50, 40));
-        GlowAt("help", UR(vw - 314, 8, 36, 40)); GlowAt("basar", UR(8, 78, 50, 44)); GlowAt("fp", UR(62, 78, 50, 44));
+        GlowAt("help", UR(vw - 314, 8, 36, 40)); GlowAt("basar", UR(8, 78, 40, 40)); GlowAt("fp", UR(52, 78, 40, 40));
         if (race != null) { RaceHud(vw, vh); return; }
         if (battle != null)
         {
@@ -386,13 +390,17 @@ public sealed partial class Game
     // fitting what is inside. These remember last frame's content height and view rect (by the order they are drawn in).
     readonly List<Rect> scrollViews = new List<Rect>(); readonly List<float> scrollContent = new List<float>(); readonly Stack<int> scrollOpen = new Stack<int>();
     int scrollN, scrollArmed = -1; bool scrollMoving; Vector2 scrollFrom;
+    // a finger on a picture you draw or play on (Live, below) belongs to it, not to the scroll view around it
+    List<Rect> drawRects = new List<Rect>(), drawNext = new List<Rect>();
+    bool OnDrawing(Vector2 gui) { var p = GUIUtility.GUIToScreenPoint(gui); foreach (var r in drawRects) if (r.Contains(p)) return true; return false; }
+    public void DrawingAt(Rect gui) { if (Event.current.type == EventType.Repaint && scrollOpen.Count > 0) drawNext.Add(GUIUtility.GUIToScreenRect(gui)); }
     /** maxH > 0: as tall as the content, at most maxH (screen pixels); otherwise it fills the space it is given. */
     public Vector2 BeginScroll(Vector2 pos, float maxH = -1)
     {
         int k = scrollN++; scrollOpen.Push(k);
         while (scrollViews.Count <= k) { scrollViews.Add(Rect.zero); scrollContent.Add(-1); }
         var e = Event.current; var view = scrollViews[k];
-        if (e.type == EventType.MouseDown && view.Contains(e.mousePosition)) { scrollArmed = k; scrollMoving = false; scrollFrom = e.mousePosition; }
+        if (e.type == EventType.MouseDown && TouchUI && view.Contains(e.mousePosition) && !OnDrawing(e.mousePosition)) { scrollArmed = k; scrollMoving = false; scrollFrom = e.mousePosition; }
         else if (e.type == EventType.MouseDrag && scrollArmed == k)
         {
             if (!scrollMoving && (e.mousePosition - scrollFrom).magnitude > U(6)) { scrollMoving = true; GUIUtility.hotControl = 0; } // a drag is never a button press
@@ -488,7 +496,7 @@ public sealed partial class Game
             float s = Mathf.Min(r.width / c.W, r.height / c.H); var rr = new Rect(r.center.x - c.W * s / 2, r.y, c.W * s, c.H * s);
             ShowAt(rr); return rr;
         }
-        public void ShowAt(Rect rr) { last = rr; if (Event.current.type == EventType.Repaint) { c.Upload(tex); GUI.DrawTexture(rr, tex); } }
+        public void ShowAt(Rect rr) { last = rr; I?.DrawingAt(rr); if (Event.current.type == EventType.Repaint) { c.Upload(tex); GUI.DrawTexture(rr, tex); } }
         /** Canvas pixel to screen (GUI) point, for text over the picture. */
         public Vector2 At(float x, float y) => new Vector2(last.x + x * last.width / c.W, last.y + y * last.height / c.H);
         /** Screen (GUI) point to canvas pixel. */

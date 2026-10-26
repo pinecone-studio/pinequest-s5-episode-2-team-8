@@ -210,7 +210,7 @@ public sealed partial class Game
                         if (GUI.Button(r, "", ai == idx ? g.sPrimary : g.sBtn)) { int j = ai; g.Later(() => Select(g, j)); }
                         var old = GUI.color; if (lockd) GUI.color = new Color(1, 1, 1, 0.4f);
                         GUI.DrawTexture(new Rect(r.center.x - g.U(13), r.y + g.U(6), g.U(26), g.U(56)), g.Tex(Bichig.Pixel(it.cell, 16, 34, ai == idx ? "#ffffff" : "#2b1e2e")));
-                        GUI.Label(new Rect(r.x, r.y + g.U(62), r.width, g.U(16)), lockd ? Loc.L("түгжээтэй", "locked") : it.cyr, new GUIStyle(ai == idx ? g.sPrimary.Clean() : g.sSmall) { alignment = TextAnchor.MiddleCenter, fontSize = Game.PxSize(g.U(10f) * 1.3f) });
+                        GUI.Label(new Rect(r.x, r.y + g.U(62), r.width, g.U(16)), lockd ? "?" : it.cyr, new GUIStyle(ai == idx ? g.sPrimary.Clean() : g.sSmall) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Game.PxSize(g.U(10f) * 1.3f) });
                         if (s2 > 0) GUI.Label(new Rect(r.x, r.y + g.U(78), r.width, g.U(16)), "<color=#f7c646>" + new string('♦', s2) + "</color>", new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter });
                         GUI.color = old;
                     }
