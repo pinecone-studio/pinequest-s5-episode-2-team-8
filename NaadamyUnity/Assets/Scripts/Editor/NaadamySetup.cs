@@ -56,6 +56,7 @@ public static class NaadamySetup
         PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip; // the host sends the .gz files with Content-Encoding: gzip (see vercel.json there)
         PlayerSettings.WebGL.decompressionFallback = false;
         PlayerSettings.WebGL.dataCaching = true;                       // a second visit starts without downloading the game again
+        PlayerSettings.WebGL.nameFilesAsHashes = true;                 // every build has new file names, so a browser never mixes a cached old build with a new one
         Build(BuildTarget.WebGL, "Builds/WebGL");
     }
 
