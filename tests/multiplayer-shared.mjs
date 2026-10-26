@@ -97,7 +97,11 @@ try {
   assert.equal(await pageA.evaluate(() => window.gameSocket.readyState), WebSocket.OPEN, 'an invalid identity claim cannot replace the real player connection');
   await impostorPage.close();
 
-  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'move', x: 31, y: 16, dir: 2 })));
+  for (let x = 17.8; x < 31; x += 0.8) {
+    await pageB.evaluate((nextX) => window.gameSocket.send(JSON.stringify({ t: 'move', x: nextX, y: 13, dir: 2 })), x);
+    await sleep(100);
+  }
+  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'move', x: 31, y: 13, dir: 2 })));
   await waitForMessage(pageA, (message) => message.t === 'move' && message.id === window.sharedTest.idB && message.x === 31, 'cross-instance movement');
   await pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'say', k: 'p', i: 0 })));
   await waitForMessage(pageB, (message) => message.t === 'say' && message.id === window.sharedTest.idA && message.i === 0, 'cross-instance chat');

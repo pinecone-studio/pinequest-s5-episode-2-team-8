@@ -6,7 +6,7 @@
   else { root.TG = root.TG || {}; root.TG.vrules = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
   const W = 56, H = 40, LOTS = 8;
-  const VERSION = 8; // bump when the game and server must change together (moves, messages), so an old running server is noticed
+  const VERSION = 12; // bump when the game and server must change together (moves, messages), so an old running server is noticed
   const T = (mn, en) => ({ mn, en });
 
   // The herding and dairy yard (хот айл): animals you milk, and the white foods (цагаан идээ) you make from the milk.
@@ -42,6 +42,9 @@
     together: { coins: 40, xp: 50 }, pet: { coins: 10, xp: 20 }, sell: { coins: 15, xp: 20 },
     race: { coins: 25, xp: 35 }, archery: { coins: 25, xp: 35 }, wrestle: { coins: 25, xp: 35 },
     etiquette: { coins: 30, xp: 40 }, defend: { coins: 40, xp: 60 }, eat: { coins: 15, xp: 20 },
+  };
+  const DAILY_ACTIVITY_REWARDS = {
+    rest: { coins: 5, xp: 10 }, snack: { coins: 0, xp: 5 }, churn: { coins: 0, xp: 5 },
   };
   const DAILY_QUEST_POOL = ['milk', 'dairy', 'milk', 'fish', 'basar', 'quiz', 'pet', 'sell', 'basar', 'quiz', 'eat'];
   const SEASON_TASKS = {
@@ -257,5 +260,5 @@
   }
 
   return { GER_STEPS, GER_DONE, GER_NEEDS, gerTry, gerUse, TRADES, COVER_PRICE, tradeCost, SHEAR_WOOL, SHEAR_REGROW_MS, FELT_WOOL, lotStage, unisTilt, HANDS_ON, handsOn,
-    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, DAILY_QUEST_REWARDS, dailyQuests, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
+    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, DAILY_QUEST_REWARDS, DAILY_ACTIVITY_REWARDS, dailyQuests, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
 });

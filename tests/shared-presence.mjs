@@ -27,7 +27,7 @@ class FakePool {
 
   async run(sql, values, client) {
     const statement = sql.replace(/\s+/g, ' ').trim();
-    if (/^CREATE (TABLE|INDEX)/.test(statement) || /^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
+    if (/^(CREATE (TABLE|INDEX)|ALTER TABLE)/.test(statement) || /^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
     if (/^SELECT pg_advisory_xact_lock/.test(statement)) return { rows: [] };
     if (/^SELECT code, state FROM naadamy_rooms/.test(statement)) return { rows: [] };
     if (/^LISTEN /.test(statement)) {

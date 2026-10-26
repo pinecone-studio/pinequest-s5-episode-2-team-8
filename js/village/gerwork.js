@@ -88,11 +88,18 @@
       const i = !v.lots[G.lot] && G.lot >= 0 ? G.lot : v.lots.findIndex((l) => !l); if (i >= 0) putLot(i, G.stage); return;
     }
     const lots = live.lots || [], at = lots.findIndex((l) => l && l.by === v.id);
-    if (at >= 0) { G.lot = at; if (R.lotStage(lots[at]) < G.stage) api.net.send({ t: 'ger-stage', stage: G.stage }); return; }
+    if (at >= 0) {
+      G.lot = at;
+      G.stage = R.lotStage(lots[at]);
+      G.gerBuilt = G.stage >= R.GER_DONE;
+      api.save();
+      return;
+    }
     const i = !lots[G.lot] ? G.lot : lots.findIndex((l) => !l);
     if (i < 0) return TG.toast(L('Энэ өрөөнд сул газар алга. Гэр чинь зөвхөн чамд харагдана.', 'No free plot in this room. Your ger shows only for you.'));
-    G.lot = i; const l = v.lots[i] || {};
-    api.net.send({ t: 'ger-claim', i, roof: l.roof || 'blue', door: l.door || 'red', stage: G.stage }); api.save();
+    G.lot = i;
+    const l = v.lots[i] || {};
+    api.net.send({ t: 'ger-claim', i, roof: l.roof || 'blue', door: l.door || 'red' }); api.save();
   }
 
   // ---------------------------------------------------------------- building

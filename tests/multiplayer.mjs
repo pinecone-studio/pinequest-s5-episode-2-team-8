@@ -63,108 +63,87 @@ try {
     v.quests = { d: TG.store.dkey(), list: [{ k: 'milk', p: 99, done: true }, { k: 'unknown', p: 4, done: false }] };
     TG.store.save();
   });
-  await until(() => a.evaluate(() => TG._village.live().progressRevision === 1
-    && TG.store.active().village.produce.milk === 1000), 'server confirms and sanitizes progress');
-  const savedProgress = await a.evaluate(() => {
+  await sleep(350);
+  const localProgress = await a.evaluate(() => {
     const v = TG.store.active().village;
     return { produce: v.produce, fish: v.fish, quests: v.quests };
   });
-  if (savedProgress.produce.unknown || savedProgress.fish.unknown || savedProgress.fish.perch !== 3
-    || savedProgress.quests.list.length !== 1 || savedProgress.quests.list[0].p !== 3 || !savedProgress.quests.list[0].done) {
-    throw new Error(`the server did not sanitize the saved progress: ${JSON.stringify(savedProgress)}`);
-  }
-  await a.evaluate(() => {
-    const originalId = TG.store.state.activeId;
-    const other = TG.store.addProfile({ name: 'Other profile', age: 10, avatar: '🐎' });
-    other.village = { produce: { milk: 999 }, fish: { perch: 999 }, quests: {} };
-    TG.store.save();
-    TG.store.state.activeId = originalId;
-    TG.store.save();
-  });
-  await sleep(350);
-  if (await a.evaluate(() => TG._village.live().progressRevision !== 1)) {
-    throw new Error('progress from another local profile was sent to this online identity');
+  if (localProgress.produce.milk !== 1003 || localProgress.fish.perch !== 3
+    || localProgress.produce.unknown !== 5 || localProgress.fish.unknown !== 9) {
+    throw new Error(`local progress was unexpectedly replaced by server data: ${JSON.stringify(localProgress)}`);
   }
   await a.evaluate(() => TG._village.reconnect());
-  await until(() => a.evaluate(() => TG._village.live().online && TG._village.live().progressRevision === 1), 'player reconnects with saved progress');
-  if (!(await a.evaluate(() => TG.store.active().village.fish.perch === 3 && TG.store.active().village.produce.milk === 1000))) {
-    throw new Error('fish and dairy inventory did not survive reconnect');
+  await until(() => a.evaluate(() => TG._village.live().online), 'player reconnects without server progress');
+  if (!(await a.evaluate(() => TG.store.active().village.fish.perch === 3 && TG.store.active().village.produce.milk === 1003))) {
+    throw new Error('local fish and dairy progress did not survive reconnect');
   }
-  ok('bounded fish, dairy and daily quest progress persists and restores on reconnect');
+  ok('unverified gameplay progress remains local instead of syncing to the server');
   const walletBefore = await a.evaluate(() => {
     const v = TG.store.active().village;
     return { coins: v.coins, xp: v.xp, revision: TG._village.live().walletRevision };
   });
-  if (walletBefore.coins !== 600 || walletBefore.xp !== 200 || walletBefore.revision !== 0) throw new Error('the server did not initialize the migrated wallet');
-  await a.evaluate(() => TG.villageReward(12, 7));
-  await until(() => a.evaluate(() => TG._village.live().walletRevision === 1), 'server confirms reward');
-  const rewardedWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
-  if (rewardedWallet.coins !== 612 || rewardedWallet.xp !== 207) throw new Error('the server did not persist the wallet reward');
+  if (walletBefore.coins !== 40 || walletBefore.xp !== 0 || walletBefore.revision !== 0) throw new Error('the server trusted client-provided initial wallet data');
+  const rejectedOnlineReward = await a.evaluate(() => {
+    const before = { coins: TG.store.active().village.coins, xp: TG.store.active().village.xp };
+    const result = TG.villageReward(12, 7);
+    const after = { coins: TG.store.active().village.coins, xp: TG.store.active().village.xp };
+    return { result, before, after, revision: TG._village.live().walletRevision };
+  });
+  if (rejectedOnlineReward.result !== null || rejectedOnlineReward.before.coins !== rejectedOnlineReward.after.coins
+    || rejectedOnlineReward.before.xp !== rejectedOnlineReward.after.xp || rejectedOnlineReward.revision !== 0) {
+    throw new Error(`an unverified online reward changed the local wallet: ${JSON.stringify(rejectedOnlineReward)}`);
+  }
+  ok('unverified local rewards do not change the wallet while connected');
   const food = await a.evaluate(async () => {
     const item = TG.FOODS.find((entry) => entry.price > 0);
     const ok = await TG.villageEat(item.id), v = TG.store.active().village, live = TG._village.live();
     return { ok, price: item.price, coins: v.coins, xp: v.xp, revision: live.walletRevision, online: live.online };
   });
   if (!food.ok) throw new Error(`a valid wallet purchase was rejected: ${JSON.stringify(food)}`);
-  await until(() => a.evaluate(() => TG._village.live().walletRevision === 3), 'server confirms spending and first-taste reward');
+  await until(() => a.evaluate(() => TG._village.live().walletRevision === 1), 'server confirms spending');
   const spentWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
-  if (spentWallet.coins !== 612 - food.price || spentWallet.xp !== 212) throw new Error('the server did not persist the wallet spend and XP');
-  await a.$eval('.v-pill', (button) => button.click());
-  await a.waitForSelector('.v-shop');
-  await a.$eval('[data-buy="hat-cap"]', (button) => button.click());
-  await until(() => a.evaluate(() => TG.store.active().village.owned.includes('hat-cap') && TG._village.live().walletRevision === 4), 'server confirms shop purchase');
-  const purchased = await a.evaluate(() => ({
-    coins: TG.store.active().village.coins,
-    ownsItem: TG.store.active().village.owned.includes('hat-cap'),
-    wearingItem: TG.store.active().village.look.hat === 'cap',
-  }));
-  if (purchased.coins !== spentWallet.coins - 40 || !purchased.ownsItem || !purchased.wearingItem) {
-    throw new Error(`the server did not atomically confirm shop ownership and payment: ${JSON.stringify(purchased)}`);
-  }
-  await a.evaluate(() => {
-    TG.store.active().village.owned = ['deel-blue'];
-    TG._village.reconnect();
-  });
-  await until(() => a.evaluate(() => TG._village.live().online && TG.store.active().village.owned.includes('hat-cap')), 'shop ownership restores from server');
-  ok('online shop purchases atomically persist canonical ownership and wallet balance');
+  if (spentWallet.coins !== 40 - food.price || spentWallet.xp !== 0) throw new Error('the server did not persist the wallet spend');
   await a.evaluate(() => TG._village.reconnect());
   await until(() => a.evaluate(() => TG._village.live().online), 'player reconnects');
   const restoredWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
-  if (restoredWallet.coins !== purchased.coins || restoredWallet.xp !== spentWallet.xp) throw new Error('wallet balances did not survive reconnect');
-  ok('authenticated wallet and inventory survive reconnect');
+  if (restoredWallet.coins !== spentWallet.coins || restoredWallet.xp !== spentWallet.xp) throw new Error('wallet balances did not survive reconnect');
+  ok('authenticated wallet balances survive reconnect');
   const walletProbe = await browser.newPage();
   await walletProbe.goto(`${base}/api/hello`);
   const probeId = 'wallet-test-' + crypto.randomBytes(4).toString('hex');
+  const probeTicket = crypto.randomBytes(32).toString('hex');
   await walletProbe.evaluate((url, id, ticket) => {
     window.walletEvents = [];
     window.walletSocket = new WebSocket(url);
     window.walletSocket.addEventListener('message', (event) => window.walletEvents.push(JSON.parse(event.data)));
     window.walletSocket.addEventListener('open', () => window.walletSocket.send(JSON.stringify({
-      t: 'join', room: 'NUTAG', id, ticket, name: 'Wallet test', look: {}, lvl: 99, wallet: { coins: 40, xp: 59 },
+      t: 'join', room: 'NUTAG', id, ticket, name: 'Wallet test', look: { deel: 'red', hat: 'mongol' }, lvl: 99,
+      wallet: { coins: 80, xp: 59 }, inventory: { owned: ['deel-red', 'hat-mongol'], rod: 2 },
       progress: {
         produce: { milk: 5000, forged: 7 }, fish: { pike: 2, taimen: -1 },
         quests: { d: '2026-02-31', list: [{ k: 'milk', p: 99, done: true }, { k: 'forged', p: 2, done: true }, { k: { toString: 'bad' }, p: 9, done: true }] },
       },
     })));
-  }, `ws://${new URL(base).host}/ws`, probeId, crypto.randomBytes(32).toString('hex'));
+  }, `ws://${new URL(base).host}/ws`, probeId, probeTicket);
   await walletProbe.waitForFunction(() => window.walletEvents.some((message) => message.t === 'welcome'), { timeout: 5000 });
+  const seededAccount = await walletProbe.evaluate(() => window.walletEvents.find((message) => message.t === 'welcome'));
+  if (seededAccount.wallet.coins !== 40 || seededAccount.wallet.xp !== 0
+    || seededAccount.inventory.owned.length !== 1 || seededAccount.inventory.owned[0] !== 'deel-blue' || seededAccount.inventory.rod !== 1
+    || seededAccount.look.deel !== 'blue' || seededAccount.look.hat || seededAccount.progress !== undefined
+    || seededAccount.position.x !== 17 || seededAccount.position.y !== 13) {
+    throw new Error(`the server accepted untrusted first-login account or position data: ${JSON.stringify(seededAccount)}`);
+  }
   await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((player) => player.name === 'Wallet test' && player.lvl === 1)),
     'server derives the shared level from XP instead of the join payload');
-  await walletProbe.evaluate(() => {
-    window.walletSocket.send(JSON.stringify({ t: 'look', look: {}, lvl: 99 }));
-    window.walletSocket.send(JSON.stringify({ t: 'move', x: 5, y: 5, dir: 0 }));
-  });
-  await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((player) => player.name === 'Wallet test' && player.x === 5 && player.y === 5)),
+  await walletProbe.evaluate(() => window.walletSocket.send(JSON.stringify({ t: 'look', look: {}, lvl: 99 })));
+  await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((player) => player.name === 'Wallet test' && player.lvl === 1)),
     'forged level update is processed');
   const forgedLookLevel = await a.evaluate(() => [...TG._village.live().others.values()].find((player) => player.name === 'Wallet test').lvl);
   if (forgedLookLevel !== 1) throw new Error(`the server accepted a client-reported level: ${forgedLookLevel}`);
-  const seededProgress = await walletProbe.evaluate(() => window.walletEvents.find((message) => message.t === 'welcome').progress);
-  if (seededProgress.revision !== 0 || seededProgress.state.produce.milk !== 1000 || seededProgress.state.produce.forged
-    || seededProgress.state.fish.pike !== 2 || seededProgress.state.fish.taimen
-    || seededProgress.state.quests.d !== '' || seededProgress.state.quests.list.length !== 1
-    || seededProgress.state.quests.list[0].p !== 3) {
-    throw new Error(`initial progress seeding was not bounded: ${JSON.stringify(seededProgress)}`);
-  }
+  await walletProbe.evaluate(() => window.walletSocket.send(JSON.stringify({ t: 'move', x: 35, y: 13, dir: 2 })));
+  await until(() => walletProbe.evaluate(() => window.walletEvents.some((message) => message.t === 'move-correct')), 'server corrects a forged position');
+  const correctedPosition = await walletProbe.evaluate(() => window.walletEvents.find((message) => message.t === 'move-correct'));
+  if (correctedPosition.x !== 17 || correctedPosition.y !== 13) throw new Error(`the server accepted a movement teleport: ${JSON.stringify(correctedPosition)}`);
   const sendProgress = async (revision, state) => {
     const previous = await walletProbe.evaluate(() => window.walletEvents.filter((message) => message.t === 'progress-result').length);
     await walletProbe.evaluate((payload) => window.walletSocket.send(JSON.stringify({ t: 'progress-save', ...payload })), { revision, state });
@@ -178,15 +157,16 @@ try {
     produce: { milk: 4, forged: 6 }, fish: { perch: 2 },
     quests: { d: '2026-10-26', list: [{ k: 'fish', p: 2, done: true }, { k: 'fake', p: 7, done: true }] },
   });
-  if (!savedProgressProbe.accepted || savedProgressProbe.revision !== 1 || savedProgressProbe.state.produce.milk !== 4
-    || savedProgressProbe.state.produce.forged || savedProgressProbe.state.quests.list.length !== 1) {
-    throw new Error(`progress update failed validation or persistence: ${JSON.stringify(savedProgressProbe)}`);
+  if (savedProgressProbe.accepted || savedProgressProbe.reason !== 'server-only' || savedProgressProbe.revision !== 0
+    || savedProgressProbe.state !== undefined) {
+    throw new Error(`the server accepted unverified progress: ${JSON.stringify(savedProgressProbe)}`);
   }
   const staleProgressProbe = await sendProgress(0, { produce: { milk: 8 }, fish: {}, quests: { d: '', list: [] } });
-  if (staleProgressProbe.accepted || staleProgressProbe.revision !== 1 || staleProgressProbe.state.produce.milk !== 4) {
-    throw new Error('stale progress update overwrote the canonical progress');
+  if (staleProgressProbe.accepted || staleProgressProbe.reason !== 'server-only'
+    || staleProgressProbe.revision !== 0 || staleProgressProbe.state !== undefined) {
+    throw new Error('a repeated progress request was accepted or exposed server state');
   }
-  ok('the server bounds imported progress and rejects stale progress revisions');
+  ok('the server rejects client-reported progress, initial position, and movement teleports');
   const sendWalletOperation = async (op, action, coins, xp) => {
     const previous = await walletProbe.evaluate((id) => window.walletEvents.filter((message) => message.t === 'wallet-result' && message.op === id).length, op);
     await walletProbe.evaluate((operation) => window.walletSocket.send(JSON.stringify({ t: 'wallet-op', ...operation })), { op, action, coins, xp });
@@ -200,14 +180,17 @@ try {
   if (deniedSpend.accepted || deniedSpend.reason !== 'insufficient' || deniedSpend.wallet.coins !== 40) throw new Error('the server allowed an overspend');
   const deniedReplay = await sendWalletOperation('b'.repeat(32), 'spend', 41, 0);
   if (deniedReplay.accepted || deniedReplay.wallet.coins !== 40) throw new Error('a rejected operation was not idempotent');
-  const acceptedReward = await sendWalletOperation('c'.repeat(32), 'reward', 10, 5);
-  if (!acceptedReward.accepted || acceptedReward.wallet.coins !== 50 || acceptedReward.wallet.xp !== 64) throw new Error('the server rejected a valid wallet reward');
-  await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((player) => player.name === 'Wallet test' && player.lvl === 2)),
-    'server broadcasts a level derived from the updated wallet');
-  const repeatedReward = await sendWalletOperation('c'.repeat(32), 'reward', 10, 5);
-  if (!repeatedReward.accepted || repeatedReward.wallet.coins !== 50 || repeatedReward.wallet.xp !== 64 || repeatedReward.wallet.revision !== 1) {
-    throw new Error('a repeated reward operation changed the wallet twice');
+  const rejectedReward = await sendWalletOperation('c'.repeat(32), 'reward', 10, 5);
+  if (rejectedReward.accepted || rejectedReward.reason !== 'server-only'
+    || rejectedReward.wallet.coins !== 40 || rejectedReward.wallet.xp !== 0 || rejectedReward.wallet.revision !== 0) {
+    throw new Error('the server accepted a client-submitted wallet reward');
   }
+  const repeatedReward = await sendWalletOperation('a'.repeat(32), 'reward', 10_000, 100);
+  if (repeatedReward.accepted || repeatedReward.reason !== 'server-only'
+    || repeatedReward.wallet.coins !== 40 || repeatedReward.wallet.xp !== 0 || repeatedReward.wallet.revision !== 0) {
+    throw new Error('a client could increase its wallet by changing the reward operation id');
+  }
+  ok('client-submitted wallet rewards are denied without changing canonical balances');
   const sendShopPurchase = async (op, item) => {
     const previous = await walletProbe.evaluate((id) => window.walletEvents.filter((message) => message.t === 'inventory-result' && message.op === id).length, op);
     await walletProbe.evaluate((purchase) => window.walletSocket.send(JSON.stringify({ t: 'shop-buy', ...purchase })), { op, item });
@@ -218,17 +201,69 @@ try {
     }, op);
   };
   const boughtCap = await sendShopPurchase('d'.repeat(32), 'hat-cap');
-  if (!boughtCap.accepted || boughtCap.wallet.coins !== 10 || !boughtCap.inventory.owned.includes('hat-cap')) {
+  if (!boughtCap.accepted || boughtCap.wallet.coins !== 0 || !boughtCap.inventory.owned.includes('hat-cap')) {
     throw new Error('the server did not validate and persist a shop purchase');
   }
   const repeatedCap = await sendShopPurchase('e'.repeat(32), 'hat-cap');
-  if (repeatedCap.accepted || repeatedCap.reason !== 'owned' || repeatedCap.wallet.coins !== 10) {
+  if (repeatedCap.accepted || repeatedCap.reason !== 'owned' || repeatedCap.wallet.coins !== 0) {
     throw new Error('the server allowed a second purchase of an already-owned item');
   }
   const lockedCrown = await sendShopPurchase('f'.repeat(32), 'hat-crown');
-  if (lockedCrown.accepted || lockedCrown.reason !== 'level' || lockedCrown.wallet.coins !== 10) {
+  if (lockedCrown.accepted || lockedCrown.reason !== 'level' || lockedCrown.wallet.coins !== 0) {
     throw new Error('the server allowed a purchase above the player level');
   }
+  const restRoom = `REST${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+  await walletProbe.evaluate(({ room, id, ticket }) => window.walletSocket.send(JSON.stringify({
+    t: 'join', room, id, ticket, name: 'Wallet test', look: {}, lvl: 99,
+  })), { room: restRoom, id: probeId, ticket: probeTicket });
+  await until(() => walletProbe.evaluate((room) => window.walletEvents.some((message) => message.t === 'welcome' && message.room === room), restRoom),
+    'wallet probe joins an isolated home-reward room');
+  const restoredProbeAccount = await walletProbe.evaluate((room) => window.walletEvents.find((message) => message.t === 'welcome' && message.room === room), restRoom);
+  if (restoredProbeAccount.wallet.coins !== 0 || restoredProbeAccount.wallet.xp !== 0
+    || !restoredProbeAccount.inventory.owned.includes('hat-cap')) {
+    throw new Error('server-persisted purchases did not survive joining another room');
+  }
+  const sendDailyActivityClaim = async (activity) => {
+    const previous = await walletProbe.evaluate((kind) => window.walletEvents.filter((message) => message.t === 'daily-activity-result' && message.activity === kind).length, activity);
+    await walletProbe.evaluate((kind) => window.walletSocket.send(JSON.stringify({ t: 'daily-activity-claim', activity: kind })), activity);
+    await until(() => walletProbe.evaluate(({ activity, previous }) => window.walletEvents.filter((message) => message.t === 'daily-activity-result' && message.activity === activity).length > previous,
+      { activity, previous }), `daily activity ${activity}`);
+    return walletProbe.evaluate((kind) => {
+      const events = window.walletEvents.filter((message) => message.t === 'daily-activity-result' && message.activity === kind);
+      return events[events.length - 1];
+    }, activity);
+  };
+  const initialClaimWallet = lockedCrown.wallet;
+  const restWithoutHome = await sendDailyActivityClaim('rest');
+  if (restWithoutHome.accepted || restWithoutHome.reason !== 'server-only'
+    || restWithoutHome.wallet.revision !== initialClaimWallet.revision) throw new Error('the server accepted a client-reported rest reward');
+  await walletProbe.evaluate((stage) => window.walletSocket.send(JSON.stringify({ t: 'ger-claim', i: 0, stage })), rules.GER_DONE);
+  await until(() => walletProbe.evaluate((id) => window.walletEvents.some((message) => message.t === 'lot' && message.act === 'claim' && message.by === id), probeId),
+    'wallet probe claims its home');
+  const claimedLot = await walletProbe.evaluate((id) => window.walletEvents.find((message) => message.t === 'lot' && message.act === 'claim' && message.by === id), probeId);
+  if (claimedLot.lot.stage !== 1) throw new Error('the server trusted a client-submitted initial ger stage');
+  await walletProbe.evaluate((stage) => window.walletSocket.send(JSON.stringify({ t: 'ger-stage', stage })), rules.GER_DONE);
+  await until(() => walletProbe.evaluate(() => window.walletEvents.some((message) => message.t === 'deny' && message.act === 'ger' && message.why === 'stage')),
+    'server rejects skipped ger construction stages');
+  await walletProbe.evaluate(() => window.walletSocket.send(JSON.stringify({ t: 'ger-stage', stage: 2 })));
+  await until(() => walletProbe.evaluate((id) => window.walletEvents.some((message) => message.t === 'lot' && message.act === 'stage' && message.by === id && message.lot.stage === 2), probeId),
+    'server accepts the next ger construction stage');
+  const restClaim = await sendDailyActivityClaim('rest');
+  if (restClaim.accepted || restClaim.reason !== 'server-only' || restClaim.wallet.revision !== initialClaimWallet.revision) {
+    throw new Error('owning a ger allowed an unverified rest reward');
+  }
+  const snackClaim = await sendDailyActivityClaim('snack');
+  if (snackClaim.accepted || snackClaim.reason !== 'server-only' || snackClaim.wallet.revision !== initialClaimWallet.revision) {
+    throw new Error('the server accepted a client-reported snack reward');
+  }
+  const churnClaim = await sendDailyActivityClaim('churn');
+  if (churnClaim.accepted || churnClaim.reason !== 'server-only' || churnClaim.wallet.revision !== initialClaimWallet.revision) {
+    throw new Error('the server accepted a client-reported churn reward');
+  }
+  const invalidActivity = await sendDailyActivityClaim('unknown');
+  if (invalidActivity.accepted || invalidActivity.reason !== 'invalid'
+    || invalidActivity.wallet.revision !== initialClaimWallet.revision) throw new Error('the server accepted an unknown daily activity');
+  ok('unverified daily ger-activity claims are denied without changing the wallet');
   await walletProbe.close();
   ok('wallet overspending is denied and transaction replays do not duplicate changes');
   const questProbe = await browser.newPage();
@@ -273,36 +308,26 @@ try {
     quests: { d: questDay, list: assignedQuests.map((entry) => ({ ...entry, p: entry.k === questKey ? questTarget : 0, done: false })) },
   };
   const claimedQuest = await claimDailyQuest(questKey, 0, completedQuestState);
-  const questMultiplier = assignedQuests[0].season ? 1.5 : 1;
-  const expectedQuestCoins = Math.round(rules.DAILY_QUEST_REWARDS[questKey].coins * questMultiplier);
-  const expectedQuestXp = Math.round(rules.DAILY_QUEST_REWARDS[questKey].xp * questMultiplier);
-  if (!claimedQuest.accepted || claimedQuest.wallet.coins !== 40 + expectedQuestCoins || claimedQuest.wallet.xp !== expectedQuestXp) {
-    throw new Error(`the server did not grant the canonical daily quest reward: ${JSON.stringify(claimedQuest)}`);
-  }
-  const questReplay = await claimDailyQuest(questKey, claimedQuest.progress.revision, completedQuestState);
-  if (!questReplay.accepted || !questReplay.duplicate || questReplay.wallet.coins !== claimedQuest.wallet.coins
-    || questReplay.wallet.xp !== claimedQuest.wallet.xp || questReplay.wallet.revision !== claimedQuest.wallet.revision) {
-    throw new Error('daily quest reward was not idempotent');
-  }
-  const incompleteState = {
-    produce: {}, fish: {},
-    quests: { d: questDay, list: assignedQuests.map((entry) => ({ ...entry, p: entry.k === questKey ? questTarget - 1 : 0, done: false })) },
-  };
-  const incompleteClaim = await claimDailyQuest(questKey, questReplay.progress.revision, incompleteState);
-  if (incompleteClaim.accepted || incompleteClaim.reason !== 'incomplete' || incompleteClaim.wallet.coins !== claimedQuest.wallet.coins) {
-    throw new Error('the server paid an incomplete daily quest');
+  if (claimedQuest.accepted || claimedQuest.reason !== 'server-only'
+    || claimedQuest.wallet.coins !== 40 || claimedQuest.wallet.xp !== 0 || claimedQuest.wallet.revision !== 0) {
+    throw new Error(`the server accepted client-reported quest progress: ${JSON.stringify(claimedQuest)}`);
   }
   const unassignedKey = Object.keys(rules.DAILY_QUEST_REWARDS).find((key) => !assignedQuests.some((entry) => entry.k === key));
   const unassignedState = {
     produce: {}, fish: {},
     quests: { d: questDay, list: [{ k: unassignedKey, p: rules.QUEST_TARGETS[unassignedKey], done: false }] },
   };
-  const unassignedClaim = await claimDailyQuest(unassignedKey, incompleteClaim.progress.revision, unassignedState);
-  if (unassignedClaim.accepted || unassignedClaim.reason !== 'not-assigned' || unassignedClaim.wallet.coins !== claimedQuest.wallet.coins) {
-    throw new Error('the server paid a quest that was not assigned to the player');
+  const invalidQuest = await claimDailyQuest(unassignedKey, 0, unassignedState);
+  if (invalidQuest.accepted || invalidQuest.reason !== 'server-only'
+    || invalidQuest.wallet.coins !== 40 || invalidQuest.wallet.xp !== 0 || invalidQuest.wallet.revision !== 0) {
+    throw new Error('the server accepted an unassigned client-reported quest');
+  }
+  const unknownQuest = await claimDailyQuest('unknown', 0, unassignedState);
+  if (unknownQuest.accepted || unknownQuest.reason !== 'invalid' || unknownQuest.wallet.revision !== 0) {
+    throw new Error('the server accepted an invalid quest reward request');
   }
   await questProbe.close();
-  ok('daily quest payouts are assigned, server-priced, and idempotent');
+  ok('client-reported daily quest claims are denied without changing the wallet');
   if (!(await a.evaluate(() => {
     const v = TG.store.active().village;
     const saved = JSON.parse(localStorage.getItem(TG.store.KEY) || 'null');
@@ -329,8 +354,8 @@ try {
   ok('an invalid ticket cannot take over a profile identity');
 
   await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Сарнай')), 'A sees B');
-  await until(() => b.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Бат' && o.look.hat === 'cap')), 'B sees A with purchased hat');
-  ok('players see each other (names and outfits)');
+  await until(() => b.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Бат' && o.look.deel === 'blue' && !o.look.hat)), 'B sees A in the server-owned starter outfit');
+  ok('players see each other with server-owned starter outfits');
 
   await a.evaluate(() => TG._village.mount('black'));
   await until(() => b.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Бат' && o.look.ride === 'horse' && o.look.coat === 'black')), 'B sees A on a black horse');
@@ -369,13 +394,31 @@ try {
   for (const s of ['shal', 'khana', 'khaalga']) { await a.evaluate((x) => TG.tasks.pick(x), s); await sleep(250); await a.evaluate(() => TG.tasks.finish()); await sleep(350); }
   await until(() => b.evaluate(() => { const l = TG._village.lots()[2]; return l && l.n === 'Бат' && TG.vrules.lotStage(l) === 3; }), 'B sees A\'s ger at stage 3');
   await a.evaluate(() => TG.tasks.cancel());
-  if ((await a.evaluate(() => TG.store.active().village.coins)) !== purchased.coins) throw new Error('building a ger should not cost coins');
+  if ((await a.evaluate(() => TG.store.active().village.coins)) !== spentWallet.coins) throw new Error('building a ger should not cost coins');
   // B started a ger on plot 2 while offline: plot 2 is A's now, so B's half-built ger moves to a free plot
   await b.evaluate(() => { const v = TG.store.active().village; v.ger.stage = 1; v.ger.lot = 2; });
   await b.evaluate(() => TG._village.reconnect());
   await until(() => b.evaluate(() => TG._village.lots().some((l, i) => i !== 2 && l && l.n === 'Сарнай' && TG.vrules.lotStage(l) === 1)), 'B re-claims a different free plot when its old one is taken');
   if ((await b.evaluate(() => TG._village.lots()[2].n)) !== 'Бат') throw new Error('a taken lot was overwritten');
   ok('building a ger syncs stage by stage; taken plots are protected; progress follows the player into a room');
+
+  const snackWalletBefore = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
+  await a.evaluate(() => TG._village.enterGer(2));
+  await a.waitForSelector('.ger-scene');
+  await a.evaluate(async () => {
+    const scene = TG._village.ger;
+    scene.me.x = 138; scene.me.y = 118;
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    scene.interact();
+  });
+  await sleep(500);
+  const snackWalletAfter = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
+  if (snackWalletAfter.coins !== snackWalletBefore.coins || snackWalletAfter.xp !== snackWalletBefore.xp) {
+    throw new Error(`an unverified online ger snack changed the wallet: ${JSON.stringify({ snackWalletBefore, snackWalletAfter })}`);
+  }
+  await a.evaluate(() => { document.querySelectorAll('.modal-x').forEach((button) => button.click()); TG._village.ger.close(); });
+  await sleep(250);
+  ok('the online ger snack interaction does not grant an unverified wallet reward');
 
   // live wrestling: A invites B, B accepts, both play exchanges until someone wins
   const bId = await b.evaluate(() => TG.store.active().village.id);

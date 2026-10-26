@@ -13,6 +13,7 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const R = require('./js/village/rules.js');
+const WD = require('./js/village/world.js');
 const QR = require('./js/qr.js');
 const basar = require('./basar-ai.js')(__dirname);
 const { createRoomStore } = require('./room-store');
@@ -182,42 +183,35 @@ const cleanName = (s) => String(s || '').replace(/[<>]/g, '').trim().slice(0, 16
 const pub = (p) => ({ id: p.id, name: p.name, look: p.look, lvl: p.lvl, x: p.x, y: p.y, dir: p.dir });
 const WALLET_MAX = 2_000_000_000;
 const walletLevel = (wallet) => num(R.level(wallet.xp).l, 1, 99);
-function walletSeed(value) {
-  const integer = (amount, fallback, maximum) => Number.isSafeInteger(amount) ? Math.max(0, Math.min(maximum, amount)) : fallback;
-  return { coins: integer(value && value.coins, 40, 100_000), xp: integer(value && value.xp, 0, 1_000_000) };
+const PLAYER_HW = 0.26, PLAYER_HH = 0.14, MOVE_MAX_SPEED = 12.5, MOVE_SLACK = 0.18, JUMP_MS = 460;
+const safeSpawn = { x: 17, y: 13, dir: 0 };
+function positionOpen(x, y, jumping) {
+  const solid = (tx, ty) => WD.blocked(tx, ty) && !(jumping && (WD.g[ty] || '')[tx] === 'r');
+  const fx = x + 0.5, fy = y + 0.82;
+  return !solid(Math.floor(fx - PLAYER_HW), Math.floor(fy - PLAYER_HH))
+    && !solid(Math.floor(fx + PLAYER_HW), Math.floor(fy - PLAYER_HH))
+    && !solid(Math.floor(fx - PLAYER_HW), Math.floor(fy + PLAYER_HH))
+    && !solid(Math.floor(fx + PLAYER_HW), Math.floor(fy + PLAYER_HH));
 }
-function inventorySeed(value) {
-  return {
-    owned: value && Array.isArray(value.owned) ? value.owned.slice(0, R.ITEMS.length) : [],
-    rod: value && Number.isInteger(value.rod) ? Math.max(1, Math.min(2, value.rod)) : 1,
-  };
+function validPosition(position) {
+  return position && Number.isFinite(position.x) && Number.isFinite(position.y)
+    && position.x >= 0.5 && position.x <= R.W - 2 && position.y >= 0.5 && position.y <= R.H - 2
+    && positionOpen(position.x, position.y, false);
 }
-function sanitizeProgress(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return { produce: {}, fish: {}, quests: { d: '', list: [] } };
-  const counts = (source, allowed) => {
-    if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
-    return Object.fromEntries(Object.entries(source)
-      .filter(([key, amount]) => Object.hasOwn(allowed, key) && Number.isSafeInteger(amount) && amount >= 0)
-      .map(([key, amount]) => [key, Math.min(1000, amount)]));
-  };
-  const rawQuests = value.quests && typeof value.quests === 'object' && !Array.isArray(value.quests) ? value.quests : {};
-  const parsedDay = typeof rawQuests.d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawQuests.d)
-    ? new Date(`${rawQuests.d}T00:00:00Z`) : null;
-  const day = parsedDay && !Number.isNaN(parsedDay.getTime()) && parsedDay.toISOString().slice(0, 10) === rawQuests.d ? rawQuests.d : '';
-  const list = Array.isArray(rawQuests.list) ? rawQuests.list.slice(0, 4).flatMap((quest) => {
-    if (!quest || typeof quest !== 'object' || Array.isArray(quest)
-      || typeof quest.k !== 'string' || !Object.hasOwn(R.QUEST_TARGETS, quest.k)) return [];
-    const target = R.QUEST_TARGETS[quest.k];
-    const progress = Number.isSafeInteger(quest.p) ? Math.max(0, Math.min(target, quest.p)) : 0;
-    const saved = { k: quest.k, p: progress, done: quest.done === true && progress >= target };
-    if (typeof quest.season === 'string' && /^[a-z0-9-]{1,32}$/i.test(quest.season)) saved.season = quest.season;
-    return [saved];
-  }) : [];
-  return {
-    produce: counts(value.produce, R.DAIRY),
-    fish: counts(value.fish, R.FISH),
-    quests: { d: day, list },
-  };
+function clearMovementPath(from, to, jumping) {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  const steps = Math.max(1, Math.ceil(distance / 0.1));
+  for (let i = 1; i <= steps; i++) {
+    const fraction = i / steps;
+    if (!positionOpen(from.x + (to.x - from.x) * fraction, from.y + (to.y - from.y) * fraction, jumping)) return false;
+  }
+  return true;
+}
+function walletSeed() {
+  return { coins: 40, xp: 0 };
+}
+function inventorySeed() {
+  return { owned: ['deel-blue'], rod: 1 };
 }
 function ownedLook(look, inventory) {
   const clean = R.cleanLook(look);
@@ -564,9 +558,7 @@ function syncPlayerLevel(conn) {
 }
 
 async function joinPlayer(conn, message, code, id, now) {
-  const account = await roomStore.getAccount(id, walletSeed(message.wallet), inventorySeed(message.inventory));
-  const storedProgress = await roomStore.getProgress(id, sanitizeProgress(message.progress));
-  const progress = { revision: storedProgress.revision, state: sanitizeProgress(storedProgress.state) };
+  const account = await roomStore.getAccount(id, walletSeed(), inventorySeed());
   await leave(conn);
   const r = room(code);
   const latestState = await roomStore.getRoomState(code);
@@ -577,12 +569,18 @@ async function joinPlayer(conn, message, code, id, now) {
   }
   const old = r.players.get(id);
   const replacingRemote = r.remotePlayers.has(id);
+  const activePlayers = roomStore.sharedRealtime && !old && !replacingRemote ? await roomStore.listPresence(code) : [];
+  const previousPosition = old || r.remotePlayers.get(id) || activePlayers.find((player) => player.id === id);
+  const position = validPosition(previousPosition) ? previousPosition : safeSpawn;
   if (old) {
     old.conn.player = null; old.conn.room = null;
     old.conn.send({ t: 'replaced' });
     setTimeout(() => old.conn.socket.destroy(), 50);
   }
-  const p = { id, conn, name: cleanName(message.name), look: ownedLook(message.look, account.inventory), lvl: walletLevel(account.wallet), x: numf(message.x, 0.5, R.W - 2), y: numf(message.y, 0.5, R.H - 2), dir: num(message.dir, 0, 3) };
+  const p = {
+    id, conn, name: cleanName(message.name), look: ownedLook(message.look, account.inventory), lvl: walletLevel(account.wallet),
+    x: position.x, y: position.y, dir: num(position.dir, 0, 3), moveAt: Date.now(), jt: 0,
+  };
   const previousInstance = await roomStore.registerPresence(INSTANCE_ID, code, pub(p));
   if (conn.socket.destroyed) {
     await roomStore.removePresence(INSTANCE_ID, p.id);
@@ -609,8 +607,10 @@ async function joinPlayer(conn, message, code, id, now) {
   ];
   conn.wallet = account.wallet;
   conn.inventory = account.inventory;
-  conn.progressRevision = progress.revision;
-  conn.send({ t: 'welcome', v: R.VERSION, now, day: villageDay(), room: code, players, lots: r.lots, chat: r.chat, wallet: account.wallet, inventory: account.inventory, progress });
+  conn.send({
+    t: 'welcome', v: R.VERSION, now, day: villageDay(), room: code, players, lots: r.lots, chat: r.chat,
+    look: p.look, wallet: account.wallet, inventory: account.inventory, position: { x: p.x, y: p.y, dir: p.dir },
+  });
   const replacing = Boolean(old || replacingRemote || previousInstance);
   broadcast(r, { t: 'join', p: pub(p), ...(replacing ? { replace: true } : {}) }, conn);
   census();
@@ -623,22 +623,20 @@ async function handleWalletOperation(conn, message) {
   const action = message.action;
   const coins = message.coins, xp = message.xp;
   if (!/^[a-f0-9]{32}$/i.test(operation)) return conn.send({ t: 'wallet-result', op: operation.slice(0, 40), accepted: false, reason: 'invalid', wallet: conn.wallet });
-  const valid = action === 'reward'
-    ? Number.isInteger(coins) && coins >= 0 && coins <= 10_000 && Number.isInteger(xp) && xp >= 0 && xp <= 100 && (coins > 0 || xp > 0)
-    : action === 'spend' && Number.isInteger(coins) && coins > 0 && coins <= 10_000 && xp === 0;
+  if (action === 'reward') {
+    return conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'server-only', wallet: conn.wallet });
+  }
+  const valid = action === 'spend' && Number.isInteger(coins) && coins > 0 && coins <= 10_000 && xp === 0;
   if (!valid) return conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'invalid', wallet: conn.wallet });
 
   try {
     const outcome = await roomStore.mutateWallet(p.id, operation, (wallet) => {
-      if (action === 'spend' && wallet.coins < coins) {
+      if (wallet.coins < coins) {
         return { changed: false, result: { accepted: false, reason: 'insufficient' } };
-      }
-      if (action === 'reward' && (wallet.coins > WALLET_MAX - coins || wallet.xp > WALLET_MAX - xp)) {
-        return { changed: false, result: { accepted: false, reason: 'limit' } };
       }
       return {
         changed: true,
-        wallet: { coins: wallet.coins + (action === 'reward' ? coins : -coins), xp: wallet.xp + xp },
+        wallet: { coins: wallet.coins - coins, xp: wallet.xp },
         result: { accepted: true },
       };
     });
@@ -658,81 +656,26 @@ function villageDay(date = new Date()) {
   }).formatToParts(date).map(({ type, value }) => [type, value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
-function villageSeason(day) {
-  const [year, month, date] = day.split('-').map(Number);
-  const index = Math.floor(Date.UTC(year, month - 1, date) / 864e5) % 4;
-  return ['spring', 'summer', 'autumn', 'winter'][index];
+async function handleDailyActivityClaim(conn, message) {
+  const p = conn.player;
+  if (!p || !conn.room) return;
+  const activity = typeof message.activity === 'string' && message.activity.length <= 16 ? message.activity : '';
+  const valid = Object.hasOwn(R.DAILY_ACTIVITY_REWARDS, activity);
+  const day = villageDay();
+  conn.send({
+    t: 'daily-activity-result', activity, day, accepted: false,
+    reason: valid ? 'server-only' : 'invalid', wallet: conn.wallet,
+  });
 }
 async function handleQuestClaim(conn, message) {
   const p = conn.player;
   if (!p) return;
   const quest = typeof message.quest === 'string' && message.quest.length <= 16 ? message.quest : '';
-  const reward = Object.hasOwn(R.DAILY_QUEST_REWARDS, quest) ? R.DAILY_QUEST_REWARDS[quest] : null;
-  if (!reward || !Number.isSafeInteger(message.revision) || message.revision < 0
-    || !message.state || typeof message.state !== 'object' || Array.isArray(message.state)) {
-    return conn.send({ t: 'quest-claim-result', quest, accepted: false, reason: 'invalid', wallet: conn.wallet });
-  }
-  let progress;
-  try {
-    progress = await roomStore.saveProgress(p.id, message.revision, sanitizeProgress(message.state));
-    conn.progressRevision = progress.revision;
-    if (!progress.accepted) {
-      return conn.send({
-        t: 'quest-claim-result', quest, accepted: false, reason: 'stale',
-        wallet: conn.wallet, progress: { revision: progress.revision, state: progress.state },
-      });
-    }
-    const day = villageDay();
-    const daily = progress.state.quests;
-    if (daily.d !== day) {
-      return conn.send({
-        t: 'quest-claim-result', quest, accepted: false, reason: 'day',
-        wallet: conn.wallet, progress: { revision: progress.revision, state: progress.state },
-      });
-    }
-    const task = daily.list.find((entry) => entry.k === quest);
-    const assigned = R.dailyQuests(p.id, day).find((entry) => entry.k === quest);
-    const target = R.QUEST_TARGETS[quest];
-    if (!assigned) {
-      return conn.send({
-        t: 'quest-claim-result', quest, accepted: false, reason: 'not-assigned',
-        wallet: conn.wallet, progress: { revision: progress.revision, state: progress.state },
-      });
-    }
-    if (!task || task.p < target) {
-      return conn.send({
-        t: 'quest-claim-result', quest, accepted: false, reason: 'incomplete',
-        wallet: conn.wallet, progress: { revision: progress.revision, state: progress.state },
-      });
-    }
-    const multiplier = assigned.season && assigned.season === villageSeason(day) ? 1.5 : 1;
-    const coins = Math.round(reward.coins * multiplier), xp = Math.round(reward.xp * multiplier);
-    const operation = `quest:${day}:${quest}`;
-    const outcome = await roomStore.mutateWallet(p.id, operation, (wallet) => {
-      if (wallet.coins > WALLET_MAX - coins || wallet.xp > WALLET_MAX - xp) {
-        return { changed: false, result: { accepted: false, reason: 'limit' } };
-      }
-      return {
-        changed: true,
-        wallet: { coins: wallet.coins + coins, xp: wallet.xp + xp },
-        result: { accepted: true },
-      };
-    });
-    conn.wallet = outcome.wallet;
-    conn.inventory = outcome.inventory;
-    syncPlayerLevel(conn);
-    conn.send({
-      t: 'quest-claim-result', quest, ...outcome.result, duplicate: outcome.duplicate, wallet: outcome.wallet,
-      progress: { revision: progress.revision, state: progress.state },
-      reward: outcome.result.accepted ? { coins, xp } : undefined,
-    });
-  } catch (error) {
-    console.error('Could not claim daily quest reward:', error.message);
-    conn.send({
-      t: 'quest-claim-result', quest, accepted: false, reason: 'storage', wallet: conn.wallet,
-      ...(progress && { progress: { revision: progress.revision, state: progress.state } }),
-    });
-  }
+  const valid = Object.hasOwn(R.DAILY_QUEST_REWARDS, quest);
+  conn.send({
+    t: 'quest-claim-result', quest, accepted: false,
+    reason: valid ? 'server-only' : 'invalid', wallet: conn.wallet,
+  });
 }
 
 async function handleShopPurchase(conn, message) {
@@ -770,20 +713,9 @@ async function handleShopPurchase(conn, message) {
   }
 }
 
-async function handleProgressSave(conn, message) {
+async function handleProgressSave(conn) {
   if (!conn.player) return;
-  if (!Number.isSafeInteger(message.revision) || message.revision < 0
-    || !message.state || typeof message.state !== 'object' || Array.isArray(message.state)) {
-    return conn.send({ t: 'progress-result', accepted: false, reason: 'invalid', revision: conn.progressRevision });
-  }
-  try {
-    const result = await roomStore.saveProgress(conn.player.id, message.revision, sanitizeProgress(message.state));
-    conn.progressRevision = result.revision;
-    conn.send({ t: 'progress-result', ...result });
-  } catch (error) {
-    console.error('Could not save player progress:', error.message);
-    conn.send({ t: 'progress-result', accepted: false, reason: 'storage', revision: conn.progressRevision });
-  }
+  conn.send({ t: 'progress-result', accepted: false, reason: 'server-only', revision: 0 });
 }
 
 async function persistLotAction(conn, action, message) {
@@ -809,14 +741,16 @@ async function persistLotAction(conn, action, message) {
             roof: Object.hasOwn(R.ROOF, message.roof) ? message.roof : 'blue',
             door: Object.hasOwn(R.DOOR, message.door) ? message.door : 'red',
             furn: [],
-            stage: Number.isInteger(message.stage) ? Math.max(1, Math.min(R.GER_DONE, message.stage)) : 1,
+            stage: 1,
           };
           lots[i] = lot;
         } else {
           if (!lot || lot.by !== p.id) return { changed: false };
           if (action === 'stage') {
-            if (!Number.isInteger(message.stage)) return { changed: false };
-            lot.stage = Math.max(1, Math.min(R.GER_DONE, message.stage));
+            if (!Number.isInteger(message.stage) || R.lotStage(lot) >= R.GER_DONE || message.stage !== R.lotStage(lot) + 1) {
+              return { changed: false, deny: 'stage' };
+            }
+            lot.stage = message.stage;
           } else {
             if (Object.hasOwn(R.ROOF, message.roof)) lot.roof = message.roof;
             if (Object.hasOwn(R.DOOR, message.door)) lot.door = message.door;
@@ -867,11 +801,22 @@ function onMessage(conn, text) {
   const p = conn.player, r = conn.room;
   if (!p || !r) return;
   switch (m.t) {
-    case 'move':
-      p.x = numf(m.x, 0.5, R.W - 2); p.y = numf(m.y, 0.5, R.H - 2); p.dir = num(m.dir, 0, 3);
+    case 'move': {
+      const t = Date.now(), next = { x: numf(m.x, 0.5, R.W - 2), y: numf(m.y, 0.5, R.H - 2) };
+      const elapsed = Math.min(0.5, Math.max(0, (t - p.moveAt) / 1000));
+      const maxDistance = MOVE_MAX_SPEED * elapsed + MOVE_SLACK;
+      const distance = Math.hypot(next.x - p.x, next.y - p.y);
+      const jumping = t - p.jt < JUMP_MS;
+      if (distance > maxDistance || !clearMovementPath(p, next, jumping)) {
+        p.moveAt = t;
+        conn.send({ t: 'move-correct', x: p.x, y: p.y, dir: p.dir });
+        return;
+      }
+      p.x = next.x; p.y = next.y; p.dir = num(m.dir, 0, 3); p.moveAt = t;
       updatePresence(p);
       broadcast(r, { t: 'move', id: p.id, x: p.x, y: p.y, dir: p.dir }, conn);
       break;
+    }
     case 'jump': { // show other players your jump, at most a few times a second
       const t = Date.now(); if (t - (p.jt || 0) < 300) return; p.jt = t;
       broadcast(r, { t: 'jump', id: p.id }, conn);
@@ -895,6 +840,9 @@ function onMessage(conn, text) {
       break;
     case 'quest-claim':
       handleQuestClaim(conn, m);
+      break;
+    case 'daily-activity-claim':
+      handleDailyActivityClaim(conn, m);
       break;
     case 'shop-buy':
       handleShopPurchase(conn, m);

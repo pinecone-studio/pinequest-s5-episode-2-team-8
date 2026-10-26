@@ -8,7 +8,7 @@ const R = require('./js/village/rules.js');
 const ROOM_CODE = /^[A-Z0-9]{3,8}$/;
 const PLAYER_ID = /^[\w-]{4,24}$/;
 const PLAYER_TICKET = /^[a-f0-9]{64}$/i;
-const WALLET_OPERATION = /^(?:[a-f0-9]{32}|quest:\d{4}-\d{2}-\d{2}:[a-z]{1,16}|wrestle:[\w-]{1,64})$/i;
+const WALLET_OPERATION = /^(?:[a-f0-9]{32}|(?:quest|activity):\d{4}-\d{2}-\d{2}:[a-z]{1,16}|wrestle:[\w-]{1,64})$/i;
 const WALLET_MAX = 2_000_000_000;
 const REALTIME_CHANNEL = 'naadamy_realtime';
 
@@ -183,7 +183,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         wallet.inventory = outcome && outcome.changed && outcome.inventory ? cleanInventory(outcome.inventory) : inventory;
         const result = outcome && outcome.result ? outcome.result : { accepted: false };
         wallet.operations[operation] = result;
-        const oldOperations = Object.keys(wallet.operations).filter((key) => !key.startsWith('quest:') && !key.startsWith('wrestle:'));
+        const oldOperations = Object.keys(wallet.operations).filter((key) => !key.startsWith('quest:') && !key.startsWith('activity:') && !key.startsWith('wrestle:'));
         for (const old of oldOperations.slice(0, Math.max(0, oldOperations.length - 200))) delete wallet.operations[old];
         Object.defineProperty(wallets, id, { value: wallet, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(walletFile, wallets);
