@@ -247,6 +247,9 @@ public sealed partial class Game
             GUILayout.BeginHorizontal(g.sBtn); GUILayout.Label("<b>" + prompts[pi % prompts.Count] + "</b>", g.sLabel); if (GUILayout.Button(Loc.L("Өөр", "Other"), g.sBtn, GUILayout.Width(g.U(70)))) g.Later(() => pi++); GUILayout.EndHorizontal();
             GUILayout.Label(Loc.L("Хэн ярьж байна?", "Who is telling?"), g.sSmall);
             int hit = g.Chips(fam.Select(f => f.Name.ToString()).ToList(), who, 70); if (hit >= 0) who = hit;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            GUILayout.Label(Loc.L("Дуу хоолой бичих нь утас, компьютерийн апп дээр ажиллана.", "Voice recording works in the phone and computer app."), g.sSmall); // no microphone in a web build
+#else
             if (Microphone.devices.Length > 0)
             {
                 GUILayout.Label(Loc.L("Дуу хоолой", "Voice"), g.sSmall);
@@ -256,6 +259,7 @@ public sealed partial class Game
                 GUILayout.EndHorizontal();
                 if (recording && Time.time - recStart >= 300) StopRec();
             }
+#endif
             GUILayout.Label(Loc.L("Тэмдэглэл", "Notes"), g.sSmall);
             text = GUILayout.TextArea(text, 2000, new GUIStyle(g.sBtn) { alignment = TextAnchor.UpperLeft, wordWrap = true }, GUILayout.MinHeight(g.U(80)));
             if (g.Btn(Loc.L("Хадгалах (+5 од)", "Save (+5 stars)"), true, 48)) g.Later(() => Save(g));
@@ -266,12 +270,19 @@ public sealed partial class Game
 #if UNITY_ANDROID
             if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(UnityEngine.Android.Permission.Microphone)) { UnityEngine.Android.Permission.RequestUserPermission(UnityEngine.Android.Permission.Microphone); status = Loc.L("Микрофоны зөвшөөрөл өгөөд дахин дар.", "Allow the microphone, then tap again."); return; }
 #endif
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
             rec = Microphone.Start(null, false, 300, 22050); recStart = Time.time; recording = rec != null;
+#endif
             if (!recording) status = Loc.L("Микрофон ашиглах зөвшөөрөл алга.", "Microphone permission denied.");
         }
         void StopRec()
         {
-            if (!recording) return; int pos = Microphone.GetPosition(null); Microphone.End(null); recording = false;
+            if (!recording) return;
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+            int pos = Microphone.GetPosition(null); Microphone.End(null); recording = false;
+#else
+            int pos = 0; recording = false;
+#endif
             if (rec != null && pos > 0) { samples = new float[pos * rec.channels]; rec.GetData(samples, 0); status = "√"; }
         }
         void Save(Game g)
@@ -284,7 +295,12 @@ public sealed partial class Game
             g.App.familyStars += 5; g.App.Save(); g.Close(); Sfx.Win(); g.Confetti(40); g.CheckAchievements();
             g.Toast(Loc.L("Дурсамж хадгалагдлаа! +5 од", "Memory saved! +5 stars"));
         }
-        public override void Closed(Game g) { if (recording) Microphone.End(null); }
+        public override void Closed(Game g)
+        {
+#if !(UNITY_WEBGL && !UNITY_EDITOR)
+            if (recording) Microphone.End(null);
+#endif
+        }
     }
 
     // ================================================================ about / pitch

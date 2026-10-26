@@ -20,6 +20,7 @@ Both use the web version's server. On a computer on the same Wi-Fi, run `node se
 
 - **Android:** install *Android Build Support* (with OpenJDK and the Android SDK & NDK) for 6000.6.7f1 in Unity Hub → Installs → ⚙ → Add modules. Then use the menu **Naadamy → Build Android APK** (output: `Builds/Android/Naadamy.apk`).
 - **Windows:** **Naadamy → Build Windows** (needs *Windows Build Support*).
+- **Web (browser):** install *WebGL Build Support*, then **Naadamy → Build WebGL** (output: `Builds/WebGL`, with its own `vercel.json`). Put it online with `npx vercel deploy --prod` from that folder; it is live at https://naadamy-unity.vercel.app. In a browser the game brings its own font (`Resources/Fonts`, a browser has none with Mongolian letters), plays together over the browser's own WebSocket (`Plugins/WebGL`), needs an `https://` server address for Basar AI and playing together, and has no voice recording in the memory book.
 
 ## What is where
 

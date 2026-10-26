@@ -47,10 +47,23 @@ public static class NaadamySetup
     [MenuItem("Naadamy/Build Windows")]
     public static void BuildWindows() => Build(BuildTarget.StandaloneWindows64, "Builds/Windows/Naadamy.exe");
 
+    /** The web build (Builds/WebGL), for a static host such as Vercel. From a terminal:
+     *  Unity -batchmode -quit -projectPath NaadamyUnity -buildTarget WebGL -executeMethod NaadamySetup.BuildWebGL */
+    [MenuItem("Naadamy/Build WebGL")]
+    public static void BuildWebGL()
+    {
+        PlayerSettings.WebGL.template = "PROJECT:Naadamy";             // Assets/WebGLTemplates/Naadamy: the game fills the browser window
+        PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip; // the host sends the .gz files with Content-Encoding: gzip (see vercel.json there)
+        PlayerSettings.WebGL.decompressionFallback = false;
+        PlayerSettings.WebGL.dataCaching = true;                       // a second visit starts without downloading the game again
+        Build(BuildTarget.WebGL, "Builds/WebGL");
+    }
+
     static void Build(BuildTarget target, string path)
     {
         if (!File.Exists(SCENE)) Setup();
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions { scenes = new[] { SCENE }, locationPathName = path, target = target });
         Debug.Log($"Naadamy build {target}: {report.summary.result} → {path}");
+        if (Application.isBatchMode && report.summary.result != UnityEditor.Build.Reporting.BuildResult.Succeeded) EditorApplication.Exit(1); // a failed terminal build must not look like a success
     }
 }

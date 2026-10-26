@@ -10,6 +10,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+#if UNITY_WEBGL && !UNITY_EDITOR
+using System.Runtime.InteropServices;
+#endif
 
 public sealed class Net
 {
@@ -39,11 +42,28 @@ public sealed class Net
     ClientWebSocket ws; CancellationTokenSource cts; readonly ConcurrentQueue<string> inbox = new ConcurrentQueue<string>(), outbox = new ConcurrentQueue<string>();
     readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0); int retry; float retryAt = -1; bool closed = true;
     float moveT, lookT; Vector2 sent = new Vector2(-99, -99); string sentLook;
+#if UNITY_WEBGL && !UNITY_EDITOR
+    // in a browser there are no threads: the socket is the browser's own (Plugins/WebGL/NaadamyWs.jslib), read every frame in Tick
+    [DllImport("__Internal")] static extern void NaadamyWsOpen(string url);
+    [DllImport("__Internal")] static extern int NaadamyWsState();
+    [DllImport("__Internal")] static extern void NaadamyWsSend(string msg);
+    [DllImport("__Internal")] static extern string NaadamyWsPoll();
+    [DllImport("__Internal")] static extern void NaadamyWsClose();
+    bool webLive; string webJoin;
+    bool Live => webLive;
+#else
+    bool Live => ws != null;
+#endif
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+    const string WS_SCHEME = "wss://"; // a web page served over https may only open wss
+#else
+    const string WS_SCHEME = "ws://";
+#endif
     static string WsUrl(string server)
     {
         string s = (server ?? "").Trim().TrimEnd('/'); if (s == "") return null;
-        if (s.StartsWith("https://")) s = "wss://" + s.Substring(8); else if (s.StartsWith("http://")) s = "ws://" + s.Substring(7); else if (!s.StartsWith("ws")) s = "ws://" + s;
+        if (s.StartsWith("https://")) s = "wss://" + s.Substring(8); else if (s.StartsWith("http://")) s = "ws://" + s.Substring(7); else if (!s.StartsWith("ws")) s = WS_SCHEME + s;
         return s + "/ws";
     }
     /** Connect (again) with the current server address and room. No address: play alone. */
@@ -57,6 +77,9 @@ public sealed class Net
     public void Close()
     {
         closed = true; retryAt = -1;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (webLive) { webLive = false; NaadamyWsClose(); }
+#endif
         try { cts?.Cancel(); } catch (ObjectDisposedException) { }
         var w = ws; ws = null; cts = null;
         if (w != null) Task.Run(async () => { try { await w.CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", CancellationToken.None); } catch (Exception) { } w.Dispose(); });
@@ -65,9 +88,12 @@ public sealed class Net
     }
     void Open(Game g)
     {
-        var w = new ClientWebSocket(); var c = new CancellationTokenSource(); ws = w; cts = c;
         var V = g.V; string join = Obj("t", "join", "room", room, "id", V.id, "name", V.name) + "," + Raw("look", LookJson(V.look)) + "," + Raw("lvl", Rules.Level(V.xp).l.ToString()) + "," + Raw("x", F2(g.MyX)) + "," + Raw("y", F2(g.MyY)) + "," + Raw("dir", "0");
         string url = serverUrl;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        webLive = true; webJoin = "{" + join + "}"; NaadamyWsOpen(url); // join goes out once the browser says the socket is open
+#else
+        var w = new ClientWebSocket(); var c = new CancellationTokenSource(); ws = w; cts = c;
         Task.Run(async () =>
         {
             try
@@ -87,6 +113,7 @@ public sealed class Net
             catch (Exception) { /* no server, or the Wi-Fi dropped */ }
             if (ws == w) inbox.Enqueue("{\"t\":\"_closed\"}");
         });
+#endif
     }
     async Task SendLoop(ClientWebSocket w, CancellationToken tok)
     {
@@ -100,7 +127,15 @@ public sealed class Net
         }
         catch (Exception) { }
     }
-    public void Send(string json) { if (!Online) return; outbox.Enqueue(json); sendSignal.Release(); }
+    public void Send(string json)
+    {
+        if (!Online) return;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        NaadamyWsSend(json);
+#else
+        outbox.Enqueue(json); sendSignal.Release();
+#endif
+    }
 
     // ---------------------------------------------------------------- tiny JSON writer
     public static string Q(string s)
@@ -119,8 +154,17 @@ public sealed class Net
     // ---------------------------------------------------------------- every frame, on the main thread
     public void Tick(Game g, float dt)
     {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (webLive)
+        {
+            int st = NaadamyWsState();
+            if (st == 1 && webJoin != null) { NaadamyWsSend(webJoin); webJoin = null; }
+            for (string m; (m = NaadamyWsPoll()) != null;) inbox.Enqueue(m);
+            if (st == 2) { webLive = false; NaadamyWsClose(); inbox.Enqueue("{\"t\":\"_closed\"}"); }
+        }
+#endif
         while (inbox.TryDequeue(out var text)) { J m; try { m = J.Parse(text); } catch (Exception) { continue; } Handle(g, m); }
-        if (!closed && ws == null && retryAt > 0 && Time.realtimeSinceStartup > retryAt) { retryAt = -1; status = "reconnecting"; Open(g); }
+        if (!closed && !Live && retryAt > 0 && Time.realtimeSinceStartup > retryAt) { retryAt = -1; status = "reconnecting"; Open(g); }
         foreach (var o in others.Values) // others glide to where the server says they are
         {
             float dx = o.x - o.px, dy = o.y - o.py, d = Mathf.Sqrt(dx * dx + dy * dy); o.moving = d > 0.02f;
