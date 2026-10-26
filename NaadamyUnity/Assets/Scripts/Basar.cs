@@ -68,7 +68,12 @@ public static class Basar
     }
 
     // ---------------------------------------------------------------- talking to the Naadamy server (Claude)
-    static string Url(Game g) { string s = (g.V.server ?? "").Trim().TrimEnd('/'); if (s == "") return null; if (!s.StartsWith("http")) s = "http://" + s; return s + "/api/basar"; }
+#if UNITY_WEBGL && !UNITY_EDITOR
+    const string SCHEME = "https://"; // a web page served over https may only call https
+#else
+    const string SCHEME = "http://";  // node server.js on the local Wi-Fi
+#endif
+    static string Url(Game g) { string s = (g.V.server ?? "").Trim().TrimEnd('/'); if (s == "") return null; if (!s.StartsWith("http")) s = SCHEME + s; return s + "/api/basar"; }
     public static IEnumerator Check(Game g)
     {
         string url = Url(g); if (url == null || checkedAi) yield break;

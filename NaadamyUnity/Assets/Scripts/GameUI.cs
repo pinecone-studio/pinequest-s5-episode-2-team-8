@@ -168,8 +168,16 @@ public sealed partial class Game
     }
 
     // ================================================================ OnGUI
+#if UNITY_WEBGL
+    // a browser has no system fonts for Unity to fall back on, so without its own font the web build shows no Cyrillic or symbols
+    static Font webFont;
+#endif
     void OnGUI()
     {
+#if UNITY_WEBGL
+        if (webFont == null) webFont = Resources.Load<Font>("Fonts/NaadamyNunito");
+        if (webFont != null) GUI.skin.font = webFont;
+#endif
         BuildStyles();
         if (Event.current.type == EventType.Repaint) uiNext.Clear();
         var safe = Screen.safeArea; float sx = safe.x, sy = Screen.height - safe.yMax, vw = safe.width / UiScale, vh = safe.height / UiScale;
