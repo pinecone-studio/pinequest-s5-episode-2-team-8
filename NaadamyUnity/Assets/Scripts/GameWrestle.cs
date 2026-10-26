@@ -66,9 +66,9 @@ public sealed partial class Game
             if (sk != null)
             {
                 GUILayout.Label(Loc.L("Ингэж хийдэг мэхүүд", "Moves you do this way"), g.sSmall);
-                scroll = GUILayout.BeginScrollView(scroll, GUILayout.MaxHeight(Screen.height * 0.3f));
+                scroll = g.BeginScroll(scroll, Screen.height * 0.3f);
                 foreach (var m in Rules.MOVES.Where(m => (Rules.SKILL.TryGetValue(m.id, out var s) ? s : "timing") == pg.skill)) { GUILayout.BeginVertical(g.sBtn); GUILayout.Label("<b>" + m.name + "</b>", g.sLabel); GUILayout.Label(GerRules.Kid(m.id).ToString(), g.sSmall); GUILayout.EndVertical(); }
-                GUILayout.EndScrollView();
+                g.EndScroll();
             }
             GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
             for (int k = 0; k < SCHOOL.Length; k++) GUILayout.Label(k == i ? "<color=#f7c646>●</color>" : k < i ? "<color=#2ea35f>●</color>" : "○", g.sLabel);
@@ -94,17 +94,17 @@ public sealed partial class Game
             int half = Rules.MOVES.Length >> 1;
             g.Small(Loc.L($"Мэх бүр дараагийн {half} мэхийг давж, өмнөхөд нь дийлддэг. Мэх бүрийг өөр ур чадвараар хийнэ: » цаг тааруулах, ↔ хөлийн хөдөлгөөн (сумнууд), !! хүч (хурдан дарах), ■ барьцаа (дарж байгаад тавих), ≈ тэнцвэр. Нэг мэхийг давтвал өрсөлдөгч таньдаг.",
                 $"Each move beats the next {half} and loses to the ones before it. Each is done with its own skill: » timing, ↔ footwork (arrows), !! power (fast taps), ■ grip (hold and release), ≈ balance. Repeat a move and your opponent reads it."));
-            scroll = GUILayout.BeginScrollView(scroll, GUILayout.Height(Screen.height * 0.55f));
+            scroll = g.BeginScroll(scroll, Screen.height * 0.55f);
             foreach (var m in Rules.MOVES)
             {
                 int used = SaveData.Get(g.V.wr.techs, m.id);
                 GUILayout.BeginVertical(g.sBtn);
-                GUILayout.Label($"<b>{SkillIcon(m.id)} {m.name}</b>  <size={Mathf.RoundToInt(g.U(10))}>×{used}</size>", g.sLabel);
+                GUILayout.Label($"<b>{SkillIcon(m.id)} {m.name}</b>  <size={Game.PxSize(g.U(10f) * 1.3f)}>×{used}</size>", g.sLabel);
                 GUILayout.Label(m.fact.ToString(), g.sSmall);
                 GUILayout.Label("√ " + Loc.L("Давна", "Beats") + ": " + string.Join(", ", m.beats.Select(b => Rules.MoveById(b).name.ToString())), g.sSmall);
                 GUILayout.EndVertical();
             }
-            GUILayout.EndScrollView();
+            g.EndScroll();
             if (g.Btn(Loc.L("Хаах", "Close"), false, 32)) g.Later(g.Close);
         }
         public override void Press(Game g) => g.Close();
@@ -328,7 +328,7 @@ public sealed partial class Game
                             for (int j = i; j < Mathf.Min(moves.Length, i + perRow); j++)
                             {
                                 var m = moves[j];
-                                if (GUILayout.Button($"<b>{SkillIcon(m.id)} {m.name}</b>\n<size={Mathf.RoundToInt(g.U(9))}>> {string.Join(", ", m.beats.Take(3).Select(x => Rules.MoveById(x).name.ToString()))}…</size>", m.id == lastPlayer ? new GUIStyle(g.sBtn) { normal = g.sBtn.active } : g.sBtn, GUILayout.MinHeight(g.U(44)))) { var id = m.id; g.Later(() => StartSkill(id)); }
+                                if (GUILayout.Button($"<b>{SkillIcon(m.id)} {m.name}</b>\n<size={Game.PxSize(g.U(9f) * 1.3f)}>> {string.Join(", ", m.beats.Take(3).Select(x => Rules.MoveById(x).name.ToString()))}…</size>", m.id == lastPlayer ? new GUIStyle(g.sBtn) { normal = g.sBtn.active } : g.sBtn, GUILayout.MinHeight(g.U(44)))) { var id = m.id; g.Later(() => StartSkill(id)); }
                             }
                             GUILayout.EndHorizontal();
                         }
@@ -367,7 +367,7 @@ public sealed partial class Game
             {
                 case "combo":
                     GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
-                    for (int i = 0; i < seq.Length; i++) GUILayout.Label(i < si ? $"<color=#2ea35f>{ARROWS[seq[i]]}</color>" : i == si ? $"<color=#e14b3d>{ARROWS[seq[i]]}</color>" : ARROWS[seq[i]], new GUIStyle(g.sBig) { fontSize = Mathf.RoundToInt(g.U(26)) }, GUILayout.Width(g.U(40)));
+                    for (int i = 0; i < seq.Length; i++) GUILayout.Label(i < si ? $"<color=#2ea35f>{ARROWS[seq[i]]}</color>" : i == si ? $"<color=#e14b3d>{ARROWS[seq[i]]}</color>" : ARROWS[seq[i]], new GUIStyle(g.sBig) { fontSize = Game.PxSize(g.U(26f) * 1.3f) }, GUILayout.Width(g.U(40)));
                     GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
                     g.Bar(Meter(), Mathf.Max(0, 1 - el / skLimit), Px.Col("#f7c646"));
                     GUILayout.BeginHorizontal(); for (int i = 0; i < 4; i++) if (GUILayout.Button(ARROWS[i], g.sBtn, GUILayout.MinHeight(g.U(48)))) { int k = i; g.Later(() => Combo(k)); } GUILayout.EndHorizontal();

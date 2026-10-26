@@ -54,7 +54,7 @@ public sealed partial class Game
                 GUI.DrawTexture(new Rect(r.center.x - g.U(14), r.y + g.U(6), g.U(28), g.U(28)), g.Tex(Emo.Icon(icon)));
                 var st = new GUIStyle(mode == m ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.UpperCenter };
                 GUI.Label(new Rect(r.x + g.U(4), r.y + g.U(38), r.width - g.U(8), g.U(22)), "<b>" + t1 + "</b>", st);
-                GUI.Label(new Rect(r.x + g.U(4), r.y + g.U(58), r.width - g.U(8), g.U(34)), t2, new GUIStyle(st) { fontSize = Mathf.RoundToInt(g.U(10)) });
+                GUI.Label(new Rect(r.x + g.U(4), r.y + g.U(58), r.width - g.U(8), g.U(34)), t2, new GUIStyle(st) { fontSize = Game.PxSize(g.U(10f) * 1.3f) });
             }
             GUILayout.EndHorizontal();
             if (mode != "family" && mode != "friends") return;
@@ -200,8 +200,8 @@ public sealed partial class Game
             var r = GUILayoutUtility.GetRect(g.U(100), g.U(86), GUILayout.ExpandWidth(true));
             bool hit = GUI.Button(r, "", g.sBtn);
             if (icon != null) GUI.DrawTexture(new Rect(r.center.x - g.U(14), r.y + g.U(6), g.U(28), g.U(28)), g.Tex(icon));
-            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(38), r.width - g.U(4), g.U(22)), "<b>" + title + "</b>", new GUIStyle(g.sLabel) { alignment = TextAnchor.UpperCenter, fontSize = Mathf.RoundToInt(g.U(11)) });
-            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(60), r.width - g.U(4), g.U(20)), sub, new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, fontSize = Mathf.RoundToInt(g.U(10)) });
+            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(38), r.width - g.U(4), g.U(22)), "<b>" + title + "</b>", new GUIStyle(g.sLabel) { alignment = TextAnchor.UpperCenter, fontSize = Game.PxSize(g.U(11f) * 1.3f) });
+            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(60), r.width - g.U(4), g.U(20)), sub, new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, fontSize = Game.PxSize(g.U(10f) * 1.3f) });
             return hit;
         }
         void LessonCard(Game g, J l)

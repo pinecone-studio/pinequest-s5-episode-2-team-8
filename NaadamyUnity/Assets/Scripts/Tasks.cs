@@ -202,7 +202,6 @@ public sealed partial class Game
             sp.art?.Invoke(x, t, s);
             DrawKind(g, x, t);
             GUILayout.BeginHorizontal(); GUILayout.Label("<b>" + sp.title + "</b>", g.sTitle); GUILayout.FlexibleSpace();
-            if (GUILayout.Button("X", g.sBtn, GUILayout.Width(g.U(40)), GUILayout.Height(g.U(36)))) g.Later(() => End(g, false));
             GUILayout.EndHorizontal();
             float maxH = Mathf.Min(g.U(330), Screen.height * 0.5f);
             var r = live.Show(g, maxH);
@@ -234,7 +233,7 @@ public sealed partial class Game
                     GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
                 }
             }
-            if (!Input.touchSupported) g.Small(sp.kind == "hold" ? Loc.L("Дарж байгаад барь (E эсвэл Space)", "Press and hold (E or Space)") : sp.kind == "turn" ? Loc.L("◄ ► эргүүлээд E", "◄ ► to turn, then E") : sp.kind == "choose" ? Loc.L("◄ ► сонгоод E", "◄ ► to pick, then E") : sp.kind == "drag" ? Loc.L("Шар бариулыг чирээрэй", "Drag the gold handle") : Loc.L("E эсвэл Space", "E or Space"));
+            if (!Game.TouchUI) g.Small(sp.kind == "hold" ? Loc.L("Дарж байгаад барь (E эсвэл Space)", "Press and hold (E or Space)") : sp.kind == "turn" ? Loc.L("◄ ► эргүүлээд E", "◄ ► to turn, then E") : sp.kind == "choose" ? Loc.L("◄ ► сонгоод E", "◄ ► to pick, then E") : sp.kind == "drag" ? Loc.L("Шар бариулыг чирээрэй", "Drag the gold handle") : Loc.L("E эсвэл Space", "E or Space"));
         }
         /** What the kind shows on top of the picture, in pixel art. */
         void DrawKind(Game g, PxCanvas x, float t)

@@ -200,7 +200,7 @@ public sealed partial class Game
             title = Loc.L("Нутаг", "Nutag"), sub = Loc.L("Өөрийн нүдээр", "First person"),
             hint = () => Loc.L("Ойртож харвал E", "Face something and press E"),
         };
-        string welcome = "<b>" + Loc.L("Нутгаа өөрийн нүдээр!", "Nutag in first person!") + "</b>\n" + (Input.touchSupported
+        string welcome = "<b>" + Loc.L("Нутгаа өөрийн нүдээр!", "Nutag in first person!") + "</b>\n" + (Game.TouchUI
             ? Loc.L("Зүүн талд чирж алхана, баруун талд чирж эргэн харна. Морины уяанаас морь унаж давхиж болно!", "Drag on the left to walk, on the right to look around. Take a horse from the hitching line and ride!")
             : Loc.L("WASD алхах, хулганаар харах, Space үсрэх, Shift гүйх, E харилцах. Морины уяанаас морь унаж давхиж болно!", "WASD walk, mouse to look, Space jump, Shift sprint, E interact. Take a horse from the hitching line and ride!"));
         src.info = () => Time.time - t0 < 9 ? welcome : null;
@@ -470,7 +470,7 @@ public sealed partial class Game
         {
             if (id < 0) // the mouse: the first click takes it for looking around, then clicks use things (or shoot, in a battle)
             {
-                if (!down || g.OverUI(pos) || Input.touchSupported && Input.touchCount > 0) return;
+                if (!down || g.OverUI(pos) || Game.TouchUI && Input.touchCount > 0) return;
                 if (!locked) { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; locked = true; return; }
                 if (g.battle != null && !g.battle.over) Shoot(g); else Interact(g);
                 return;
@@ -566,25 +566,25 @@ public sealed partial class Game
             float ccx = sw / 2f, ccy = sh / 2f, s = 9 * g.UiScale, k = Mathf.Max(1, g.UiScale);
             g.Box(new Rect(ccx - s, ccy - k, s * 2, k * 2), new Color(1, 1, 1, 0.85f)); g.Box(new Rect(ccx - k, ccy - s, k * 2, s * 2), new Color(1, 1, 1, 0.85f));
             string nl = NearLabel(g);
-            if (nl != null) { string lab = nl + (Input.touchSupported ? "" : " · E"); var r = new Rect(ccx - g.U(130), ccy + g.U(18), g.U(260), g.U(26)); GUI.Box(r, "<color=#f7c646><b>" + lab + "</b></color>", g.sToast); }
+            if (nl != null) { string lab = nl + (Game.TouchUI ? "" : " · E"); var r = new Rect(ccx - g.U(130), ccy + g.U(18), g.U(260), g.U(26)); GUI.Box(r, "<color=#f7c646><b>" + lab + "</b></color>", g.sToast); }
             if (building != null) GUI.Box(new Rect(ccx - g.U(130), ccy - g.U(60), g.U(260), g.U(30)), Loc.L($"Ертөнц бүтээж байна… {built * 100 / Mathf.Max(1, chunks)}%", $"Building the world… {built * 100 / Mathf.Max(1, chunks)}%"), g.sToast);
             // the buttons, like the 2D scenes
             var safe = Screen.safeArea; float sx = safe.x, sy = sh - safe.yMax, vw = safe.width / g.UiScale, vh = safe.height / g.UiScale;
             GUI.BeginGroup(new Rect(sx, sy, safe.width, safe.height));
             if (g.Button(g.URect(8, 8, 48, 44), "X")) g.Later(g.Close);
-            var tr = g.URect(64, 8, Mathf.Min(360, vw - 72), 44); GUI.Box(tr, $"<b>{src.title}</b>" + (src.sub != null ? $"  <size={Mathf.RoundToInt(g.U(11))}>{src.sub}</size>" : ""), g.sToast);
+            var tr = g.URect(64, 8, Mathf.Min(360, vw - 72), 44); GUI.Box(tr, $"<b>{src.title}</b>" + (src.sub != null ? $"  <size={Game.PxSize(g.U(11f) * 1.3f)}>{src.sub}</size>" : ""), g.sToast);
             if (g.battle != null) GUI.Box(g.URect(vw / 2 - 210, 58, 420, 30), g.BattleLabel(), g.sToast);
-            if (!locked && !Input.touchSupported && building == null) GUI.Box(g.URect(vw / 2 - 230, 94, 460, 28), Loc.L("Дэлгэц дээр дарж хулганаар эргэн харна · Esc хулганаа чөлөөлнө", "Click the view to look around with the mouse · Esc frees the mouse"), g.sToast);
+            if (!locked && !Game.TouchUI && building == null) GUI.Box(g.URect(vw / 2 - 230, 94, 460, 28), Loc.L("Дэлгэц дээр дарж хулганаар эргэн харна · Esc хулганаа чөлөөлнө", "Click the view to look around with the mouse · Esc frees the mouse"), g.sToast);
             string info = src.info?.Invoke();
-            if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, vh - 140, Mathf.Min(520, vw - 16), 72); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sToast) { alignment = TextAnchor.MiddleLeft, fontSize = Mathf.RoundToInt(g.U(12)), wordWrap = true }); }
+            if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, vh - 140, Mathf.Min(520, vw - 16), 72); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sToast) { alignment = TextAnchor.MiddleLeft, fontSize = Game.PxSize(g.U(12f) * 1.3f), wordWrap = true }); }
             float bx0 = 8;
             foreach (var (label, run) in src.buttons) { string l = label(); float w = Mathf.Max(90, l.Length * 8 + 24); if (g.Button(g.URect(bx0, vh - 60, w, 52), l)) g.Later(run); bx0 += w + 6; }
             if (g.riding && g.Button(g.URect(bx0, vh - 60, 110, 52), Loc.L("Мориноос буух", "Get off"))) g.Later(g.Dismount);
             if (g.Button(g.URect(vw - 290, vh - 60, 56, 52), runLock ? Loc.L("Алхах", "Walk") : Loc.L("Гүйх", "Run"), runLock ? g.sPrimary : g.sBtn)) runLock = !runLock;
             if (g.Button(g.URect(vw - 228, vh - 60, 56, 52), Loc.L("Үсрэх", "Jump"))) DoJump();
-            if (g.battle != null && Input.touchSupported && g.Button(g.URect(vw - 166, vh - 124, 158, 52), Loc.L("Сум харвах", "Shoot"), g.sPrimary)) g.Later(g.ShootNearest);
+            if (g.battle != null && Game.TouchUI && g.Button(g.URect(vw - 166, vh - 124, 158, 52), Loc.L("Сум харвах", "Shoot"), g.sPrimary)) g.Later(g.ShootNearest);
             bool was = GUI.enabled; GUI.enabled = nl != null;
-            string act = nl != null ? nl + (Input.touchSupported ? "" : " (E)") : src.hint?.Invoke() ?? Loc.L("Ойртож харвал E", "Face something and press E");
+            string act = nl != null ? nl + (Game.TouchUI ? "" : " (E)") : Game.TouchUI ? Loc.L("Ойртож хараад товчийг дар", "Face something and tap the button") : src.hint?.Invoke() ?? Loc.L("Ойртож харвал E", "Face something and press E");
             if (g.Button(g.URect(vw - 166, vh - 64, 158, 56), act, g.sPrimary)) Interact(g);
             GUI.enabled = was;
             GUI.EndGroup();

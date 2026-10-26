@@ -7,7 +7,7 @@ using UnityEngine;
 public sealed partial class Game
 {
     // ================================================================ pointer: a finger that drags becomes a joystick right where it landed; a quick tap walks there
-    const float STICK_R = 50;
+    const float STICK_R = 56;
     sealed class Drag { public int id; public Vector2 p0, p; public bool on; }
     Drag drag; Vector2 stick; bool stickOn, runLock, sprintHeld; float lastTouch = -9, guiOX, guiOY;
     Rect sprintRect;
@@ -31,7 +31,12 @@ public sealed partial class Game
             if (Input.touchCount == 0 && Input.GetMouseButton(0) && sprintRect.Contains(new Vector2(Input.mousePosition.x, Screen.height - Input.mousePosition.y))) sprintHeld = true;
         }
         stickOn = drag != null && drag.on;
-        if (stickOn) { var d = (drag.p - drag.p0) / (STICK_R * UiScale); if (d.magnitude > 1) d.Normalize(); stick = new Vector2(d.x, -d.y); }
+        if (stickOn)
+        {
+            // the ring slides along behind a thumb that goes past it, so pulling back turns around at once
+            float R = STICK_R * UiScale; var off = drag.p - drag.p0; if (off.magnitude > R) { drag.p0 += off - off.normalized * R; off = drag.p - drag.p0; }
+            var d = off / R; stick = new Vector2(d.x, -d.y);
+        }
     }
     void PointerEvent(int id, Vector2 pos, bool down, bool up)
     {
@@ -61,7 +66,7 @@ public sealed partial class Game
     // ================================================================ windows
     public abstract class Modal
     {
-        public virtual float Width => 520;
+        public virtual float Width => 640;
         public virtual bool FullScreen => false;
         public virtual bool CanEscape => true;
         public abstract void Draw(Game g);
@@ -70,18 +75,19 @@ public sealed partial class Game
         public virtual void Key(Game g) { }     // any other keys, read in Update
         public virtual void Pointer(Game g, int id, Vector2 pos, bool down, bool up) { } // full-screen scenes take the pointer
         public virtual void Closed(Game g) { }
+        public Vector2 winScroll; // a window taller than the screen scrolls (DrawModal)
     }
-    Modal modal;
+    Modal modal; Rect modalPanel; // where the open window is on the screen, for its ✕ and for taps outside it
     readonly Stack<Modal> under = new Stack<Modal>();
     /** A full-screen scene is showing (maybe under a window opened from it), so the village is hidden. */
     bool InScene { get { if (modal == null) return false; if (modal.FullScreen) return true; foreach (var m in under) if (m.FullScreen) return true; return false; } }
     Modal SceneUnder { get { foreach (var m in under) if (m.FullScreen) return m; return null; } }
-    public void Open(Modal m) { if (modal != null && m != null && !modal.FullScreen && m.FullScreen) modal = null; if (modal != null) under.Push(modal); modal = m; drag = null; path.Clear(); pending = null; Sfx.Tap(); }
+    public void Open(Modal m) { modalPanel = Rect.zero; if (modal != null && m != null && !modal.FullScreen && m.FullScreen) modal = null; if (modal != null) under.Push(modal); modal = m; drag = null; path.Clear(); pending = null; Sfx.Tap(); }
     /** Closes the top window; a window opened from a full-screen scene goes back to the scene. */
-    public void Close() { var m = modal; modal = under.Count > 0 ? under.Pop() : null; m?.Closed(this); if (modal == null) ctx = ContextAction(); }
+    public void Close() { modalPanel = Rect.zero; var m = modal; modal = under.Count > 0 ? under.Pop() : null; m?.Closed(this); if (modal == null) ctx = ContextAction(); }
     public void CloseAll() { while (modal != null) Close(); }
     /** Replaces the current window with another one. */
-    public void Swap(Modal m) { var old = modal; modal = m; old?.Closed(this); Sfx.Tap(); }
+    public void Swap(Modal m) { modalPanel = Rect.zero; var old = modal; modal = m; old?.Closed(this); Sfx.Tap(); }
     void KeysInModal()
     {
         if (Input.GetKeyDown(KeyCode.Escape)) { if (modal.CanEscape) Close(); return; }
@@ -90,9 +96,12 @@ public sealed partial class Game
     }
 
     // ================================================================ styles (rebuilt when the screen size changes)
-    public float UiScale => Mathf.Max(1, Screen.height / 480f);
+    // the layout is about 520 units tall and at least 900 wide, so a wide screen gets room to the sides (landscape, not a stretched portrait)
+    public float UiScale => Mathf.Max(1, Mathf.Min(Screen.height / 520f, Screen.width / 900f));
+    /** Phones and tablets get on-screen buttons and touch hints; a computer uses the keys Bolormaa teaches. */
+    public static bool TouchUI => Application.isMobilePlatform;
     float builtFor = -1;
-    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig;
+    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt;
     Texture2D white;
     readonly Dictionary<PxCanvas, Texture2D> texCache = new Dictionary<PxCanvas, Texture2D>();
     public Texture2D Tex(PxCanvas c) { if (!texCache.TryGetValue(c, out var t)) texCache[c] = t = c.ToTexture(); return t; }
@@ -121,19 +130,20 @@ public sealed partial class Game
     {
         float s = UiScale; if (Mathf.Approximately(s, builtFor) && sPanel != null) return;
         builtFor = s; int b = Mathf.Max(1, Mathf.RoundToInt(s * 1.5f));
-        int F(float v) => Mathf.RoundToInt(v * s);
+        int F(float v) => PxSize(v * s * 1.3f); // pixel letters need to be a bit bigger than smooth ones to read easily
         white = Texture2D.whiteTexture;
         Color ink = Px.Col("#2b1e2e"), paper = Color.white;
         sPanel = Style(Frame("#f6dca8", "#2b1e2e", b), null, b, F(13), ink, TextAnchor.UpperLeft, true); sPanel.padding = new RectOffset(F(14), F(14), F(12), F(12));
         sBtn = Style(Frame("#f4efe3", "#2b1e2e", b), Frame("#d8cfba", "#2b1e2e", b), b, F(14), ink, TextAnchor.MiddleCenter, true);
-        sPrimary = Style(Frame("#3f76db", "#2b1e2e", b), Frame("#2b52a5", "#2b1e2e", b), b, F(14), paper, TextAnchor.MiddleCenter, true); sPrimary.fontStyle = FontStyle.Bold;
-        sChip = Style(Frame("#3a2c3e", "#1a1418", b), null, b, F(13), paper, TextAnchor.MiddleLeft); sChip.fontStyle = FontStyle.Bold; sChipText = sChip.Clean();
+        sPrimary = Style(Frame("#3f76db", "#2b1e2e", b), Frame("#2b52a5", "#2b1e2e", b), b, F(14), paper, TextAnchor.MiddleCenter, true); sPrimary.fontStyle = FontStyle.Normal;
+        sChip = Style(Frame("#3a2c3e", "#1a1418", b), null, b, F(13), paper, TextAnchor.MiddleLeft); sChip.fontStyle = FontStyle.Normal; sChipText = sChip.Clean();
         sToast = Style(Frame("#2b1e2e", "#1a1418", b), null, b, F(13), paper, TextAnchor.MiddleCenter, true); sToast.padding = new RectOffset(F(10), F(10), F(6), F(6));
+        sOpt = Style(Frame("#08060e", "#ffffff", b), Frame("#2b1e2e", "#f7c646", b), b, F(14), paper, TextAnchor.MiddleLeft, true); // an answer in the story box
         sTag = Style(Frame("#fff8e6", "#2b1e2e", b), null, b, F(11), ink, TextAnchor.MiddleCenter); sTag.padding = new RectOffset(F(5), F(5), F(2), F(2));
         sLabel = new GUIStyle { fontSize = F(13), wordWrap = true, richText = true, normal = { textColor = ink } };
         sSmall = new GUIStyle(sLabel) { fontSize = F(11), normal = { textColor = Px.Col("#6b4220") } };
-        sTitle = new GUIStyle(sLabel) { fontSize = F(19), fontStyle = FontStyle.Bold };
-        sBig = new GUIStyle(sLabel) { fontSize = F(30), fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+        sTitle = new GUIStyle(sLabel) { fontSize = F(19) };
+        sBig = new GUIStyle(sLabel) { fontSize = F(30), alignment = TextAnchor.MiddleCenter };
         sCenter = new GUIStyle(sLabel) { alignment = TextAnchor.MiddleCenter };
     }
     public float U(float v) => v * UiScale;
@@ -160,25 +170,23 @@ public sealed partial class Game
     public void Outlined(float x, float y, string text, float size, Color col, float alpha = 1)
     {
         if (string.IsNullOrEmpty(text)) return;
-        var st = new GUIStyle(sCenter) { fontSize = Mathf.RoundToInt(size), fontStyle = FontStyle.Bold, wordWrap = false };
-        var r = new Rect(x - U(150), y - size, U(300), size * 2); float o = Mathf.Max(1, size / 10);
+        var st = new GUIStyle(sCenter) { fontSize = PxSize(size), fontStyle = FontStyle.Normal, wordWrap = false };
+        var r = new Rect(x - U(150), y - size, U(300), size * 2); float o = Mathf.Max(1, Mathf.Round(PxSize(size) / 8f));
         st.normal.textColor = new Color(0.17f, 0.12f, 0.18f, alpha);
         foreach (var (dx, dy) in new[] { (-o, 0f), (o, 0f), (0f, -o), (0f, o), (-o, -o), (o, o), (-o, o), (o, -o) }) GUI.Label(new Rect(r.x + dx, r.y + dy, r.width, r.height), text, st);
         st.normal.textColor = new Color(col.r, col.g, col.b, alpha); GUI.Label(r, text, st);
     }
 
     // ================================================================ OnGUI
-#if UNITY_WEBGL
-    // a browser has no system fonts for Unity to fall back on, so without its own font the web build shows no Cyrillic or symbols
-    static Font webFont;
-#endif
+    // every text is pixel text, as on the web version: Tiny5 (Resources/Fonts, drawn as hard pixels by Editor/NaadamyFontImport)
+    static Font pixelFont;
+    /** Tiny5 is crisp at multiples of 8 screen pixels. */
+    public static int PxSize(float v) => Mathf.Max(16, Mathf.FloorToInt(v / 8f + 0.6f) * 8); // rounds up a little sooner, so small labels stay readable
     void OnGUI()
     {
-#if UNITY_WEBGL
-        if (webFont == null) webFont = Resources.Load<Font>("Fonts/NaadamyNunito");
-        if (webFont != null) GUI.skin.font = webFont;
-#endif
-        BuildStyles();
+        if (pixelFont == null) pixelFont = Resources.Load<Font>("Fonts/NaadamyPixel");
+        if (pixelFont != null) GUI.skin.font = pixelFont;
+        BuildStyles(); scrollN = 0; scrollOpen.Clear();
         if (Event.current.type == EventType.Repaint) uiNext.Clear();
         var safe = Screen.safeArea; float sx = safe.x, sy = Screen.height - safe.yMax, vw = safe.width / UiScale, vh = safe.height / UiScale;
         guiOX = sx; guiOY = sy;
@@ -186,7 +194,9 @@ public sealed partial class Game
         {
             WorldLabels();
             GUI.BeginGroup(new Rect(sx, sy, safe.width, safe.height));
+            bool was = GUI.enabled; GUI.enabled = modal == null; // the buttons behind an open window don't answer
             Hud(vw, vh);
+            GUI.enabled = was;
             GUI.EndGroup();
         }
         if (!InScene && modal == null) { GUI.BeginGroup(new Rect(sx, sy, safe.width, safe.height)); DialogDraw(vw, vh); GUI.EndGroup(); }
@@ -256,7 +266,7 @@ public sealed partial class Game
     void MyLabel(float ts)
     {
         var p = PxGui(px * T + 8, py * T - 16 - (riding ? 10 : 0));
-        var st = new GUIStyle(sCenter) { fontSize = Mathf.RoundToInt(ts), fontStyle = FontStyle.Bold, wordWrap = false };
+        var st = new GUIStyle(sCenter) { fontSize = PxSize(ts), fontStyle = FontStyle.Bold, wordWrap = false };
         string lv = Rules.Level(V.xp).l.ToString(), nm = MyName;
         float pad = ts * 0.45f, th = ts + U(4), lw = st.CalcSize(new GUIContent(lv)).x + pad * 2, nw = st.CalcSize(new GUIContent(nm)).x + pad * 2, gap = U(3), x0 = p.x - (lw + gap + nw) / 2, y = p.y - th / 2, u = Mathf.Max(1, U(1));
         void BoxT(float bx, float w, string bg, string fg, string text) { Box(new Rect(bx - u, y - u, w + 2 * u, th + 2 * u), Px.Col("#2b1e2e")); Box(new Rect(bx, y, w, th), Px.Col(bg)); st.normal.textColor = Px.Col(fg); GUI.Label(new Rect(bx, y, w, th), text, st); }
@@ -317,13 +327,12 @@ public sealed partial class Game
         if (battle != null)
         {
             GUI.Box(UR(vw / 2 - 210, 56, 420, 34), BattleLabel(), sToast);
-            if (Input.touchSupported && Button(UR(vw - 166, vh - 128, 158, 56), Loc.L("Сум харвах (F)", "Shoot (F)"), sPrimary)) ShootNearest();
-            else if (!Input.touchSupported) GUI.Box(UR(vw / 2 - 160, 94, 320, 26), Loc.L("F: сум харвах · E: уургадах", "F: shoot · E: lasso"), sToast);
+            if (TouchUI && Button(UR(vw - 166, vh - 128, 158, 56), Loc.L("Сум харвах (F)", "Shoot (F)"), sPrimary)) ShootNearest();
+            else if (!TouchUI) GUI.Box(UR(vw / 2 - 160, 94, 320, 26), Loc.L("F: сум харвах · E: уургадах", "F: shoot · E: lasso"), sToast);
         }
-        if (Time.timeSinceLevelLoad < 9 && modal == null)
+        if (Time.timeSinceLevelLoad < 9 && modal == null && TouchUI) // on a computer, Bolormaa teaches the keys as you go
         {
-            string hint = Input.touchSupported ? Loc.L("Дэлгэц дээр чирж алх, товшиж оч", "Drag on the screen to walk, tap to go somewhere")
-                                              : Loc.L("WASD/сумаар алх · Shift гүйх · Space үсрэх · E хэрэглэх", "WASD/arrows walk · Shift run · Space jump · E use");
+            string hint = Loc.L("Дэлгэц дээр чирж алх, товшиж оч", "Drag on the screen to walk, tap to go somewhere");
             GUI.Box(UR(vw / 2 - 210, vh - 118, 420, 32), hint, sToast);
         }
         // bottom: your milk and the dairy foods you made. Tap a food to eat it.
@@ -334,7 +343,7 @@ public sealed partial class Game
             var r = UR(x, vh - 56, 48, 48);
             if (Button(r, "")) Later(() => { if (Rules.DAIRY[k].food) Eat(k); else Toast($"{Rules.DAIRY[k].name}: " + Loc.L("тавиур, тулга, хөхүүр дээр цагаан идээ хийнэ.", "make dairy foods at the rack, stove or churn.")); });
             GUI.DrawTexture(UR(x + 10, vh - 53, 28, 28), Tex(Px.Icon("dairy:" + k)));
-            GUI.Label(UR(x + 4, vh - 26, 40, 16), n.ToString(), new GUIStyle(sCenter) { fontSize = Mathf.RoundToInt(U(11)), fontStyle = FontStyle.Bold });
+            GUI.Label(UR(x + 4, vh - 26, 40, 16), n.ToString(), new GUIStyle(sCenter) { fontSize = PxSize(U(11f) * 1.3f), fontStyle = FontStyle.Bold });
             x += 52;
         }
         if (x == 8 && Button(UR(x, vh - 56, 48, 48), "")) Later(() => GoTo(9, 14, null)); // nothing yet: a shortcut to the dairy yard
@@ -343,10 +352,10 @@ public sealed partial class Game
         float bx = vw - 166;
         if (riding && Button(UR(bx - 66, vh - 56, 60, 48), Loc.L("Буух", "Get off"))) Later(Dismount);
         if (riding) bx -= 66;
-        if (Input.touchSupported) { if (Button(UR(bx - 60, vh - 56, 56, 48), runLock ? Loc.L("Алхах", "Walk") : Loc.L("Гүйх", "Run"), runLock ? sPrimary : sBtn)) runLock = !runLock; if (Button(UR(bx - 120, vh - 56, 56, 48), Loc.L("Үсрэх", "Jump"))) Jump(); GlowAt("run", UR(bx - 60, vh - 56, 56, 48)); GlowAt("jump", UR(bx - 120, vh - 56, 56, 48)); }
+        if (TouchUI) { if (Button(UR(bx - 88, vh - 56, 80, 48), runLock ? Loc.L("Алхах", "Walk") : Loc.L("Гүйх", "Run"), runLock ? sPrimary : sBtn)) runLock = !runLock; if (Button(UR(bx - 172, vh - 56, 80, 48), Loc.L("Үсрэх", "Jump"))) Jump(); GlowAt("run", UR(bx - 88, vh - 56, 80, 48)); GlowAt("jump", UR(bx - 172, vh - 56, 80, 48)); }
         if (ctx != null && modal == null)
         {
-            string label = LabelFor(ctx) + (Input.touchSupported ? "" : "  [E]");
+            string label = LabelFor(ctx) + (TouchUI ? "" : "  [E]");
             var here = ctx; if (Button(UR(vw - 166, vh - 64, 158, 56), label, sPrimary)) Later(() => DoAction(here));
         }
     }
@@ -357,14 +366,51 @@ public sealed partial class Game
         var sc = SceneUnder; if (sc != null && Event.current.type == EventType.Repaint) sc.Draw(this); // the scene stays behind its windows
         // dim the village, then a centred window that grows with its content
         Box(new Rect(0, 0, Screen.width, Screen.height), new Color(0.1f, 0.06f, 0.12f, 0.55f));
+        // a tap on the dimmed village outside the window closes it, as the ✕ does
+        var e = Event.current;
+        if (modal.CanEscape && e.type == EventType.MouseDown && modalPanel.width > 0 && !modalPanel.Contains(e.mousePosition)) { e.Use(); Later(Close); return; }
         float w = Mathf.Min(U(modal.Width), Screen.width - U(24)), h = Screen.height - U(24);
         GUILayout.BeginArea(new Rect((Screen.width - w) / 2, U(12), w, h));
         GUILayout.FlexibleSpace();
         GUILayout.BeginVertical(sPanel);
-        var m = modal; m.Draw(this);
+        var m = modal; m.winScroll = BeginScroll(m.winScroll, h - U(40)); m.Draw(this); EndScroll();
         GUILayout.EndVertical();
+        if (e.type == EventType.Repaint) { var pr = GUILayoutUtility.GetLastRect(); modalPanel = new Rect(pr.x + (Screen.width - w) / 2, pr.y + U(12), pr.width, pr.height); }
         GUILayout.FlexibleSpace();
         GUILayout.EndArea();
+        if (m.CanEscape && modalPanel.width > 0 && GUI.Button(new Rect(modalPanel.xMax - U(40), modalPanel.y + U(6), U(34), U(34)), "X", sBtn)) Later(() => { if (modal == m) Close(); });
+    }
+
+    // ---------------------------------------------------------------- scroll views that a finger can drag and that fit their content
+    // IMGUI scroll views only follow the mouse wheel and their scrollbar, and they either collapse or stretch instead of
+    // fitting what is inside. These remember last frame's content height and view rect (by the order they are drawn in).
+    readonly List<Rect> scrollViews = new List<Rect>(); readonly List<float> scrollContent = new List<float>(); readonly Stack<int> scrollOpen = new Stack<int>();
+    int scrollN, scrollArmed = -1; bool scrollMoving; Vector2 scrollFrom;
+    /** maxH > 0: as tall as the content, at most maxH (screen pixels); otherwise it fills the space it is given. */
+    public Vector2 BeginScroll(Vector2 pos, float maxH = -1)
+    {
+        int k = scrollN++; scrollOpen.Push(k);
+        while (scrollViews.Count <= k) { scrollViews.Add(Rect.zero); scrollContent.Add(-1); }
+        var e = Event.current; var view = scrollViews[k];
+        if (e.type == EventType.MouseDown && view.Contains(e.mousePosition)) { scrollArmed = k; scrollMoving = false; scrollFrom = e.mousePosition; }
+        else if (e.type == EventType.MouseDrag && scrollArmed == k)
+        {
+            if (!scrollMoving && (e.mousePosition - scrollFrom).magnitude > U(6)) { scrollMoving = true; GUIUtility.hotControl = 0; } // a drag is never a button press
+            if (scrollMoving) { pos.y -= e.delta.y; e.Use(); }
+        }
+        else if (e.type == EventType.MouseUp && scrollArmed == k) { scrollArmed = -1; if (scrollMoving) { scrollMoving = false; e.Use(); } }
+        var opts = maxH > 0 ? new[] { GUILayout.Height(Mathf.Min(scrollContent[k] > 0 ? scrollContent[k] + 2 : maxH, maxH)) } : new GUILayoutOption[0];
+        pos = GUILayout.BeginScrollView(pos, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, opts);
+        GUILayout.BeginVertical();
+        return pos;
+    }
+    public void EndScroll()
+    {
+        int k = scrollOpen.Count > 0 ? scrollOpen.Pop() : 0;
+        GUILayout.EndVertical();
+        if (Event.current.type == EventType.Repaint) scrollContent[k] = GUILayoutUtility.GetLastRect().height;
+        GUILayout.EndScrollView();
+        if (Event.current.type == EventType.Repaint) scrollViews[k] = GUILayoutUtility.GetLastRect();
     }
 
     // little layout helpers for the windows
@@ -419,8 +465,9 @@ public sealed partial class Game
     /** Chips to pick one of several values; returns the picked index or -1. */
     public int Chips(IList<string> labels, int current, float minW = 60)
     {
-        int hit = -1; GUILayout.BeginHorizontal();
-        for (int i = 0; i < labels.Count; i++) { if (i > 0 && i % 5 == 0) { GUILayout.EndHorizontal(); GUILayout.BeginHorizontal(); } if (GUILayout.Button(labels[i], i == current ? sPrimary : sBtn, GUILayout.MinWidth(U(minW)), GUILayout.MinHeight(U(32)))) hit = i; }
+        // three to a row on one line each: pixel letters are wide, and wrapped chips spill over each other
+        int hit = -1; GUILayout.BeginHorizontal(); var on = new GUIStyle(sPrimary) { wordWrap = false }; var off = new GUIStyle(sBtn) { wordWrap = false };
+        for (int i = 0; i < labels.Count; i++) { if (i > 0 && i % 3 == 0) { GUILayout.EndHorizontal(); GUILayout.BeginHorizontal(); } if (GUILayout.Button(labels[i], i == current ? on : off, GUILayout.MinWidth(U(minW)), GUILayout.MinHeight(U(36)))) hit = i; }
         GUILayout.EndHorizontal(); return hit;
     }
     public bool Swatch(Color c, bool on, float size = 36)

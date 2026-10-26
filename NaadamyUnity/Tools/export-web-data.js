@@ -92,6 +92,7 @@ const EXPR = ['happy', 'laugh', 'wink', 'surprised', 'think', 'sad', 'proud', 't
 { const POSES = ['wait', 'bye', 'yay'], N = 16, W = TG.nomin.W, H = TG.nomin.H, sheet = new Canvas(W * N, H * POSES.length), x = sheet.getContext('2d');
   POSES.forEach((pose, r) => { for (let i = 0; i < N; i++) { const c = new Canvas(W, H); TG.nomin.drawNomin(c.getContext('2d'), (i / N) * 2 * Math.PI / 1.2, pose); x.drawImage(c, i * W, r * H); } });
   savePng('nomin_body', sheet); }
+save('playlist', JSON.parse(fs.readFileSync(path.join(root, 'assets', 'music', 'playlist.json'), 'utf8'))); // the music list (Music.cs)
 save('nomin', { W: TG.nomin.W, H: TG.nomin.H, frames: 16, poses: ['wait', 'bye', 'yay'], faces: EXPR, period: 2 * Math.PI / 1.2 });
 
 // ---------------------------------------------------------------- the 3D worlds (js/fpworld.js): Нутаг and every province as voxels

@@ -5,7 +5,8 @@
    Run from the repo root:  node NaadamyUnity/Tools/render-bichig.js */
 const fs = require('fs'), path = require('path'), vm = require('vm'), { execFileSync } = require('child_process');
 const root = path.resolve(__dirname, '..', '..'), out = path.join(__dirname, '..', 'Assets', 'Resources');
-const EDGE = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find((p) => fs.existsSync(p));
+const EDGE = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/usr/bin/google-chrome', '/usr/bin/chromium'].find((p) => fs.existsSync(p));
 if (!EDGE) { console.error('Needs Microsoft Edge or Google Chrome to render the Mongol script.'); process.exit(1); }
 
 // the letters, from the web file itself

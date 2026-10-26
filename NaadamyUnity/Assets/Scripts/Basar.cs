@@ -225,10 +225,9 @@ public sealed partial class Game
             GUILayout.BeginHorizontal(); g.IconAt(Px.BankharFace(busy ? 2 : 0), 56);
             GUILayout.BeginVertical(); g.Title(Loc.L("Басар", "Basar")); g.Small(Loc.L("Монгол банхар нохой · Таны сурах найз", "Mongolian Bankhar · your learning buddy") + "   " + (Basar.ai ? Loc.L("● AI ухаантай", "● AI smart mode") : Loc.L("○ Офлайн мэдлэг", "○ Offline knowledge")));
             GUILayout.EndVertical(); GUILayout.FlexibleSpace();
-            if (GUILayout.Button("X", g.sBtn, GUILayout.Width(g.U(40)), GUILayout.Height(g.U(36)))) g.Later(g.Close);
             GUILayout.EndHorizontal();
             if (log.Count != lastCount) { lastCount = log.Count; scroll.y = float.MaxValue; }
-            scroll = GUILayout.BeginScrollView(scroll, GUILayout.Height(Screen.height * 0.42f));
+            scroll = g.BeginScroll(scroll, Screen.height * 0.42f);
             foreach (var l in log)
             {
                 GUILayout.BeginHorizontal();
@@ -241,13 +240,13 @@ public sealed partial class Game
                 if (!l.me) GUILayout.FlexibleSpace();
                 GUILayout.EndHorizontal();
             }
-            GUILayout.EndScrollView();
+            g.EndScroll();
             GUILayout.Label(Loc.L("Асуулт хариулт:", "Quiz me on:"), g.sSmall);
             var topics = Basar.Topics.ToList();
             int hit = g.Chips(topics.Select(t => t.name.ToString()).ToList(), -1, 80);
             if (hit >= 0) { var tp = topics[hit].id; g.Later(() => QuizIn(g, tp)); }
             GUILayout.Label(Loc.L("Асууж болох зүйлс:", "Try asking:"), g.sSmall);
-            var sug = Basar.Suggest.Select(s => s.ToString()).ToList(); int sh = g.Chips(sug, -1, 80);
+            var sug = Basar.Suggest.Select(s => s.ToString()).ToList(); int sh = -1; for (int i = 0; i < sug.Count; i++) if (g.Btn(sug[i], false, 34)) sh = i; // whole questions: one per line
             if (sh >= 0) { var s = sug[sh]; g.Later(() => Send(g, s)); }
             GUILayout.BeginHorizontal();
             GUI.SetNextControlName("basar-input");
