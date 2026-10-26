@@ -1,6 +1,6 @@
-/* Guide Nomin in full (pixel art, animated in code) and the Aimag Travel Pass.
+/* Guide Bolormaa in full (pixel art, animated in code) and the Aimag Travel Pass.
    The first two provinces on the passport route are free. Going further needs the Aimag Travel Pass (9,900₮, paid once
-   by a grown-up): when a child tries, Nomin steps in front of the road barrier and kindly explains the pass. */
+   by a grown-up): when a child tries, Bolormaa steps in front of the road barrier and kindly explains the pass. */
 (function (TG) {
   const { h, L, tx } = TG;
   const S = TG.store;
@@ -8,7 +8,7 @@
   const FREE = 2, PRICE = 9900;
   const OUT = '#2b1e2e';
 
-  // ------------------------------------------------------------ full-body Nomin (76×168 pixel art in three layers)
+  // ------------------------------------------------------------ full-body Bolormaa (76×168 pixel art in three layers)
   // back: hair, deel, boots, the arm at her side · head: her portrait, tilted smoothly by CSS · front: the khadag and the gesturing arm.
   // Breathing, the hop and the head tilt are CSS transforms, so they glide between pixels instead of jumping a whole one.
   const W = 76, H = 168, HX = 14, HY = 2, CX = 38, HEAD_H = 40;
@@ -88,7 +88,7 @@
     if (A.finger) { for (let i = 1; i <= 6; i++) disc(A.hand[0] + ux * (2 + i), A.hand[1] + uy * (2 + i), 1.8, OUT); for (let i = 1; i <= 6; i++) disc(A.hand[0] + ux * (2 + i), A.hand[1] + uy * (2 + i), 0.8, GP.skin[4]); }
     else for (let f = -2; f <= 2; f++) { const c = Math.cos(f * 0.28), sn = Math.sin(f * 0.28), fx = ux * c - uy * sn, fy = ux * sn + uy * c; for (let i = 1; i <= 4; i++) px(A.hand[0] + fx * (2 + i), A.hand[1] + fy * (2 + i), i === 4 ? OUT : GP.skin[4]); }
   }
-  /** Nomin, animating. Returns { el, set(pose), talk(on), stop() }. pose: 'wait' | 'bye' | 'yay'. */
+  /** Bolormaa, animating. Returns { el, set(pose), talk(on), stop() }. pose: 'wait' | 'bye' | 'yay'. */
   function nominCanvas(pose = 'wait', scale = 2) {
     const mk = (w, hh) => { const c = h('canvas', { width: w, height: hh }); c.getContext('2d').imageSmoothingEnabled = false; return c; };
     const back = mk(W, H), head = mk(48, HEAD_H), front = mk(W, H);
@@ -150,7 +150,7 @@
   }
   const fmt = (n) => n.toLocaleString('en-US') + '₮';
 
-  /** The paywall: Nomin says no-no in front of the barrier, with the pass and its price. */
+  /** The paywall: Bolormaa says no-no in front of the barrier, with the pass and its price. */
   function show(id, after) {
     const a = TG.aimags && TG.aimags.byId(id), p = S.active();
     const nm = nominCanvas('wait', 2), say = h('div', { class: 'nw-say', 'aria-live': 'polite' });

@@ -141,7 +141,7 @@
   function visit({ id, shell }) {
     const p = S.active(), a = TG.aimags.byId(id), j = J[id];
     if (!a || !j || !unlocked(p, id)) return screen({ shell });
-    if (TG.aimagPass.locked(p, id)) { setTimeout(() => TG.aimagPass.show(id), 60); return screen({ shell }); } // past the free provinces: Nomin and the travel pass
+    if (TG.aimagPass.locked(p, id)) { setTimeout(() => TG.aimagPass.show(id), 60); return screen({ shell }); } // past the free provinces: Bolormaa and the travel pass
     const got = pass(p).stamps[id], i = ORDER.indexOf(id);
     const eth = TG.ethnic ? TG.ethnic.ETHNIC.filter((e) => e.aimags[0] === id || (e.aimags.includes(id) && e.id !== 'khalkh')) : [];
     const seen = ((p.travel || {})[id] || []).length, stampedAt = pass(p).stamps[id];

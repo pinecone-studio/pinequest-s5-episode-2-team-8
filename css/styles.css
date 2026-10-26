@@ -1582,7 +1582,7 @@ img.emo { height: 1.2em; width: auto; vertical-align: -0.24em; image-rendering: 
 .v-stick-hint.gone { opacity: 0; }
 .v-help { font-size: 22px; }
 
-/* ---------- Aimag Travel Pass: Nomin says "no no" in front of the road barrier ---------- */
+/* ---------- Aimag Travel Pass: Bolormaa says "no no" in front of the road barrier ---------- */
 .nomin-wall { display: flex; flex-direction: column; gap: 12px; }
 .nomin-wall h2 { text-align: center; margin: 0; }
 .nw-stage { position: relative; height: 360px; overflow: hidden; background: #8fd0f5; box-shadow: inset 0 0 0 3px #2b1e2e; }

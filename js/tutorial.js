@@ -1,4 +1,4 @@
-/* Naadamy — the tutorial level: Guide Nomin walks a new player through Нутаг.
+/* Naadamy — the tutorial level: Guide Bolormaa walks a new player through Нутаг.
    She talks in the story box (portrait with changing faces, her own voice), then hands over control for small
    goals: walk, jump, call Basar, drink from the well. In between she shows the buttons and answers questions.
    It starts by itself on the first visit; the "?" pill in Нутаг plays it again. */
@@ -6,7 +6,7 @@
   const { h, L } = TG;
   const T = (mn, en) => ({ mn, en });
   const S = TG.store;
-  const LOOK = { deel: 'blue', skin: '#D9A06E', hat: null, face: null, neck: 'khadag', pet: null }; // Nomin in the village
+  const LOOK = { deel: 'blue', skin: '#D9A06E', hat: null, face: null, neck: 'khadag', pet: null }; // Bolormaa in the village
   const coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
 
   let run = null; // { id, goalEl, glowEl, timer }
@@ -62,7 +62,7 @@
     }
 
     // hello
-    await say('happy', `Сайн уу, ${name}! Би Номин, энэ Нутгийн хөтөч.`, `Hello, ${name}! I’m Nomin, the guide of this village.`);
+    await say('happy', `Сайн уу, ${name}! Би Болормаа, энэ Нутгийн хөтөч.`, `Hello, ${name}! I’m Bolormaa, the guide of this village.`);
     await say('wink', 'Энд мал саах, бөх барилдах, морь уралдуулах, монгол гэр барих бүгдийг тоглож сурна.', 'Here you learn by playing: milking, wrestling, horse racing, building a ger and more.');
     let a = await ask('tease', 'Тэгэхээр... надтай хамт Нутгаар нэг тойрох уу?', 'So... want to take a little tour with me?',
       [T('Тийм ээ, явцгаая!', 'Yes, let’s go!'), T('Нутаг гэж юу вэ?', 'What is Nutag?'), T('Би өөрөө мэднэ', 'I already know how')]);
@@ -140,7 +140,7 @@
           await say('happy', 'Эмээгийн гэрт ч зочлоорой. Эмээ ёс заншил зааж, ааруул өгдөг!', 'Visit Grandma’s ger too. She teaches good manners and gives you aaruul!');
         }],
         [T('Чи хэн бэ?', 'Who are you?'), async () => {
-          await say('proud', 'Би Номин! Хөдөө өссөн, морь унах, бөх барилдахыг үзэх их дуртай.', 'I’m Nomin! I grew up in the countryside, and I love riding and watching wrestling.');
+          await say('proud', 'Би Болормаа! Хөдөө өссөн, морь унах, бөх барилдахыг үзэх их дуртай.', 'I’m Bolormaa! I grew up in the countryside, and I love riding and watching wrestling.');
           await say('tease', 'Нууцхан хэлэхэд... Басарыг надаас ч илүү ухаантай гэж боддог. Түүнд битгий хэлээрэй!', 'Between you and me... I think Basar is even smarter than me. Don’t tell him!');
         }],
       ];
@@ -190,7 +190,7 @@
     drop.next = Math.max(drop.next, Date.now() + GAP_SHORT); // no drop-in visit right after she has just talked
   }
 
-  // ---------------------------------------------------------------- Nomin drops by: a quest to claim, new quests, someone with a task, now and then a tip
+  // ---------------------------------------------------------------- Bolormaa drops by: a quest to claim, new quests, someone with a task, now and then a tip
   const TIPS = [
     T('Ядарсан уу? 🍖 дээр дараад нэг юм идчих. Хүч чинь буцаад дүүрнэ шүү.', 'Feeling tired? Tap 🍖 and grab a snack. Your energy fills right back up.'),
     T('Эмээд зочлохоо мартаагүй биз? Ёсоор мэндэлбэл ааруул өгнө шүү, хи хи.', 'Have you visited Grandma yet? Greet her nicely and she’ll share her aaruul, hee hee.'),
