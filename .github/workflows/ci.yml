@@ -29,7 +29,7 @@ jobs:
 
       - name: JavaScript syntax
         run: |
-          for f in $(find js -name '*.js') sw.js server.js basar-ai.js; do node --check "$f"; done
+          for f in $(find web/js -name '*.js') web/sw.js server/server.js server/basar-ai.js; do node --check "$f"; done
           echo "All JavaScript files parse."
 
       - name: Every referenced file exists and is cached offline
@@ -92,7 +92,7 @@ jobs:
       - name: Collect site files
         run: |
           mkdir _site
-          cp -r index.html manifest.webmanifest sw.js assets css js _site/
+          cp -r web/. _site/
 
       - uses: actions/configure-pages@v5
 

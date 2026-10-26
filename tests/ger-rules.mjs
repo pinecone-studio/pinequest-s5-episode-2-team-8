@@ -2,7 +2,7 @@
 // Grandpa Craftsman's trades, felt making, and how lots saved before hands-on building are read.
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
-const R = createRequire(import.meta.url)('../js/village/rules.js');
+const R = createRequire(import.meta.url)('../web/js/village/rules.js');
 assert.equal(R.GER_STEPS.length, 9); assert.equal(R.GER_DONE, 9);
 assert.deepEqual(R.gerTry(0, 'shal', {}), { ok: true });
 assert.deepEqual(R.gerTry(0, 'esgii', { esgii: 2 }), { ok: false, why: 'order', next: 'shal' });

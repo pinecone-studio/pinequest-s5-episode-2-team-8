@@ -96,7 +96,7 @@ public static class Data
         if (cache.TryGetValue(name, out var j)) return j;
         var ta = Resources.Load<TextAsset>("Data/" + name);
         j = ta != null ? J.Parse(ta.text) : new J(null);
-        if (ta == null) Debug.LogWarning("Naadamy: missing Resources/Data/" + name + ".json (run NaadamyUnity/Tools/export-web-data.js)");
+        if (ta == null) Debug.LogWarning("Naadamy: missing Resources/Data/" + name + ".json (run unity/Tools/export-web-data.js)");
         return cache[name] = j;
     }
 }

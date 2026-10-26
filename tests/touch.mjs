@@ -6,7 +6,7 @@ import { join, extname, dirname, resolve, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 
-const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const chrome = process.env.CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain' };

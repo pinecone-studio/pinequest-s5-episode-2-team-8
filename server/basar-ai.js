@@ -1,7 +1,7 @@
 /* Басар AI: the server-side bridge to Claude. The API key stays on the server and is never sent to the browser.
-   Without a key (or without internet) the app falls back to Basar's offline knowledge in js/basar/knowledge.js.
+   Without a key (or without internet) the app falls back to Basar's offline knowledge in web/js/basar/knowledge.js.
 
-   Key:   ANTHROPIC_API_KEY=... in the environment, or in a file named .env next to server.js
+   Key:   ANTHROPIC_API_KEY=... in the environment, or in a file named .env in the repo root
    Model: BASAR_MODEL (default claude-opus-5-5) */
 'use strict';
 const fs = require('fs');

@@ -1,7 +1,7 @@
 // What a child learns by doing it by hand in Нутаг (shown on the parent dashboard), read from the village save.
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
-const R = createRequire(import.meta.url)('../js/village/rules.js');
+const R = createRequire(import.meta.url)('../web/js/village/rules.js');
 
 assert.deepEqual(R.HANDS_ON.map((a) => a.id), ['ger', 'aaruul', 'urum', 'tarag', 'airag', 'emee']);
 for (const a of R.HANDS_ON) {

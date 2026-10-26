@@ -48,7 +48,7 @@ public static class NaadamySetup
     public static void BuildWindows() => Build(BuildTarget.StandaloneWindows64, "Builds/Windows/Naadamy.exe");
 
     /** The web build (Builds/WebGL), for a static host such as Vercel. From a terminal:
-     *  Unity -batchmode -quit -projectPath NaadamyUnity -buildTarget WebGL -executeMethod NaadamySetup.BuildWebGL */
+     *  Unity -batchmode -quit -projectPath unity -buildTarget WebGL -executeMethod NaadamySetup.BuildWebGL */
     [MenuItem("Naadamy/Build WebGL")]
     public static void BuildWebGL()
     {

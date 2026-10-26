@@ -4,7 +4,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url)), '..', 'web');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 const problems = [];
 const local = (u) => !/^(https?:|data:|#|mailto:)/.test(u);

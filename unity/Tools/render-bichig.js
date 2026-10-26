@@ -2,9 +2,9 @@
    Noto Sans Mongolian font, in Microsoft Edge (headless), so Unity gets correctly shaped glyphs (Unity can't shape
    Mongol script). Output: Assets/Resources/Art/bichig_glyphs.png.bytes (a grid of 240×312 cells, black on white) and
    Assets/Resources/Data/bichig.json (the letters, their order and the grid).
-   Run from the repo root:  node NaadamyUnity/Tools/render-bichig.js */
+   Run from the repo root:  node unity/Tools/render-bichig.js */
 const fs = require('fs'), path = require('path'), vm = require('vm'), { execFileSync } = require('child_process');
-const root = path.resolve(__dirname, '..', '..'), out = path.join(__dirname, '..', 'Assets', 'Resources');
+const root = path.resolve(__dirname, '..', '..', 'web'), out = path.join(__dirname, '..', 'Assets', 'Resources');
 const EDGE = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Google/Chrome/Application/chrome.exe',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/usr/bin/google-chrome', '/usr/bin/chromium'].find((p) => fs.existsSync(p));
 if (!EDGE) { console.error('Needs Microsoft Edge or Google Chrome to render the Mongol script.'); process.exit(1); }

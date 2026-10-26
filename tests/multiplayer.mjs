@@ -15,7 +15,7 @@ const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const until = async (fn, label, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return; await sleep(150); } throw new Error(`timed out waiting for: ${label}`); };
 
-const server = spawn(process.execPath, [join(root, 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, HEARTBEAT_MS: '600' }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
+const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, HEARTBEAT_MS: '600' }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
 const port = await new Promise((res, rej) => { server.on('message', (m) => m.port && res(m.port)); server.on('exit', (c) => rej(new Error('server exited ' + c))); setTimeout(() => rej(new Error('server did not start')), 8000); });
 // connect over the computer's Wi-Fi address like a second device would (falls back to localhost without a network)
 const lan = Object.values(networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal);
