@@ -1,0 +1,402 @@
+// Бөх: Mongolian wrestling at the Naadam arena. The herald calls both names, you do the eagle dance, then each move is
+// done with its own skill (timing, footwork, power, grip, balance). 9 rounds, titles from Nachin to Avarga.
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+
+public sealed partial class Game
+{
+    const string RED = "#d8342b", BLUE = "#2b5bd8"; // traditional zodog colours
+    string MySkin => Rules.SKINS.Contains(V.look.skin) ? V.look.skin : Rules.SKINS[0];
+
+    sealed class ArenaModal : Modal
+    {
+        readonly Tx fact = Rules.Pick(Rules.WR_FACTS);
+        public override void Draw(Game g)
+        {
+            var wr = g.V.wr; var t = Rules.TitleById(Rules.TitleFor(wr));
+            var next = Rules.TITLES.FirstOrDefault(q => q.id == "avarga" ? wr.champ < 2 : wr.best < q.need);
+            GUILayout.BeginHorizontal(); g.IconAt(Px.Wrestler(RED, g.MySkin, "dance", 0), 64);
+            GUILayout.BeginVertical(); g.Title(Loc.L("Бөхийн барилдаан", "Mongolian wrestling")); g.Small(t != null ? "♦ " + t.name : Loc.L("Цолгүй бөх", "No title yet")); GUILayout.EndVertical(); GUILayout.EndHorizontal();
+            g.Stats((Loc.L("Шилдэг давлага", "Best rounds"), wr.best.ToString()), (Loc.L("Түрүү", "Wins"), wr.champ.ToString()), (Loc.L("Ялалт", "Victories"), (wr.wins + wr.pvpW).ToString()));
+            g.Small(next == null ? Loc.L("Та хамгийн дээд цол Аварга хүртсэн!", "You hold the highest title, Avarga!")
+                : next.id == "avarga" ? Loc.L("Наадамд дахин түрүүлбэл Аварга цол хүртэнэ!", "Win the Naadam once more to become an Avarga!")
+                : Loc.L($"Наадамд {next.need} давбал «{next.name}» цол хүртэнэ.", $"Win {next.need} rounds at the Naadam to earn the \"{next.name}\" title."));
+            GUILayout.BeginHorizontal();
+            if (g.Btn(Loc.L("Чөлөөтэй барилдах", "Wrestle freely") + "\n<size=" + Mathf.RoundToInt(g.U(10)) + ">" + Loc.L("Наадамд 9 даваа барилдаж цол аваарай", "Wrestle 9 rounds at the Naadam and earn titles") + "</size>", true, 64)) g.Later(() => g.Swap(WrestleModal.Tournament(g, 1)));
+            if (g.Btn(Loc.L("Барилдаж сурах", "Learn to wrestle") + "\n<size=" + Mathf.RoundToInt(g.U(10)) + ">" + (wr.school > 0 ? Loc.L("Мэх бүрийг энгийнээр дахин үзэх", "Go over every move again, nice and simple") : Loc.L("Мэх бүрийг энгийнээр тайлбарлаад дасгал хийнэ", "Every move explained simply, then practice")) + "</size>", false, 64)) g.Later(() => g.Swap(new SchoolModal()));
+            GUILayout.EndHorizontal();
+            if (g.Btn(Loc.L($"Мэхний ном ({Rules.MOVES.Length} мэх)", $"Technique book ({Rules.MOVES.Length} moves)"))) g.Later(() => g.Open(new TechBookModal()));
+            g.Fact(fact.ToString());
+        }
+        public override void Press(Game g) => g.Close();
+    }
+    // ---------------- wrestling school: the basics and every move, told as you'd tell a five-year-old, then a practice bout
+    sealed class SkillKid { public Tx name, how; }
+    static readonly Dictionary<string, SkillKid> SKILL_KID = new Dictionary<string, SkillKid>
+    {
+        ["timing"] = new SkillKid { name = new Tx("Цагаа тааруулах", "Tap on time"), how = new Tx("Жижиг зураас нааш цааш гүйнэ. Ногоон дээр ирэхэд нь дар, эрвээхэй барьж байгаа юм шиг!", "A little line runs back and forth. Tap when it’s in the green, like catching a butterfly!") },
+        ["hold"] = new SkillKid { name = new Tx("Дараад барих", "Press and hold"), how = new Tx("Товчоо дараад барь. Аяганд сүү хийх шиг зураас дүүрнэ. Шар дээр хүрэхэд нь тавь. Хэт удаан битгий бариарай!", "Press the button and keep holding. The bar fills up like pouring milk into a cup. Let go when it reaches the yellow. Not too long!") },
+        ["combo"] = new SkillKid { name = new Tx("Хөлийн хөдөлгөөн", "Happy feet"), how = new Tx("Сумнууд гарч ирнэ. Яг тэр дарааллаар нь хурдан дар. Хөлөөрөө бүжиглэж байгаа юм шиг!", "Arrows pop up. Press them in the same order, quickly. It’s like a little dance with your feet!") },
+        ["mash"] = new SkillKid { name = new Tx("Бүх хүчээрээ", "Super strong"), how = new Tx("Аль болох хурдан дар, дар, дар! Дарах бүрт чи улам хүчтэй болно.", "Tap, tap, tap as fast as you can! Every tap makes you stronger.") },
+        ["balance"] = new SkillKid { name = new Tx("Тэнцвэр", "Stay steady"), how = new Tx("Найз чинь чамайг нааш цааш түлхэнэ. ◄ ► дарж зүүгээ голд нь байлга. Гуалин дээгүүр алхаж байгаа юм шиг!", "Your friend pushes you this way and that. Press ◄ ► to keep the needle in the middle, like walking along a log!") },
+    };
+    sealed class SchoolPage { public string[] pic; public Tx title; public Tx[] say; public string skill; public bool last; }
+    static readonly SchoolPage[] SCHOOL = new[]
+    {
+        new SchoolPage { pic = new[] { "grip", "grip" }, title = new Tx("Бөх гэж юу вэ?", "What is wrestling?"), say = new[] { new Tx("Хоёр бөх бие биенээ барьж аваад түлхэлцэж, татацгаана.", "Two wrestlers hold on to each other, then push and pull."), new Tx("Хэн нь түрүүлж унавал тэр нь ялагдана. Яг л тоглоом шиг!", "Whoever falls down first loses. It’s just like a game!") } },
+        new SchoolPage { pic = new[] { "dance", "fall" }, title = new Tx("Яаж ялах вэ?", "How do you win?"), say = new[] { new Tx("Найзынхаа өвдөг, тохой, нуруу эсвэл толгойг газарт хүргэвэл чи ялна.", "If your friend’s knee, elbow, back or head touches the ground, you win."), new Tx("Хөл, гар газарт хүрвэл зүгээр. Тэр унасанд тооцогдохгүй.", "Feet and hands on the ground are okay. That doesn’t count as falling.") } },
+        new SchoolPage { pic = new[] { "idle", "idle" }, title = new Tx("Бөхийн хувцас", "Wrestler clothes"), say = new[] { new Tx("Зодог бол урд нь задгай, ханцуйтай жижигхэн цамц.", "The zodog is a little jacket with long sleeves and an open front."), new Tx("Шуудаг бол богинохон өмд. Гутал нь хамар нь дээшээ эргэсэн том гутал.", "The shuudag is tiny shorts, and the gutal are big boots with curly toes.") } },
+        new SchoolPage { pic = new[] { "dance", "dance" }, title = new Tx("Бүргэдийн бүжиг", "The eagle dance"), say = new[] { new Tx("Барилдахын өмнө бөхчүүд бүргэд шиг гараа дэвж бүжиглэнэ. Үүнийг “дэвээ” гэдэг.", "Before wrestling, wrestlers flap their arms like a big eagle. This is called “devee”."), new Tx("Тоглоомд товч гэрэлтэх бүрт дар. Сайн бүжиглэвэл эхний мэх чинь илүү хүчтэй болно!", "In the game, tap when the button glows. Dance well and your first move gets stronger!") } },
+        new SchoolPage { pic = new[] { "push", "grip" }, title = new Tx("Мэх гэж юу вэ?", "What is a move?"), say = new[] { new Tx("Мэх бол найзаа унагах арга. Хайч, чулуу, даавуу шиг: мэх бүр заримыг нь дийлж, заримд нь дийлдэнэ.", "A move is a trick to make your friend fall. It’s like rock, paper, scissors: every move beats some moves and loses to others."), new Tx("Мэхний доор “>” тэмдгийн ард ямар мэхийг дийлдэг нь бичээстэй.", "Under each move, after the “>” sign, you can see which moves it beats."), new Tx("Нэг мэхийг дахин дахин хийвэл найз чинь таачихна. Өөр өөр мэх хий!", "If you use the same move again and again, your friend will guess it. Mix them up!") } },
+        new SchoolPage { skill = "timing" }, new SchoolPage { skill = "hold" }, new SchoolPage { skill = "combo" }, new SchoolPage { skill = "mash" }, new SchoolPage { skill = "balance" },
+        new SchoolPage { pic = new[] { "grip", "grip" }, title = new Tx("Одоо туршаад үзье!", "Now let’s try it!"), say = new[] { new Tx("Багштайгаа дасгал барилдаан хийе. Багш зөөлөн барилдана, санаа зовох хэрэггүй.", "Let’s have a practice bout with the coach. The coach goes easy, so don’t worry."), new Tx("Мэх сонгох бүрт тэр мэх юу хийдгийг, яаж хийхийг дахин сануулна.", "Every time you pick a move, you’ll see what it does and how to do it.") }, last = true },
+    };
+    sealed class SchoolModal : Modal
+    {
+        int i; Vector2 scroll;
+        public override void Draw(Game g)
+        {
+            var pg = SCHOOL[i]; var sk = pg.skill != null ? SKILL_KID[pg.skill] : null;
+            g.Small(Loc.L("Бөхийн сургууль", "Wrestling school") + $" · {i + 1}/{SCHOOL.Length}");
+            if (sk != null) GUILayout.Label(SKILL_ICON[pg.skill], new GUIStyle(g.sBig) { alignment = TextAnchor.MiddleCenter });
+            else { GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace(); g.IconAt(Px.Wrestler(RED, g.MySkin, pg.pic[0], 0), 56); g.IconAt(Flip(Px.Wrestler(BLUE, Rules.SKINS[2], pg.pic[1], 0)), 56); GUILayout.FlexibleSpace(); GUILayout.EndHorizontal(); }
+            GUILayout.Label("<b>" + (sk != null ? sk.name : pg.title) + "</b>", new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleCenter });
+            foreach (var t in sk != null ? new[] { sk.how } : pg.say) g.Text(t.ToString());
+            if (sk != null)
+            {
+                GUILayout.Label(Loc.L("Ингэж хийдэг мэхүүд", "Moves you do this way"), g.sSmall);
+                scroll = GUILayout.BeginScrollView(scroll, GUILayout.MaxHeight(Screen.height * 0.3f));
+                foreach (var m in Rules.MOVES.Where(m => (Rules.SKILL.TryGetValue(m.id, out var s) ? s : "timing") == pg.skill)) { GUILayout.BeginVertical(g.sBtn); GUILayout.Label("<b>" + m.name + "</b>", g.sLabel); GUILayout.Label(GerRules.Kid(m.id).ToString(), g.sSmall); GUILayout.EndVertical(); }
+                GUILayout.EndScrollView();
+            }
+            GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
+            for (int k = 0; k < SCHOOL.Length; k++) GUILayout.Label(k == i ? "<color=#f7c646>●</color>" : k < i ? "<color=#2ea35f>●</color>" : "○", g.sLabel);
+            GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
+            if (pg.last && g.V.wr.school == 0) { g.V.wr.school = 1; g.V.Save(); }
+            GUILayout.BeginHorizontal();
+            if (i > 0) { if (g.Btn("◄ " + Loc.L("Буцах", "Back"))) g.Later(() => i--); } else if (g.Btn(Loc.L("Хаах", "Close"))) g.Later(g.Close);
+            if (pg.last) { if (g.Btn(Loc.L("Дасгал барилдаан", "Practice bout"), true)) g.Later(() => g.Swap(WrestleModal.Practice(g))); }
+            else if (g.Btn(Loc.L("Дараах", "Next") + " ►", true)) g.Later(() => { i++; Sfx.Tap(); });
+            GUILayout.EndHorizontal();
+        }
+        static PxCanvas Flip(PxCanvas c) { var o = new PxCanvas(c.W, c.H); o.BlitScaled(c, 0, 0, c.W, c.H, true); return o; }
+        public override void Press(Game g) { }
+    }
+    static readonly Dictionary<string, string> SKILL_ICON = new Dictionary<string, string> { ["timing"] = "»", ["hold"] = "■", ["combo"] = "↔", ["mash"] = "!!", ["balance"] = "≈" };
+    static string SkillIcon(string move) => SKILL_ICON[Rules.SKILL.TryGetValue(move, out var s) ? s : "timing"];
+    sealed class TechBookModal : Modal
+    {
+        Vector2 scroll;
+        public override void Draw(Game g)
+        {
+            g.Title(Loc.L("Бөхийн мэхний ном", "Wrestling technique book"));
+            int half = Rules.MOVES.Length >> 1;
+            g.Small(Loc.L($"Мэх бүр дараагийн {half} мэхийг давж, өмнөхөд нь дийлддэг. Мэх бүрийг өөр ур чадвараар хийнэ: » цаг тааруулах, ↔ хөлийн хөдөлгөөн (сумнууд), !! хүч (хурдан дарах), ■ барьцаа (дарж байгаад тавих), ≈ тэнцвэр. Нэг мэхийг давтвал өрсөлдөгч таньдаг.",
+                $"Each move beats the next {half} and loses to the ones before it. Each is done with its own skill: » timing, ↔ footwork (arrows), !! power (fast taps), ■ grip (hold and release), ≈ balance. Repeat a move and your opponent reads it."));
+            scroll = GUILayout.BeginScrollView(scroll, GUILayout.Height(Screen.height * 0.55f));
+            foreach (var m in Rules.MOVES)
+            {
+                int used = SaveData.Get(g.V.wr.techs, m.id);
+                GUILayout.BeginVertical(g.sBtn);
+                GUILayout.Label($"<b>{SkillIcon(m.id)} {m.name}</b>  <size={Mathf.RoundToInt(g.U(10))}>×{used}</size>", g.sLabel);
+                GUILayout.Label(m.fact.ToString(), g.sSmall);
+                GUILayout.Label("√ " + Loc.L("Давна", "Beats") + ": " + string.Join(", ", m.beats.Select(b => Rules.MoveById(b).name.ToString())), g.sSmall);
+                GUILayout.EndVertical();
+            }
+            GUILayout.EndScrollView();
+            if (g.Btn(Loc.L("Хаах", "Close"), false, 32)) g.Later(g.Close);
+        }
+        public override void Press(Game g) => g.Close();
+    }
+
+    sealed class WrestleModal : Modal
+    {
+        const float DEVEE_BEAT = 0.7f; const int DEVEE_TAPS = 4;
+        static readonly string[] ARROWS = { "←", "→", "↑", "↓" };
+        readonly int round, need; readonly string oppName, oppSkin; readonly float oppSkill, barSpeed, sharp; readonly bool young, practice; string coachMove;
+        readonly Live live = new Live(192, 108);
+        int a, b; string phase = "devee", move, lastPlayer, lastMove; float off, target, t0, marker, intro, end, bonus; bool overF;
+        string[] pose = { "dance", "dance" }; readonly Dictionary<string, int> used = new Dictionary<string, int>();
+        (string text, bool good, float t0)? flash; string msg, herald; bool heraldOn = true;
+        int dn, dgood, df; readonly List<bool?> feathers = new List<bool?>();
+        // the skill being performed
+        string sk; float skT0, skLimit; int[] seq; int si, serr, sn, sneed; bool held; float sv, szc, szw, bx2, bvx, bpush, bgood; int bdir; int holdFrame = -9;
+        bool won; (string newTitle, bool champion) res;
+
+        WrestleModal(Game g, int round, string oppName, float oppSkill, string oppSkin, bool practice = false)
+        {
+            this.round = round; this.oppName = oppName; this.oppSkill = oppSkill; this.oppSkin = oppSkin; this.practice = practice;
+            need = round >= 7 ? 3 : 2;
+            young = g.V.age > 0 && g.V.age <= 9;   // little ones get a slower marker and wider targets
+            barSpeed = (2.1f + round * 0.2f) * (young ? 0.85f : 1) * (practice ? 0.8f : 1); sharp = Mathf.Max(1, 1 + round * 0.08f - (young ? 0.1f : 0));
+            intro = Time.time; t0 = Time.time;
+            var myT = Rules.TitleById(Rules.TitleFor(g.V.wr)); var opT = Rules.TitleById(Rules.OPP_TITLE[round]);
+            string Named(Rules.Title t, string n) => (t != null ? t.name + " " : "") + n;
+            herald = Loc.L($"«{Named(myT, g.MyName)}, {Named(opT, oppName)} хоёр барилдана! Хүчит бөхчүүд дэвээгээ хийцгээ!»", $"\"{Named(myT, g.MyName)} and {Named(opT, oppName)} will wrestle! Mighty wrestlers, do your eagle dance!\"");
+            msg = Loc.L("Дэвээ! Товч гэрэлтэх үед дарж бүргэд шиг дэв (4 удаа).", "Eagle dance! Tap when the button glows (4 times).");
+        }
+        /** A practice bout at the wrestling school: the slowest round, a gentle coach, the move explained as you pick it, nothing to win or lose. */
+        public static WrestleModal Practice(Game g) => new WrestleModal(g, 1, Loc.L("Багш", "Coach"), 0.06f, Rules.SKINS[2], true);
+        public static WrestleModal Tournament(Game g, int round) => new WrestleModal(g, round, Rules.WR_NAMES[(round * 5 + Random.Range(0, 4)) % Rules.WR_NAMES.Length], 0.12f + round * 0.07f, Rules.Pick(Rules.SKINS));
+        public override float Width => 560;
+
+        bool OnBeat() { float q = ((Time.time - intro) % DEVEE_BEAT) / DEVEE_BEAT; return q < 0.2f || q > 0.84f; }
+        void DeveeTap(Game g)
+        {
+            if (phase != "devee" || dn >= DEVEE_TAPS) return;
+            bool good = OnBeat(); feathers.Add(good); dn++; df ^= 1; if (good) dgood++;
+            if (good) Sfx.Chime(); else Sfx.Tap();
+            if (dn < DEVEE_TAPS) return;
+            bonus = dgood * 0.06f;
+            msg = dgood >= 3 ? Loc.L($"Гоё дэвлээ! Бүргэд шиг! Эхний мэх +{Mathf.RoundToInt(bonus * 100)}% хүчтэй.", $"Beautiful dance, like an eagle! First move +{Mathf.RoundToInt(bonus * 100)}% power.")
+                : dgood > 0 ? Loc.L($"Дэвээ дууслаа. Эхний мэх +{Mathf.RoundToInt(bonus * 100)}% хүчтэй.", $"Dance done. First move +{Mathf.RoundToInt(bonus * 100)}% power.") : Loc.L("Дэвээ хэмнэлээсээ алдлаа. Одоо барилдъя!", "The dance was off the beat. Now wrestle!");
+            phase = "pause"; t0 = Time.time;
+        }
+        void StartSkill(string id)
+        {
+            coachMove = id;
+            move = id; heraldOn = false;
+            string type = Rules.SKILL.TryGetValue(id, out var s) ? s : "timing"; t0 = Time.time; skT0 = Time.time; sk = type;
+            if (type == "timing") { phase = "timing"; msg = Loc.L("Ногоон хэсэгт хүрэхэд дар!", "Press when the marker is in the green!"); return; }
+            if (type == "combo") { seq = Enumerable.Range(0, 3 + Mathf.Min(2, round / 4)).Select(_ => Random.Range(0, 4)).ToArray(); si = 0; serr = 0; skLimit = Mathf.Max(3.4f, 5.6f - round * 0.18f) * (young ? 1.2f : 1); }
+            if (type == "mash") { sn = 0; sneed = 7 + Mathf.CeilToInt(round * 0.6f) - (young ? 1 : 0); skLimit = 2.9f; }
+            if (type == "hold") { held = false; sv = 0; szc = 0.78f; szw = (young ? 0.3f : 0.26f) / sharp; }
+            if (type == "balance") { bx2 = 0; bvx = 0; bpush = 0; bdir = 0; bgood = 0; skLimit = 2.8f; }
+            phase = "skill";
+            msg = type == "combo" ? Loc.L("Хөлийн хөдөлгөөн! Сумнуудыг дарааллаар нь хурдан дар.", "Footwork! Press the arrows in order, quickly.") : type == "mash" ? Loc.L("Бүх хүчээ гарга! Хурдан, олон дар!", "All your strength! Tap as fast as you can!")
+                : type == "hold" ? Loc.L("Барьцаа ав: дарж байгаад шар хэсэгт хүрэхэд тавь.", "Take the grip: hold, and let go in the yellow zone.") : Loc.L("Тэнцвэрээ хадгал! Зүү голдоо байлгах гэж ← → дар.", "Keep your balance! Use ← → to keep the needle in the middle.");
+        }
+        void Combo(int i) { if (phase != "skill" || sk != "combo") return; if (seq[si] == i) { si++; Sfx.Tap(); if (si >= seq.Length) { float q = (Time.time - skT0) / skLimit; Lock(Mathf.Clamp(0.45f + 0.55f * (1 - q) - 0.15f * serr, 0.05f, 1)); } } else { serr++; Sfx.Bad(); } }
+        void Mash() { if (phase != "skill" || sk != "mash") return; sn++; Sfx.Tap(); }
+        void HoldDown() { if (phase != "skill" || sk != "hold" || held) return; held = true; sv = 0; }
+        void HoldUp() { if (phase != "skill" || sk != "hold" || !held) return; held = false; Lock(Mathf.Clamp01(1 - Mathf.Abs(sv - szc) * 3.2f * sharp)); }
+
+        public override void Tick(Game g, float dt)
+        {
+            off += (target - off) * Mathf.Min(1, dt * 8);
+            if (phase == "pause" && Time.time - t0 > 0.9f && !overF) { pose = new[] { "grip", "grip" }; phase = "choose"; msg = Loc.L("Мэхээ сонго!", "Choose your move!"); }
+            if (phase == "timing") { marker = (Mathf.Sin((Time.time - t0) * barSpeed) + 1) / 2; if (Time.time - t0 > 5) Lock(-1); }
+            if (phase == "skill")
+            {
+                float el = Time.time - skT0;
+                if (sk == "combo" && el > skLimit) Lock(si / (float)seq.Length * 0.5f);
+                else if (sk == "mash" && el > skLimit) Lock(Mathf.Min(1, sn / (float)sneed));
+                else if (sk == "hold")
+                {
+                    bool pressing = Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.E) || Time.frameCount - holdFrame <= 2;
+                    if (pressing && !held) HoldDown(); else if (!pressing && held) HoldUp();
+                    if (held) { sv += dt / (young ? 1.9f : 1.6f); if (sv > 1) { sv = 0; msg = Loc.L("Хэт удаан барилаа! Дахиад.", "Held too long! Again."); } }
+                    if (phase == "skill" && el > 6) Lock(0.1f);
+                }
+                else if (sk == "balance")
+                {
+                    int kd = (Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.A) ? -1 : 0) + (Input.GetKey(KeyCode.RightArrow) || Input.GetKey(KeyCode.D) ? 1 : 0);
+                    int d = kd != 0 ? kd : bdir; bdir = 0;
+                    bpush += (Random.value - 0.5f) * dt * (4.5f + round * 0.7f); bpush = Mathf.Clamp(bpush, -1.3f, 1.3f); // your opponent shoves you this way and that
+                    bvx += (bpush * (0.85f + round * 0.08f) + d * 4.6f) * dt; bvx *= 0.92f; bx2 = Mathf.Clamp(bx2 + bvx * dt, -1, 1);
+                    if (Mathf.Abs(bx2) < 0.25f) bgood += dt;
+                    if (el > skLimit) Lock(Mathf.Clamp01(bgood / skLimit * 1.15f));
+                }
+            }
+            if (phase == "result" && Time.time - t0 > (a >= need || b >= need ? 0.9f : 1.1f)) { if (a >= need || b >= need) Finish(g, a > b); else { phase = "choose"; } }
+        }
+        public override void Press(Game g) { }
+        public override void Key(Game g)
+        {
+            bool space = Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.E);
+            if (phase == "devee" && space) DeveeTap(g);
+            else if (phase == "timing" && space) Lock(-1);
+            else if (phase == "skill" && sk == "mash" && space) Mash();
+            else if (phase == "skill" && sk == "combo")
+            {
+                if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A)) Combo(0);
+                if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D)) Combo(1);
+                if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W)) Combo(2);
+                if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S)) Combo(3);
+            }
+        }
+        void Lock(float given)
+        {
+            if (phase != "timing" && phase != "skill") return;
+            heraldOn = false;
+            float power = given >= 0 ? given : Mathf.Max(0, 1 - Mathf.Abs(marker - 0.5f) * 2 * sharp);
+            if (bonus > 0) { power = Mathf.Min(1, power + bonus); bonus = 0; } // the eagle dance's power
+            bool repeated = move == lastPlayer;
+            if (repeated) power *= 0.8f; // the same move twice in a row is easier to read
+            used[move] = (used.TryGetValue(move, out var u) ? u : 0) + 1;
+            // the opponent studies you: in later rounds it often picks a move that beats the one you use most
+            string fav = used.OrderByDescending(kv => kv.Value).First().Key;
+            string read = repeated ? move : (Random.value < 0.5f ? lastPlayer : fav);
+            bool smart = read != null && Random.value < Mathf.Min(0.5f, 0.03f + round * 0.05f);
+            var counters = Rules.MOVES.Where(q => read != null && q.beats.Contains(read)).ToList();
+            string om = smart && counters.Count > 0 ? Rules.Pick(counters).id : Rules.Pick(Rules.MOVES).id;
+            float op = Mathf.Clamp(oppSkill + (Random.value - 0.5f) * Mathf.Max(0.18f, 0.5f - round * 0.035f), 0.05f, 1);
+            Apply(Rules.Exchange(move, power, om, op), move, power, om, op);
+        }
+        void Apply(int r, string mm, float mp, string om, float op)
+        {
+            bool wasRepeat = mm == lastPlayer; var g = I;
+            lastPlayer = mm; if (r != 0) lastMove = r > 0 ? mm : om;
+            if (r > 0) { a++; Sfx.Good(); SaveData.Add(g.V.wr.techs, mm, 1); g.V.Save(); } else if (r < 0) { b++; Sfx.Bad(); } else Sfx.Tap();
+            flash = ((r >= 0 ? Rules.MoveById(mm).name : Rules.MoveById(om).name).ToString().ToUpper() + "!", r > 0, Time.time);
+            target = Mathf.Clamp((a - b) * 12, -26, 26) + (r > 0 ? 6 : r < 0 ? -6 : 0);
+            msg = $"{Rules.MoveById(mm).name} {Mathf.RoundToInt(mp * 100)}%  ·  {Rules.MoveById(om).name} {Mathf.RoundToInt(op * 100)}%  →  " + (r > 0 ? Loc.L("Та давууллаа!", "You gain the upper hand!") : r < 0 ? Loc.L("Өрсөлдөгч давууллаа!", "Your opponent gains!") : Loc.L("Тэнцлээ!", "Even!"));
+            if (wasRepeat && r < 0) msg += " " + Loc.L("(Давтсан мэхийг өрсөлдөгч таньчихлаа!)", "(They saw your repeated move coming!)");
+            phase = "result"; t0 = Time.time;
+        }
+        void Finish(Game g, bool w)
+        {
+            if (overF) return; overF = true; won = w; phase = "done";
+            pose = w ? new[] { "dance", "fall" } : new[] { "fall", "dance" }; target = w ? 18 : -18; end = Time.time;
+            if (w) { Sfx.Win(); g.Confetti(60); } else Sfx.Bad();
+            if (practice) { msg = w ? Loc.L("Гоё барилдлаа! Одоо жинхэнэ Наадамд барилдаж үзээрэй.", "Great wrestling! Now try the real Naadam.") : Loc.L("Зүгээр дээ, энэ бол дасгал. Дахиад оролдоё!", "That’s fine, it’s only practice. Let’s try again!"); return; }
+            var wr = g.V.wr;
+            if (w) { wr.wins++; g.Quest("wrestle"); g.Reward(8 + round * 2, 10 + round * 3); } else { wr.losses++; g.Reward(0, 5); }
+            int reached = w ? round : round - 1;
+            if (w && round == 9) wr.champ++;
+            if (reached > wr.best) wr.best = reached;
+            string before = g.V.look.title, t = Rules.TitleFor(wr);
+            if (t != null && before != t) { g.V.look.title = t; res.newTitle = t; }
+            res.champion = w && round == 9; g.V.Save();
+            string part = lastMove != null && Rules.WR_PART.TryGetValue(lastMove, out var p) ? p.ToString() : null;
+            string touch = part != null ? (w ? Loc.L($"Өрсөлдөгчийн {part} газарт хүрлээ! ", $"Their {part} touched the ground! ") : Loc.L($"Таны {part} газарт хүрлээ. ", $"Your {part} touched the ground. ")) : "";
+            msg = touch + (w ? Loc.L("Та яллаа! Бүргэд шиг дэвээрэй!", "You won! Do the eagle dance!") : Loc.L("Уналаа… Дараагийн удаа заавал ялна!", "You fell… you will win next time!"));
+        }
+
+        void Scene(Game g)
+        {
+            var cx = live.c; float ts = Time.time; const int Wc = 192, ground = 100;
+            Px.R(cx, 0, 0, Wc, 108, "#e8c994");
+            for (int i = 0; i < 90; i++) Px.R(cx, (i * 37) % Wc, 40 + ((i * 53) % 66), 1, 1, i % 2 != 0 ? "#d4ae72" : "#f6e2b8");
+            Px.R(cx, 0, 0, Wc, 30, "#5a361c"); Px.R(cx, 0, 10, Wc, 2, "#7a4a26"); Px.R(cx, 0, 21, Wc, 2, "#7a4a26");
+            string[] shirts = { "#d8342b", "#2b5bd8", "#f7c646", "#2ea35f", "#ffffff", "#9466e0" };
+            for (int row = 0; row < 2; row++) for (int i = 0; i < 31; i++) { int px0 = 3 + i * 6 + row * 3, py0 = 3 + row * 11, bob = (int)(ts / 0.4f + i + row) % 3 == 0 ? -1 : 0; Px.R(cx, px0, py0 + 4 + bob, 4, 4, shirts[(i + row * 2) % 6]); Px.R(cx, px0 + 1, py0 + 1 + bob, 2, 3, (i + row) % 3 != 0 ? "#edbb93" : "#c98a5a"); Px.R(cx, px0 + 1, py0 + bob, 2, 1, "#2b1e14"); }
+            foreach (var (fx, fc) in new[] { (8, "#2b5bd8"), (60, "#d8342b"), (132, "#f7c646"), (184, "#2b5bd8") }) { Px.R(cx, fx, 30, 1, 14, "#4a2a14"); for (int r = 0; r < 5; r++) Px.R(cx, fx + 1, 30 + r, 5 - Mathf.Abs(r - 2), 1, fc); }
+            Px.R(cx, 0, 44, Wc, 1, "#b98a50");
+            Px.R(cx, 167, ground - 1, 12, 2, "rgba(40,20,0,.25)"); cx.Blit(Px.Char(Rules.ZASUUL, 0, (int)(ts / 0.9f) % 2 != 0 && overF ? 1 : 0), 165, ground - 28);
+            int f = (int)(ts / 0.26f) % 2, o = Mathf.RoundToInt(off); float ent = Mathf.Min(1, (ts - intro) / 0.6f);
+            string myPose = pose[0], opPose = pose[1];
+            var A = Px.Wrestler(RED, g.MySkin, myPose == "grip" && f != 0 && phase == "timing" ? "push" : myPose, phase == "devee" ? df : f); var B = Px.Wrestler(BLUE, oppSkin, opPose, f);
+            const int cxm = 92; int ax = Mathf.RoundToInt(cxm - 30 - (1 - ent) * 24) + o + (myPose == "dance" ? -12 : 0), bxx = Mathf.RoundToInt(cxm - 4 + (1 - ent) * 24) + o + (opPose == "dance" ? 12 : 0);
+            void Draw1(PxCanvas img, int X, bool flip, int dy = 0) { int Y = ground - img.H + dy; Px.R(cx, X + 4, ground - 1, img.W - 8, 2, "rgba(40,20,0,.28)"); cx.BlitScaled(img, X, Y, img.W, img.H, flip); }
+            float cross = overF ? Mathf.Clamp01((ts - end - 1.1f) / 1.6f) : 0;
+            if (cross > 0) // custom: the fallen wrestler gets up and passes under the winner's raised arm
+            {
+                var win = Px.Wrestler(won ? RED : BLUE, won ? g.MySkin : oppSkin, "dance", cross < 1 ? 1 : f); var lose = Px.Wrestler(won ? BLUE : RED, won ? oppSkin : g.MySkin, "idle", 0);
+                int from = won ? bxx : ax, to = won ? ax - 26 : bxx + 26;
+                Draw1(win, won ? ax : bxx, !won); Draw1(lose, Mathf.RoundToInt(from + (to - from) * cross), won, 2);
+            }
+            else { Draw1(A, ax - (myPose == "fall" ? 16 : 0), false); Draw1(B, bxx + (opPose == "fall" ? 2 : 0), true); }
+        }
+
+        public override void Draw(Game g)
+        {
+            GUILayout.Label(practice ? Loc.L("Бөхийн сургууль · Дасгал", "Wrestling school · Practice") : $"{Loc.L("Наадам", "Naadam")} · {Loc.L("Даваа", "Round")} {round}/9 · {need} {Loc.L("унагаалт", "falls")} · {new string('♦', Mathf.CeilToInt(round / 3f))}", g.sSmall);
+            g.Title($"{g.MyName} · {oppName}");
+            Scene(g); live.Show(g, 190);
+            if (flash.HasValue && Time.time - flash.Value.t0 < 1.3f)
+            {
+                float q = (Time.time - flash.Value.t0) / 1.3f; var at = live.At(96, 60 - q * 10);
+                g.Outlined(at.x, at.y, flash.Value.text, live.Scale * 11, flash.Value.good ? Px.Col("#f7c646") : Color.white, q > 0.75f ? (1 - q) * 4 : 1);
+            }
+            if (heraldOn) GUILayout.Label($"<b>{Loc.L("Засуул", "Herald")}:</b> {herald}", g.sLabel);
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"<color=#d8342b><b>{g.MyName}</b></color> {new string('●', a)}{new string('○', Mathf.Max(0, need - a))}", g.sLabel);
+            GUILayout.FlexibleSpace();
+            GUILayout.Label($"{new string('●', b)}{new string('○', Mathf.Max(0, need - b))} <color=#2b5bd8><b>{oppName}</b></color>", g.sLabel);
+            GUILayout.EndHorizontal();
+            g.Text(msg);
+            if (practice && phase != "done") // the school's coach explains as you go
+            {
+                if (phase == "devee") g.Fact(Loc.L("Товч гэрэлтэх бүрт дар. Сайн бүжиглэвэл эхний мэх чинь хүчтэй болно!", "Tap each time the button glows. A good dance makes your first move stronger!"), true, Loc.L("Бүргэд шиг бүжиглэ", "Dance like an eagle"));
+                else if (coachMove != null) { var mv = Rules.MoveById(coachMove); string skl = Rules.SKILL.TryGetValue(coachMove, out var s0) ? s0 : "timing"; g.Fact(GerRules.Kid(coachMove) + "\n" + SKILL_KID[skl].how, true, SkillIcon(coachMove) + " " + mv.name); }
+                else g.Fact(Loc.L("Мэх сонго. Сонгох бүрт тэр мэх юу хийдгийг, яаж хийхийг тайлбарлана.", "Pick a move. Each time, the coach explains what it does and how to do it."), true, Loc.L("Багш", "Coach"));
+            }
+            switch (phase)
+            {
+                case "devee":
+                    GUILayout.BeginHorizontal(); for (int i = 0; i < DEVEE_TAPS; i++) GUILayout.Label(i < feathers.Count ? (feathers[i] == true ? "<color=#2ea35f>●</color>" : "<color=#e14b3d>●</color>") : "○", g.sTitle); GUILayout.EndHorizontal();
+                    if (GUILayout.Button(Loc.L("Дэвэх (Space)", "Flap (Space)"), OnBeat() ? new GUIStyle(g.sPrimary) { normal = g.sPrimary.active } : g.sPrimary, GUILayout.MinHeight(g.U(52)))) g.Later(() => DeveeTap(g));
+                    break;
+                case "choose":
+                    {
+                        var moves = Rules.MOVES; int perRow = 3;
+                        for (int i = 0; i < moves.Length; i += perRow)
+                        {
+                            GUILayout.BeginHorizontal();
+                            for (int j = i; j < Mathf.Min(moves.Length, i + perRow); j++)
+                            {
+                                var m = moves[j];
+                                if (GUILayout.Button($"<b>{SkillIcon(m.id)} {m.name}</b>\n<size={Mathf.RoundToInt(g.U(9))}>> {string.Join(", ", m.beats.Take(3).Select(x => Rules.MoveById(x).name.ToString()))}…</size>", m.id == lastPlayer ? new GUIStyle(g.sBtn) { normal = g.sBtn.active } : g.sBtn, GUILayout.MinHeight(g.U(44)))) { var id = m.id; g.Later(() => StartSkill(id)); }
+                            }
+                            GUILayout.EndHorizontal();
+                        }
+                        break;
+                    }
+                case "timing":
+                    {
+                        var r = GUILayoutUtility.GetRect(10, g.U(22), GUILayout.ExpandWidth(true)); g.Box(r, Px.Col("#2b1e2e")); var inner = new Rect(r.x + g.U(2), r.y + g.U(2), r.width - g.U(4), r.height - g.U(4)); g.Box(inner, Px.Col("#e6c48a"));
+                        float zw = 0.36f / sharp; g.Box(new Rect(inner.x + (0.5f - zw / 2) * inner.width, inner.y, zw * inner.width, inner.height), Px.Col("#5c9a36"));
+                        g.Box(new Rect(inner.x + marker * inner.width - g.U(2), r.y - g.U(3), g.U(4), r.height + g.U(6)), Px.Col("#f7c646"));
+                        if (g.Btn(Loc.L("Хүч! (Space)", "Power! (Space)"), true, 52)) g.Later(() => Lock(-1));
+                        break;
+                    }
+                case "skill": SkillUI(g); break;
+                case "done":
+                    g.Fact(won ? Loc.L("Унасан бөх ялсан бөхийн суган доогуур гарч хүндэтгэл үзүүлдэг. Ялсан бөх дараа нь тугаа тойрон дэвдэг.", "The fallen wrestler passes under the winner's arm as a sign of respect. The winner then dances around the flag.")
+                        : Loc.L("Унасан бөх ялсан бөхийн суган доогуур гарч хүндэтгэл үзүүлдэг. Ялагдсан ч хүндэтгэлтэй байх нь бөхийн ёс.", "The fallen wrestler passes under the winner's arm as a sign of respect. Losing with honour is the wrestler's way."), true, Loc.L("Бөхийн ёс", "Wrestling custom"));
+                    var t = res.newTitle != null ? Rules.TitleById(res.newTitle) : null;
+                    if (t != null) g.Fact(t.fact.ToString(), true, Loc.L($"Засуул: «Хүчит бөх {g.MyName} {t.name} цол хүртлээ!»", $"Herald: \"The mighty wrestler {g.MyName} earns the {t.name} title!\""));
+                    if (res.champion) g.Text("<b>" + Loc.L("Та Наадамд түрүүллээ!", "You won the whole Naadam!") + "</b>");
+                    GUILayout.BeginHorizontal();
+                    if (practice) { if (g.Btn(Loc.L("Дахиад", "Again"))) g.Later(() => g.Swap(Practice(g))); if (g.Btn(Loc.L("Жинхэнэ барилдаан", "Wrestle for real") + " ►", true)) g.Later(() => g.Swap(Tournament(g, 1))); GUILayout.EndHorizontal(); break; }
+                    if (g.Btn(Loc.L("Хаах", "Close"))) g.Later(g.Close);
+                    if (won && round < 9) { if (g.Btn(Loc.L("Дараагийн даваа", "Next round") + " ►", true)) g.Later(() => g.Swap(Tournament(g, round + 1))); }
+                    else if (g.Btn(Loc.L("Шинэ Наадам", "New Naadam"), true)) g.Later(() => g.Swap(Tournament(g, 1)));
+                    GUILayout.EndHorizontal();
+                    break;
+            }
+            if (phase != "done" && g.Btn(Loc.L("Гарах", "Leave"), false, 28)) g.Later(g.Close);
+        }
+        void SkillUI(Game g)
+        {
+            float el = Time.time - skT0;
+            Rect Meter() { var r = GUILayoutUtility.GetRect(10, g.U(16), GUILayout.ExpandWidth(true)); return r; }
+            switch (sk)
+            {
+                case "combo":
+                    GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
+                    for (int i = 0; i < seq.Length; i++) GUILayout.Label(i < si ? $"<color=#2ea35f>{ARROWS[seq[i]]}</color>" : i == si ? $"<color=#e14b3d>{ARROWS[seq[i]]}</color>" : ARROWS[seq[i]], new GUIStyle(g.sBig) { fontSize = Mathf.RoundToInt(g.U(26)) }, GUILayout.Width(g.U(40)));
+                    GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
+                    g.Bar(Meter(), Mathf.Max(0, 1 - el / skLimit), Px.Col("#f7c646"));
+                    GUILayout.BeginHorizontal(); for (int i = 0; i < 4; i++) if (GUILayout.Button(ARROWS[i], g.sBtn, GUILayout.MinHeight(g.U(48)))) { int k = i; g.Later(() => Combo(k)); } GUILayout.EndHorizontal();
+                    break;
+                case "mash":
+                    g.Bar(Meter(), Mathf.Min(1, sn / (float)sneed), Px.Col("#e14b3d"));
+                    if (g.Btn(Loc.L($"Хүч! {sn}/{sneed}", $"Power! {sn}/{sneed}"), true, 56)) g.Later(Mash);
+                    break;
+                case "hold":
+                    {
+                        var r = Meter(); g.Box(r, Px.Col("#2b1e2e")); var inner = new Rect(r.x + g.U(2), r.y + g.U(2), r.width - g.U(4), r.height - g.U(4)); g.Box(inner, Px.Col("#5a4a5e"));
+                        g.Box(new Rect(inner.x + (szc - szw / 2) * inner.width, inner.y, szw * inner.width, inner.height), Px.Col("#f7c646"));
+                        g.Box(new Rect(inner.x, inner.y + inner.height * 0.3f, sv * inner.width, inner.height * 0.4f), Px.Col("#3f76db"));
+                        if (GUILayout.RepeatButton(Loc.L("Барих: дарж байгаад тавих (Space)", "Grip: hold, then let go (Space)"), g.sPrimary, GUILayout.MinHeight(g.U(56)))) holdFrame = Time.frameCount;
+                        break;
+                    }
+                case "balance":
+                    {
+                        var r = Meter(); g.Box(r, Px.Col("#2b1e2e")); var inner = new Rect(r.x + g.U(2), r.y + g.U(2), r.width - g.U(4), r.height - g.U(4)); g.Box(inner, Px.Col("#e6c48a"));
+                        g.Box(new Rect(inner.x + 0.375f * inner.width, inner.y, 0.25f * inner.width, inner.height), Px.Col("#5c9a36"));
+                        g.Box(new Rect(inner.x + (0.5f + bx2 * 0.48f) * inner.width - g.U(2), r.y - g.U(3), g.U(4), r.height + g.U(6)), Px.Col("#2b1e2e"));
+                        g.Bar(GUILayoutUtility.GetRect(10, g.U(8), GUILayout.ExpandWidth(true)), Mathf.Max(0, 1 - el / skLimit), Px.Col("#f7c646"));
+                        GUILayout.BeginHorizontal();
+                        if (GUILayout.RepeatButton("◄", g.sBtn, GUILayout.MinHeight(g.U(52)))) bdir = -1;
+                        if (GUILayout.RepeatButton("►", g.sBtn, GUILayout.MinHeight(g.U(52)))) bdir = 1;
+                        GUILayout.EndHorizontal();
+                        break;
+                    }
+            }
+        }
+    }
+}
