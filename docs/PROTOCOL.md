@@ -59,7 +59,7 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 | `say` | `k, i` | `k: 'p'` = phrase `PHRASES[i]`, `k: 'e'` = emote `EMOTES[i]`. `i` must be a valid integer index. There is **no typed text**, by design (safe for kids). Sent to everyone in the room, **including the sender**. At most **one per second** per player; extra ones are dropped silently. Added to the room's chat log. |
 
 ### Chat log
-Each room keeps its last **30** lines in memory: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. It is **not saved**: a server restart clears it.
+Each room keeps its last **30** lines: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. The server saves this bounded log alongside room lots in `DATA_DIR/rooms.json`, every 5 seconds when changed and on shutdown. Older room files without a `chat` field start with an empty log. On load, entries are validated against the preset phrase/emote lists and cleaned before being sent to players.
 
 A log line is `{ k, id, n, i? }`:
 - `k`: `'p'` phrase, `'e'` emote, `'join'`, `'leave'`.

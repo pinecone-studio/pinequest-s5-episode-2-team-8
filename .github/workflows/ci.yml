@@ -49,6 +49,9 @@ jobs:
       - name: Multiplayer test (two players in the village)
         run: node tests/multiplayer.mjs
 
+      - name: Multiplayer chat survives server restart
+        run: node tests/chat-persistence.mjs
+
       - name: Touch test (phone joystick and buttons)
         run: node tests/touch.mjs
 

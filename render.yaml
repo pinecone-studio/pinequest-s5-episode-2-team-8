@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: naadamy-team8
+    runtime: node
+    region: singapore
+    plan: 0.5c-512mb
+    buildCommand: node --check server.js
+    startCommand: node server.js
+    healthCheckPath: /api/hello
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: naadamy-team8-data
+      mountPath: /var/data
+      sizeGB: 1
