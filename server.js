@@ -181,6 +181,7 @@ const numf = (v, lo, hi) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math
 const cleanName = (s) => String(s || '').replace(/[<>]/g, '').trim().slice(0, 16) || 'Найз';
 const pub = (p) => ({ id: p.id, name: p.name, look: p.look, lvl: p.lvl, x: p.x, y: p.y, dir: p.dir });
 const WALLET_MAX = 2_000_000_000;
+const walletLevel = (wallet) => num(R.level(wallet.xp).l, 1, 99);
 function walletSeed(value) {
   const integer = (amount, fallback, maximum) => Number.isSafeInteger(amount) ? Math.max(0, Math.min(maximum, amount)) : fallback;
   return { coins: integer(value && value.coins, 40, 100_000), xp: integer(value && value.xp, 0, 1_000_000) };
@@ -348,6 +349,7 @@ async function grantWrestlingReward(player, matchId, won) {
     });
     player.conn.wallet = outcome.wallet;
     player.conn.inventory = outcome.inventory;
+    syncPlayerLevel(player.conn);
     player.conn.send({ t: 'wallet-result', op: operation, ...outcome.result, wallet: outcome.wallet });
   } catch (error) {
     console.error('Could not grant server-validated wrestling reward:', error.message);
@@ -551,6 +553,15 @@ function updatePresence(p) {
   p.presenceUpdatedAt = now;
   roomStore.updatePresence(INSTANCE_ID, pub(p)).catch((error) => console.error('Could not update player presence:', error.message));
 }
+function syncPlayerLevel(conn) {
+  const p = conn.player;
+  if (!p || !conn.room || !conn.wallet) return;
+  const level = walletLevel(conn.wallet);
+  if (p.lvl === level) return;
+  p.lvl = level;
+  updatePresence(p);
+  broadcast(conn.room, { t: 'look', id: p.id, look: p.look, lvl: level }, conn);
+}
 
 async function joinPlayer(conn, message, code, id, now) {
   const account = await roomStore.getAccount(id, walletSeed(message.wallet), inventorySeed(message.inventory));
@@ -571,7 +582,7 @@ async function joinPlayer(conn, message, code, id, now) {
     old.conn.send({ t: 'replaced' });
     setTimeout(() => old.conn.socket.destroy(), 50);
   }
-  const p = { id, conn, name: cleanName(message.name), look: ownedLook(message.look, account.inventory), lvl: num(message.lvl, 1, 99), x: numf(message.x, 0.5, R.W - 2), y: numf(message.y, 0.5, R.H - 2), dir: num(message.dir, 0, 3) };
+  const p = { id, conn, name: cleanName(message.name), look: ownedLook(message.look, account.inventory), lvl: walletLevel(account.wallet), x: numf(message.x, 0.5, R.W - 2), y: numf(message.y, 0.5, R.H - 2), dir: num(message.dir, 0, 3) };
   const previousInstance = await roomStore.registerPresence(INSTANCE_ID, code, pub(p));
   if (conn.socket.destroyed) {
     await roomStore.removePresence(INSTANCE_ID, p.id);
@@ -633,6 +644,7 @@ async function handleWalletOperation(conn, message) {
     });
     conn.wallet = outcome.wallet;
     conn.inventory = outcome.inventory;
+    syncPlayerLevel(conn);
     conn.send({ t: 'wallet-result', op: operation, ...outcome.result, wallet: outcome.wallet });
   } catch (error) {
     console.error('Could not update player wallet:', error.message);
@@ -708,6 +720,7 @@ async function handleQuestClaim(conn, message) {
     });
     conn.wallet = outcome.wallet;
     conn.inventory = outcome.inventory;
+    syncPlayerLevel(conn);
     conn.send({
       t: 'quest-claim-result', quest, ...outcome.result, duplicate: outcome.duplicate, wallet: outcome.wallet,
       progress: { revision: progress.revision, state: progress.state },
@@ -865,7 +878,7 @@ function onMessage(conn, text) {
       break;
     }
     case 'look':
-      p.look = ownedLook(m.look, conn.inventory); p.lvl = num(m.lvl, 1, 99);
+      p.look = ownedLook(m.look, conn.inventory); p.lvl = walletLevel(conn.wallet);
       updatePresence(p);
       broadcast(r, { t: 'look', id: p.id, look: p.look, lvl: p.lvl }, conn);
       break;

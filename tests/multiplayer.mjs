@@ -140,7 +140,7 @@ try {
     window.walletSocket = new WebSocket(url);
     window.walletSocket.addEventListener('message', (event) => window.walletEvents.push(JSON.parse(event.data)));
     window.walletSocket.addEventListener('open', () => window.walletSocket.send(JSON.stringify({
-      t: 'join', room: 'NUTAG', id, ticket, name: 'Wallet test', look: {}, wallet: { coins: 40, xp: 0 },
+      t: 'join', room: 'NUTAG', id, ticket, name: 'Wallet test', look: {}, lvl: 99, wallet: { coins: 40, xp: 59 },
       progress: {
         produce: { milk: 5000, forged: 7 }, fish: { pike: 2, taimen: -1 },
         quests: { d: '2026-02-31', list: [{ k: 'milk', p: 99, done: true }, { k: 'forged', p: 2, done: true }, { k: { toString: 'bad' }, p: 9, done: true }] },
@@ -148,6 +148,16 @@ try {
     })));
   }, `ws://${new URL(base).host}/ws`, probeId, crypto.randomBytes(32).toString('hex'));
   await walletProbe.waitForFunction(() => window.walletEvents.some((message) => message.t === 'welcome'), { timeout: 5000 });
+  await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((player) => player.name === 'Wallet test' && player.lvl === 1)),
+    'server derives the shared level from XP instead of the join payload');
+  await walletProbe.evaluate(() => {
+    window.walletSocket.send(JSON.stringify({ t: 'look', look: {}, lvl: 99 }));
+    window.walletSocket.send(JSON.stringify({ t: 'move', x: 5, y: 5, dir: 0 }));
+  });
+  await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((player) => player.name === 'Wallet test' && player.x === 5 && player.y === 5)),
+    'forged level update is processed');
+  const forgedLookLevel = await a.evaluate(() => [...TG._village.live().others.values()].find((player) => player.name === 'Wallet test').lvl);
+  if (forgedLookLevel !== 1) throw new Error(`the server accepted a client-reported level: ${forgedLookLevel}`);
   const seededProgress = await walletProbe.evaluate(() => window.walletEvents.find((message) => message.t === 'welcome').progress);
   if (seededProgress.revision !== 0 || seededProgress.state.produce.milk !== 1000 || seededProgress.state.produce.forged
     || seededProgress.state.fish.pike !== 2 || seededProgress.state.fish.taimen
@@ -191,9 +201,11 @@ try {
   const deniedReplay = await sendWalletOperation('b'.repeat(32), 'spend', 41, 0);
   if (deniedReplay.accepted || deniedReplay.wallet.coins !== 40) throw new Error('a rejected operation was not idempotent');
   const acceptedReward = await sendWalletOperation('c'.repeat(32), 'reward', 10, 5);
-  if (!acceptedReward.accepted || acceptedReward.wallet.coins !== 50 || acceptedReward.wallet.xp !== 5) throw new Error('the server rejected a valid wallet reward');
+  if (!acceptedReward.accepted || acceptedReward.wallet.coins !== 50 || acceptedReward.wallet.xp !== 64) throw new Error('the server rejected a valid wallet reward');
+  await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((player) => player.name === 'Wallet test' && player.lvl === 2)),
+    'server broadcasts a level derived from the updated wallet');
   const repeatedReward = await sendWalletOperation('c'.repeat(32), 'reward', 10, 5);
-  if (!repeatedReward.accepted || repeatedReward.wallet.coins !== 50 || repeatedReward.wallet.xp !== 5 || repeatedReward.wallet.revision !== 1) {
+  if (!repeatedReward.accepted || repeatedReward.wallet.coins !== 50 || repeatedReward.wallet.xp !== 64 || repeatedReward.wallet.revision !== 1) {
     throw new Error('a repeated reward operation changed the wallet twice');
   }
   const sendShopPurchase = async (op, item) => {
