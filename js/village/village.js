@@ -333,7 +333,10 @@
       || !Number.isSafeInteger(wallet.revision) || wallet.revision < 0) return;
     if (live.walletRevision !== undefined && wallet.revision < live.walletRevision) return;
     const v = V(); if (!v) return;
+    const oldLevel = R.level(v.xp).l;
     v.coins = wallet.coins; v.xp = wallet.xp; live.walletRevision = wallet.revision;
+    const newLevel = R.level(v.xp).l;
+    if (newLevel !== oldLevel) net.send({ t: 'look', look: v.look, lvl: newLevel });
     S.save(); hud();
   }
   function applyInventory(inventory) {
@@ -2711,7 +2714,8 @@
       const side = m.a.id === v.id ? 'a' : 'b', opp = side === 'a' ? m.b : m.a;
       live.match = { id: m.id, side };
       setTimeout(() => wrestleMatch({ ai: false, opp: { name: opp.name, skin: opp.look && opp.look.skin }, remote: live.match }, (won) => {
-        const wr = V().wr; if (won) { wr.pvpW = (wr.pvpW || 0) + 1; reward(25, 30); } else { wr.pvpL = (wr.pvpL || 0) + 1; reward(0, 10); } S.save(); return {};
+        const wr = V().wr; if (won) wr.pvpW = (wr.pvpW || 0) + 1; else wr.pvpL = (wr.pvpL || 0) + 1;
+        S.save(); return {};
       }), 250);
     } else if (live.match && live.match.ui) live.match.ui(m);
   }

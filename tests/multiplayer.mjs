@@ -367,6 +367,10 @@ try {
 
   // live wrestling: A invites B, B accepts, both play exchanges until someone wins
   const bId = await b.evaluate(() => TG.store.active().village.id);
+  const walletBeforeWrestling = await Promise.all([
+    a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp })),
+    b.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp })),
+  ]);
   await a.evaluate((id) => TG._village.invite(id), bId);
   await until(() => b.evaluate(() => [...document.querySelectorAll('.modal .btn.primary')].some((x) => /Барилдъя/.test(x.textContent))), 'B gets the invitation');
   await b.evaluate(() => [...document.querySelectorAll('.modal .btn.primary')].find((x) => /Барилдъя/.test(x.textContent)).click());
@@ -383,6 +387,24 @@ try {
   await until(() => a.evaluate(() => !!document.querySelector('.v-wrestle .row-btns')) && b.evaluate(() => !!document.querySelector('.v-wrestle .row-btns')), 'match finishes for both', 10000);
   const recs = [await a.evaluate(() => TG.store.active().village.wr), await b.evaluate(() => TG.store.active().village.wr)];
   if ((recs[0].pvpW + recs[1].pvpW) !== 1 || (recs[0].pvpL + recs[1].pvpL) !== 1) throw new Error('wrestling result not recorded exactly once: ' + JSON.stringify(recs));
+  const winnerIndex = recs[0].pvpW ? 0 : 1, loserIndex = 1 - winnerIndex;
+  await until(() => Promise.all([
+    a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp })),
+    b.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp })),
+  ]).then((wallets) => wallets[winnerIndex].coins === walletBeforeWrestling[winnerIndex].coins + 25
+    && wallets[winnerIndex].xp === walletBeforeWrestling[winnerIndex].xp + 30
+    && wallets[loserIndex].coins === walletBeforeWrestling[loserIndex].coins
+    && wallets[loserIndex].xp === walletBeforeWrestling[loserIndex].xp + 10), 'server awards wrestling rewards');
+  const walletsAfterWrestling = await Promise.all([
+    a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp })),
+    b.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp })),
+  ]);
+  if (walletsAfterWrestling[winnerIndex].coins !== walletBeforeWrestling[winnerIndex].coins + 25
+    || walletsAfterWrestling[winnerIndex].xp !== walletBeforeWrestling[winnerIndex].xp + 30
+    || walletsAfterWrestling[loserIndex].coins !== walletBeforeWrestling[loserIndex].coins
+    || walletsAfterWrestling[loserIndex].xp !== walletBeforeWrestling[loserIndex].xp + 10) {
+    throw new Error(`server wrestling rewards were incorrect or duplicated: ${JSON.stringify({ walletBeforeWrestling, walletsAfterWrestling, recs })}`);
+  }
   ok('live wrestling match: invite, exchanges, one winner, records saved');
   await a.screenshot({ path: join(process.env.SHOT_DIR || tmpdir(), 'village-wrestle.png') });
   await a.evaluate(() => document.querySelectorAll('.modal-x').forEach((x) => x.click()));

@@ -171,6 +171,13 @@ try {
   assert.equal(pgRejected.wallet.coins, 400, 'rejected PostgreSQL spends leave the wallet unchanged');
   assert.equal((await store.mutateWallet('identity-player', '2'.repeat(32), () => { throw new Error('rejected operation was retried'); })).duplicate, true,
     'rejected PostgreSQL operations are also idempotent');
+  const pgMatchReward = await store.mutateWallet('identity-player', 'wrestle:w-match-0001', (wallet) => ({
+    changed: true, wallet: { ...wallet, coins: wallet.coins + 25, xp: wallet.xp + 30 }, result: { accepted: true },
+  }));
+  assert.deepEqual(pgMatchReward.wallet, { coins: 425, xp: 280, revision: 3 }, 'PostgreSQL stores server-validated match rewards');
+  assert.equal((await store.mutateWallet('identity-player', 'wrestle:w-match-0001', () => {
+    throw new Error('wrestling reward was applied twice');
+  })).duplicate, true, 'PostgreSQL match rewards remain idempotent');
   const pgProgress = await store.getProgress('identity-player', { produce: { milk: 2 } });
   assert.deepEqual(pgProgress, { revision: 0, state: { produce: { milk: 2 } } }, 'PostgreSQL creates initial player progress');
   const pgProgressSaved = await store.saveProgress('identity-player', 0, { produce: { milk: 3 } });
@@ -249,6 +256,10 @@ try {
     changed: true, wallet: { ...wallet, coins: wallet.coins + 25 }, result: { accepted: true },
   }));
   assert.equal(jsonQuestClaim.wallet.coins, 120, 'JSON mode stores namespaced daily quest claims');
+  const jsonMatchReward = await jsonStore.mutateWallet('json-player', 'wrestle:w-match-0001', (wallet) => ({
+    changed: true, wallet: { ...wallet, coins: wallet.coins + 25, xp: wallet.xp + 30 }, result: { accepted: true },
+  }));
+  assert.deepEqual(jsonMatchReward.wallet, { coins: 145, xp: 60, revision: 3 }, 'JSON mode stores server-validated match rewards');
   const jsonProgress = await jsonStore.getProgress('json-player', { fish: { perch: 1 } });
   const jsonProgressSaved = await jsonStore.saveProgress('json-player', jsonProgress.revision, { fish: { perch: 2 } });
   assert.deepEqual(jsonProgressSaved, { accepted: true, revision: 1, state: { fish: { perch: 2 } } }, 'JSON mode persists revisioned player progress');
@@ -262,6 +273,10 @@ try {
     throw new Error('daily quest reward was applied twice');
   });
   assert.equal(jsonQuestReplay.duplicate, true, 'JSON daily quest claims remain idempotent after restart');
+  const jsonMatchReplay = await restartedJsonStore.mutateWallet('json-player', 'wrestle:w-match-0001', () => {
+    throw new Error('wrestling reward was applied twice');
+  });
+  assert.equal(jsonMatchReplay.duplicate, true, 'JSON match rewards remain idempotent after restart');
   await jsonStore.save({ NUTAG: { lots: [], chat: [] } });
   assert.deepEqual(await jsonStore.load(), { NUTAG: { lots: [], chat: [] } }, 'JSON storage still saves snapshots');
   const jsonMutation = await jsonStore.mutateRoom('NUTAG', { lots: [], chat: [] }, (state) => {

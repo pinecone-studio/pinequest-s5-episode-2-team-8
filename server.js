@@ -322,6 +322,37 @@ function deliverWrestleEvent(r, event) {
     const player = r.players.get(id);
     if (player) player.conn.send(message);
   }
+  if (message.t === 'wr-end') awardWrestlingResult(r, message);
+}
+function awardWrestlingResult(r, message) {
+  if (!message.winner || typeof message.id !== 'string' || !/^w[\w-]{1,64}$/.test(message.id)
+    || !Array.isArray(message.playerIds) || message.playerIds.length !== 2 || !message.playerIds.includes(message.winner)) return;
+  for (const id of message.playerIds) {
+    const player = r.players.get(id);
+    if (player) grantWrestlingReward(player, message.id, id === message.winner);
+  }
+}
+async function grantWrestlingReward(player, matchId, won) {
+  const operation = `wrestle:${matchId}`;
+  const coins = won ? 25 : 0, xp = won ? 30 : 10;
+  try {
+    const outcome = await roomStore.mutateWallet(player.id, operation, (wallet) => {
+      if (wallet.coins > WALLET_MAX - coins || wallet.xp > WALLET_MAX - xp) {
+        return { changed: false, result: { accepted: false, reason: 'limit' } };
+      }
+      return {
+        changed: true,
+        wallet: { coins: wallet.coins + coins, xp: wallet.xp + xp },
+        result: { accepted: true },
+      };
+    });
+    player.conn.wallet = outcome.wallet;
+    player.conn.inventory = outcome.inventory;
+    player.conn.send({ t: 'wallet-result', op: operation, ...outcome.result, wallet: outcome.wallet });
+  } catch (error) {
+    console.error('Could not grant server-validated wrestling reward:', error.message);
+    player.conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'storage', wallet: player.conn.wallet });
+  }
 }
 async function mutateSharedWrestling(r, mutate) {
   const { result } = await roomStore.mutateRoom(
@@ -368,7 +399,8 @@ function resolveSharedRound(wrestling, match, timedOut) {
   if (finished) {
     wrestling.matches = wrestling.matches.filter((entry) => entry.id !== match.id);
     events.push(wrestlingEvent([match.a, match.b], {
-      t: 'wr-end', id: match.id, winner: match.score.a > match.score.b ? match.a : match.b, reason: '',
+      t: 'wr-end', id: match.id, winner: match.score.a > match.score.b ? match.a : match.b,
+      playerIds: [match.a, match.b], reason: '',
     }));
   }
   return { changed: true, events };
@@ -450,7 +482,7 @@ async function handleSharedWrestling(conn, type, message) {
         if (index < 0) return { changed: false };
         const [match] = wrestling.matches.splice(index, 1);
         const winner = match.a === p.id ? match.b : match.a;
-        events.push(wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, reason: 'left' }));
+        events.push(wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason: 'left' }));
         return { changed: true, events };
       }
       return { changed: false };
@@ -472,7 +504,7 @@ async function endSharedWrestlingOnLeave(r, playerId) {
       const winner = match.a === playerId ? match.b : match.a;
       return {
         changed: true,
-        events: [wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, reason: 'left' })],
+        events: [wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason: 'left' })],
       };
     });
   } catch (error) {
@@ -950,7 +982,9 @@ function resolveMatch(r, match) {
 }
 function endMatch(r, match, winner, reason) {
   clearTimeout(match.timer); r.matches.delete(match.id);
-  for (const id of [match.a, match.b]) { const q = r.players.get(id); if (q) { q.match = null; q.conn.send({ t: 'wr-end', winner, reason }); } }
+  const message = { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason };
+  for (const id of [match.a, match.b]) { const q = r.players.get(id); if (q) { q.match = null; q.conn.send(message); } }
+  awardWrestlingResult(r, message);
 }
 function leave(conn) {
   const p = conn.player, r = conn.room;
