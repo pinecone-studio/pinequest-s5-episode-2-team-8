@@ -6,7 +6,7 @@
   else { root.TG = root.TG || {}; root.TG.vrules = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
   const W = 56, H = 40, LOTS = 8;
-  const VERSION = 6; // bump when the game and server must change together (moves, messages), so an old running server is noticed
+  const VERSION = 7; // bump when the game and server must change together (moves, messages), so an old running server is noticed
   const T = (mn, en) => ({ mn, en });
 
   // The herding and dairy yard (хот айл): animals you milk, and the white foods (цагаан идээ) you make from the milk.
@@ -31,6 +31,10 @@
     lenok: { e: '🐠', name: T('Зэвэг', 'Lenok'), sell: 45, xp: 20, diff: 3, w: 16, fact: T('Зэвэг цэвэр, хүйтэн уулын голд амьдардаг.', 'Lenok live in clean, cold mountain rivers.') },
     taimen: { e: '🐡', name: T('Хадран', 'Taimen'), sell: 0, xp: 60, coins: 50, diff: 4, w: 6, release: true,
       fact: T('Хадран бол дэлхийн хамгийн том хулд загасны төрөл. Монголд хамгаалагдсан тул барьсан бол буцааж тавина!', 'Taimen is the largest salmon species in the world. It is protected in Mongolia, so we always release it!') },
+  };
+  const QUEST_TARGETS = {
+    milk: 3, dairy: 2, fish: 2, basar: 2, quiz: 3, lesson: 1, together: 1, pet: 3, sell: 5,
+    race: 1, archery: 3, wrestle: 1, etiquette: 1, defend: 1, eat: 3,
   };
 
   // Preset, kid-safe phrases only. No free-text chat.
@@ -219,5 +223,5 @@
   }
 
   return { GER_STEPS, GER_DONE, GER_NEEDS, gerTry, gerUse, TRADES, COVER_PRICE, tradeCost, SHEAR_WOOL, SHEAR_REGROW_MS, FELT_WOOL, lotStage, unisTilt, HANDS_ON, handsOn,
-    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
+    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
 });

@@ -16,6 +16,7 @@ class FakePool {
     this.identities = new Map();
     this.wallets = new Map();
     this.walletOperations = new Map();
+    this.progress = new Map();
   }
   async connect() {
     return {
@@ -72,6 +73,19 @@ class FakePool {
         if (/^SELECT result FROM naadamy_wallet_ops/.test(statement)) {
           const result = this.walletOperations.get(`${values[0]}:${values[1]}`);
           return { rows: result ? [{ result }] : [] };
+        }
+        if (/^INSERT INTO naadamy_player_progress/.test(statement)) {
+          if (!this.progress.has(values[0])) this.progress.set(values[0], { revision: 0, state: JSON.parse(values[1]) });
+          return { rows: [] };
+        }
+        if (/^SELECT revision, state FROM naadamy_player_progress/.test(statement)) {
+          const record = this.progress.get(values[0]);
+          return { rows: record ? [{ ...record }] : [] };
+        }
+        if (/^UPDATE naadamy_player_progress SET revision =/.test(statement)) {
+          const record = { revision: values[1], state: JSON.parse(values[2]) };
+          this.progress.set(values[0], record);
+          return { rows: [{ ...record }] };
         }
         if (/^UPDATE naadamy_wallets SET coins =/.test(statement)) {
           this.wallets.set(values[0], {
@@ -150,6 +164,14 @@ try {
   assert.equal(pgRejected.wallet.coins, 375, 'rejected PostgreSQL spends leave the wallet unchanged');
   assert.equal((await store.mutateWallet('identity-player', '2'.repeat(32), () => { throw new Error('rejected operation was retried'); })).duplicate, true,
     'rejected PostgreSQL operations are also idempotent');
+  const pgProgress = await store.getProgress('identity-player', { produce: { milk: 2 } });
+  assert.deepEqual(pgProgress, { revision: 0, state: { produce: { milk: 2 } } }, 'PostgreSQL creates initial player progress');
+  const pgProgressSaved = await store.saveProgress('identity-player', 0, { produce: { milk: 3 } });
+  assert.deepEqual(pgProgressSaved, { accepted: true, revision: 1, state: { produce: { milk: 3 } } }, 'PostgreSQL persists player progress and advances revision');
+  const pgProgressConflict = await store.saveProgress('identity-player', 0, { produce: { milk: 4 } });
+  assert.deepEqual(pgProgressConflict, { accepted: false, revision: 1, state: { produce: { milk: 3 } } }, 'PostgreSQL rejects stale progress writes and returns canonical data');
+  assert.deepEqual(await store.getProgress('identity-player', { produce: { milk: 1 } }),
+    { revision: 1, state: { produce: { milk: 3 } } }, 'PostgreSQL ignores later initial progress seeds');
   const concurrentClaims = await Promise.all([
     store.authenticatePlayer('registration-race', 'e'.repeat(64)),
     store.authenticatePlayer('registration-race', 'f'.repeat(64)),
@@ -216,6 +238,13 @@ try {
   assert.deepEqual(jsonReward.inventory, { owned: ['deel-blue', 'pet-lamb'], rod: 2 }, 'JSON mode atomically saves shop ownership with the wallet');
   assert.deepEqual(await restartedJsonStore.getWallet('json-player'), jsonReward.wallet, 'JSON wallet balances survive a server restart');
   assert.deepEqual((await restartedJsonStore.getAccount('json-player')).inventory, jsonReward.inventory, 'JSON inventory survives a server restart');
+  const jsonProgress = await jsonStore.getProgress('json-player', { fish: { perch: 1 } });
+  const jsonProgressSaved = await jsonStore.saveProgress('json-player', jsonProgress.revision, { fish: { perch: 2 } });
+  assert.deepEqual(jsonProgressSaved, { accepted: true, revision: 1, state: { fish: { perch: 2 } } }, 'JSON mode persists revisioned player progress');
+  assert.deepEqual(await jsonStore.saveProgress('json-player', 0, { fish: { perch: 3 } }),
+    { accepted: false, revision: 1, state: { fish: { perch: 2 } } }, 'JSON mode rejects stale progress writes');
+  assert.deepEqual(await restartedJsonStore.getProgress('json-player'),
+    { revision: 1, state: { fish: { perch: 2 } } }, 'JSON progress survives a server restart');
   const jsonReplay = await restartedJsonStore.mutateWallet('json-player', jsonOperation, () => { throw new Error('duplicate operation was applied twice'); });
   assert.equal(jsonReplay.duplicate, true, 'JSON wallet operations are idempotent');
   await jsonStore.save({ NUTAG: { lots: [], chat: [] } });

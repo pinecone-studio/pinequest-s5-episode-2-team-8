@@ -37,7 +37,10 @@ async function player(name, look, room, ctxIn) {
     const p = TG.store.addProfile({ name, age: 9, avatar: '🐎' }); TG.store.state.loggedIn = true;
     TG.store.state.settings.sound = false;
     const owned = ['deel-blue', 'deel-red', 'deel-green', 'hat-mongol', 'hat-flower', 'pet-lamb', 'neck-khadag'];
-    p.village = { tips: true, tutorial: true, look, owned, xp: 200, coins: 600, room: room || 'NUTAG' };
+    p.village = {
+      tips: true, tutorial: true, look, owned, xp: 200, coins: 600, room: room || 'NUTAG',
+      quests: { d: TG.store.dkey(), list: [{ k: 'milk', p: 1, done: false }] },
+    };
     TG.go('village');
   }, name, look, room);
   await until(() => page.evaluate(() => TG._village.live() && TG._village.live().online), `${name} online`);
@@ -49,6 +52,41 @@ try {
   const a = await player('Бат', { deel: 'red', hat: 'mongol', pet: 'lamb' });
   const b = await player('Сарнай', { deel: 'green', hat: 'flower', neck: 'khadag' });
   ok('both players connected to the server');
+  await a.evaluate(() => {
+    const v = TG.store.active().village;
+    v.produce = { milk: 1003, unknown: 5 };
+    v.fish = { perch: 3, unknown: 9 };
+    v.quests = { d: TG.store.dkey(), list: [{ k: 'milk', p: 99, done: true }, { k: 'unknown', p: 4, done: false }] };
+    TG.store.save();
+  });
+  await until(() => a.evaluate(() => TG._village.live().progressRevision === 1
+    && TG.store.active().village.produce.milk === 1000), 'server confirms and sanitizes progress');
+  const savedProgress = await a.evaluate(() => {
+    const v = TG.store.active().village;
+    return { produce: v.produce, fish: v.fish, quests: v.quests };
+  });
+  if (savedProgress.produce.unknown || savedProgress.fish.unknown || savedProgress.fish.perch !== 3
+    || savedProgress.quests.list.length !== 1 || savedProgress.quests.list[0].p !== 3 || !savedProgress.quests.list[0].done) {
+    throw new Error(`the server did not sanitize the saved progress: ${JSON.stringify(savedProgress)}`);
+  }
+  await a.evaluate(() => {
+    const originalId = TG.store.state.activeId;
+    const other = TG.store.addProfile({ name: 'Other profile', age: 10, avatar: '🐎' });
+    other.village = { produce: { milk: 999 }, fish: { perch: 999 }, quests: {} };
+    TG.store.save();
+    TG.store.state.activeId = originalId;
+    TG.store.save();
+  });
+  await sleep(350);
+  if (await a.evaluate(() => TG._village.live().progressRevision !== 1)) {
+    throw new Error('progress from another local profile was sent to this online identity');
+  }
+  await a.evaluate(() => TG._village.reconnect());
+  await until(() => a.evaluate(() => TG._village.live().online && TG._village.live().progressRevision === 1), 'player reconnects with saved progress');
+  if (!(await a.evaluate(() => TG.store.active().village.fish.perch === 3 && TG.store.active().village.produce.milk === 1000))) {
+    throw new Error('fish and dairy inventory did not survive reconnect');
+  }
+  ok('bounded fish, dairy and daily quest progress persists and restores on reconnect');
   const walletBefore = await a.evaluate(() => {
     const v = TG.store.active().village;
     return { coins: v.coins, xp: v.xp, revision: TG._village.live().walletRevision };
@@ -99,9 +137,42 @@ try {
     window.walletSocket.addEventListener('message', (event) => window.walletEvents.push(JSON.parse(event.data)));
     window.walletSocket.addEventListener('open', () => window.walletSocket.send(JSON.stringify({
       t: 'join', room: 'NUTAG', id, ticket, name: 'Wallet test', look: {}, wallet: { coins: 40, xp: 0 },
+      progress: {
+        produce: { milk: 5000, forged: 7 }, fish: { pike: 2, taimen: -1 },
+        quests: { d: '2026-02-31', list: [{ k: 'milk', p: 99, done: true }, { k: 'forged', p: 2, done: true }, { k: { toString: 'bad' }, p: 9, done: true }] },
+      },
     })));
   }, `ws://${new URL(base).host}/ws`, probeId, crypto.randomBytes(32).toString('hex'));
   await walletProbe.waitForFunction(() => window.walletEvents.some((message) => message.t === 'welcome'), { timeout: 5000 });
+  const seededProgress = await walletProbe.evaluate(() => window.walletEvents.find((message) => message.t === 'welcome').progress);
+  if (seededProgress.revision !== 0 || seededProgress.state.produce.milk !== 1000 || seededProgress.state.produce.forged
+    || seededProgress.state.fish.pike !== 2 || seededProgress.state.fish.taimen
+    || seededProgress.state.quests.d !== '' || seededProgress.state.quests.list.length !== 1
+    || seededProgress.state.quests.list[0].p !== 3) {
+    throw new Error(`initial progress seeding was not bounded: ${JSON.stringify(seededProgress)}`);
+  }
+  const sendProgress = async (revision, state) => {
+    const previous = await walletProbe.evaluate(() => window.walletEvents.filter((message) => message.t === 'progress-result').length);
+    await walletProbe.evaluate((payload) => window.walletSocket.send(JSON.stringify({ t: 'progress-save', ...payload })), { revision, state });
+    await until(() => walletProbe.evaluate((count) => window.walletEvents.filter((message) => message.t === 'progress-result').length > count, previous), 'player progress response');
+    return walletProbe.evaluate(() => {
+      const events = window.walletEvents.filter((message) => message.t === 'progress-result');
+      return events[events.length - 1];
+    });
+  };
+  const savedProgressProbe = await sendProgress(0, {
+    produce: { milk: 4, forged: 6 }, fish: { perch: 2 },
+    quests: { d: '2026-10-26', list: [{ k: 'fish', p: 2, done: true }, { k: 'fake', p: 7, done: true }] },
+  });
+  if (!savedProgressProbe.accepted || savedProgressProbe.revision !== 1 || savedProgressProbe.state.produce.milk !== 4
+    || savedProgressProbe.state.produce.forged || savedProgressProbe.state.quests.list.length !== 1) {
+    throw new Error(`progress update failed validation or persistence: ${JSON.stringify(savedProgressProbe)}`);
+  }
+  const staleProgressProbe = await sendProgress(0, { produce: { milk: 8 }, fish: {}, quests: { d: '', list: [] } });
+  if (staleProgressProbe.accepted || staleProgressProbe.revision !== 1 || staleProgressProbe.state.produce.milk !== 4) {
+    throw new Error('stale progress update overwrote the canonical progress');
+  }
+  ok('the server bounds imported progress and rejects stale progress revisions');
   const sendWalletOperation = async (op, action, coins, xp) => {
     const previous = await walletProbe.evaluate((id) => window.walletEvents.filter((message) => message.t === 'wallet-result' && message.op === id).length, op);
     await walletProbe.evaluate((operation) => window.walletSocket.send(JSON.stringify({ t: 'wallet-op', ...operation })), { op, action, coins, xp });

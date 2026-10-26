@@ -103,10 +103,22 @@ function initialInventory(inventory) {
   return cleanInventory({ owned, rod });
 }
 
+function isRecord(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function cleanProgressRecord(record) {
+  if (!isRecord(record) || !Number.isSafeInteger(record.revision) || record.revision < 0 || !isRecord(record.state)) {
+    throw new Error('Invalid stored player progress');
+  }
+  return { revision: record.revision, state: record.state };
+}
+
 function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolOverride } = {}) {
   const dataFile = path.join(dataDir, 'rooms.json');
   const identityFile = path.join(dataDir, 'identities.json');
   const walletFile = path.join(dataDir, 'wallets.json');
+  const progressFile = path.join(dataDir, 'progress.json');
 
   if (!databaseUrl) {
     return {
@@ -175,6 +187,27 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         Object.defineProperty(wallets, id, { value: wallet, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(walletFile, wallets);
         return { wallet: cleanWallet(wallet), inventory: wallet.inventory, result, duplicate: false };
+      },
+      async getProgress(id, initial = {}) {
+        if (!PLAYER_ID.test(id || '')) throw new Error('Invalid player id for progress');
+        const records = readLegacyFile(progressFile, 'player progress');
+        if (Object.hasOwn(records, id)) return cleanProgressRecord(records[id]);
+        const record = { revision: 0, state: initial };
+        Object.defineProperty(records, id, { value: record, writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(progressFile, records);
+        return record;
+      },
+      async saveProgress(id, revision, state) {
+        if (!PLAYER_ID.test(id || '') || !Number.isSafeInteger(revision) || revision < 0 || !isRecord(state)) {
+          throw new Error('Invalid player progress update');
+        }
+        const records = readLegacyFile(progressFile, 'player progress');
+        const current = Object.hasOwn(records, id) ? cleanProgressRecord(records[id]) : { revision: 0, state: {} };
+        if (current.revision !== revision) return { accepted: false, ...current };
+        const record = { revision: revision + 1, state };
+        Object.defineProperty(records, id, { value: record, writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(progressFile, records);
+        return { accepted: true, ...record };
       },
       async mutateRoom(roomCode, initialState, mutate, instanceId) {
         const rooms = readLegacyFile(dataFile);
@@ -254,6 +287,14 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             result jsonb NOT NULL,
             created_at timestamptz NOT NULL DEFAULT now(),
             PRIMARY KEY (player_id, operation_id)
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_player_progress (
+            player_id text PRIMARY KEY,
+            revision bigint NOT NULL DEFAULT 0,
+            state jsonb NOT NULL,
+            updated_at timestamptz NOT NULL DEFAULT now()
           )
         `);
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_players_room_idx ON naadamy_players (room_code)');
@@ -392,6 +433,60 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           console.error('Could not roll back player wallet update:', rollbackError.message);
         }
         throw new Error(`Could not update player wallet: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    async getProgress(id, initial = {}) {
+      if (!PLAYER_ID.test(id || '') || !isRecord(initial)) throw new Error('Invalid player progress seed');
+      const client = await pool.connect();
+      try {
+        await client.query(
+          'INSERT INTO naadamy_player_progress (player_id, revision, state) VALUES ($1, 0, $2::jsonb) ON CONFLICT (player_id) DO NOTHING',
+          [id, JSON.stringify(initial)],
+        );
+        const selected = await client.query(
+          'SELECT revision, state FROM naadamy_player_progress WHERE player_id = $1',
+          [id],
+        );
+        if (!selected.rows[0]) throw new Error('player progress record was not created');
+        return cleanProgressRecord({ revision: Number(selected.rows[0].revision), state: selected.rows[0].state });
+      } catch (error) {
+        throw new Error(`Could not load player progress: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    async saveProgress(id, revision, state) {
+      if (!PLAYER_ID.test(id || '') || !Number.isSafeInteger(revision) || revision < 0 || !isRecord(state)) {
+        throw new Error('Invalid player progress update');
+      }
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const selected = await client.query(
+          'SELECT revision, state FROM naadamy_player_progress WHERE player_id = $1 FOR UPDATE',
+          [id],
+        );
+        if (!selected.rows[0]) throw new Error('player progress record does not exist');
+        const current = cleanProgressRecord({ revision: Number(selected.rows[0].revision), state: selected.rows[0].state });
+        if (current.revision !== revision) {
+          await client.query('COMMIT');
+          return { accepted: false, ...current };
+        }
+        const updated = await client.query(
+          'UPDATE naadamy_player_progress SET revision = $2, state = $3::jsonb, updated_at = now() WHERE player_id = $1 RETURNING revision, state',
+          [id, revision + 1, JSON.stringify(state)],
+        );
+        await client.query('COMMIT');
+        return { accepted: true, ...cleanProgressRecord({ revision: Number(updated.rows[0].revision), state: updated.rows[0].state }) };
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          console.error('Could not roll back player progress update:', rollbackError.message);
+        }
+        throw new Error(`Could not save player progress: ${error.message}`, { cause: error });
       } finally {
         client.release();
       }

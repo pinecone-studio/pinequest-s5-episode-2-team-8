@@ -63,21 +63,21 @@
     return { coins, xp, level: after > before ? after : 0 };
   }
   const QUESTS = {
-    milk: { n: 3, c: 20, x: 25, t: Tx('3 удаа мал саах', 'Milk the animals 3 times') },
-    dairy: { n: 2, c: 25, x: 35, t: Tx('2 цагаан идээ хийх', 'Make 2 dairy foods') },
-    fish: { n: 2, c: 25, x: 30, t: Tx('2 загас барих', 'Catch 2 fish') },
-    basar: { n: 2, c: 15, x: 25, t: Tx('Басараас 2 асуулт асуух', 'Ask Basar 2 questions') },
-    quiz: { n: 3, c: 25, x: 35, t: Tx('Басарын 3 асуултад зөв хариулах', 'Answer 3 of Basar’s questions right') },
-    lesson: { n: 1, c: 30, x: 40, t: Tx('Өв соёлын 1 хичээл дуусгах', 'Finish 1 heritage lesson') },
-    together: { n: 1, c: 40, x: 50, t: Tx('Гэр бүлтэйгээ бодит ажил хийх', 'Do a real activity with family') },
-    pet: { n: 3, c: 10, x: 20, t: Tx('Хонийг 3 удаа илбэх', 'Pet the sheep 3 times') },
-    sell: { n: 5, c: 15, x: 20, t: Tx('5 зүйл зарах', 'Sell 5 items') },
-    race: { n: 1, c: 25, x: 35, t: Tx('Морин уралдаанд 1 удаа оролцох', 'Ride in 1 horse race') },
-    archery: { n: 3, c: 25, x: 35, t: Tx('Сур харваанд 3 бай онох', 'Hit 3 archery targets') },
-    wrestle: { n: 1, c: 25, x: 35, t: Tx('Бөхийн барилдаанд 1 удаа давах', 'Win 1 wrestling round') },
-    etiquette: { n: 1, c: 30, x: 40, t: Tx('Эмээгийн гэрт ёсоор зочлох', 'Visit Grandma’s ger with good manners') },
-    defend: { n: 1, c: 40, x: 60, t: Tx('Нутгаа хамгаалах тулаанд ялах', 'Win a defend-the-homeland battle') },
-    eat: { n: 3, c: 15, x: 20, t: Tx('3 удаа хоол идэх, ундаа уух', 'Eat or drink 3 times') },
+    milk: { n: R.QUEST_TARGETS.milk, c: 20, x: 25, t: Tx('3 удаа мал саах', 'Milk the animals 3 times') },
+    dairy: { n: R.QUEST_TARGETS.dairy, c: 25, x: 35, t: Tx('2 цагаан идээ хийх', 'Make 2 dairy foods') },
+    fish: { n: R.QUEST_TARGETS.fish, c: 25, x: 30, t: Tx('2 загас барих', 'Catch 2 fish') },
+    basar: { n: R.QUEST_TARGETS.basar, c: 15, x: 25, t: Tx('Басараас 2 асуулт асуух', 'Ask Basar 2 questions') },
+    quiz: { n: R.QUEST_TARGETS.quiz, c: 25, x: 35, t: Tx('Басарын 3 асуултад зөв хариулах', 'Answer 3 of Basar’s questions right') },
+    lesson: { n: R.QUEST_TARGETS.lesson, c: 30, x: 40, t: Tx('Өв соёлын 1 хичээл дуусгах', 'Finish 1 heritage lesson') },
+    together: { n: R.QUEST_TARGETS.together, c: 40, x: 50, t: Tx('Гэр бүлтэйгээ бодит ажил хийх', 'Do a real activity with family') },
+    pet: { n: R.QUEST_TARGETS.pet, c: 10, x: 20, t: Tx('Хонийг 3 удаа илбэх', 'Pet the sheep 3 times') },
+    sell: { n: R.QUEST_TARGETS.sell, c: 15, x: 20, t: Tx('5 зүйл зарах', 'Sell 5 items') },
+    race: { n: R.QUEST_TARGETS.race, c: 25, x: 35, t: Tx('Морин уралдаанд 1 удаа оролцох', 'Ride in 1 horse race') },
+    archery: { n: R.QUEST_TARGETS.archery, c: 25, x: 35, t: Tx('Сур харваанд 3 бай онох', 'Hit 3 archery targets') },
+    wrestle: { n: R.QUEST_TARGETS.wrestle, c: 25, x: 35, t: Tx('Бөхийн барилдаанд 1 удаа давах', 'Win 1 wrestling round') },
+    etiquette: { n: R.QUEST_TARGETS.etiquette, c: 30, x: 40, t: Tx('Эмээгийн гэрт ёсоор зочлох', 'Visit Grandma’s ger with good manners') },
+    defend: { n: R.QUEST_TARGETS.defend, c: 40, x: 60, t: Tx('Нутгаа хамгаалах тулаанд ялах', 'Win a defend-the-homeland battle') },
+    eat: { n: R.QUEST_TARGETS.eat, c: 15, x: 20, t: Tx('3 удаа хоол идэх, ундаа уух', 'Eat or drink 3 times') },
   };
   const POOL = ['milk', 'dairy', 'milk', 'fish', 'basar', 'quiz', 'pet', 'sell', 'basar', 'quiz', 'eat'];
   function quests() {
@@ -252,12 +252,22 @@
       const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + location.pathname.replace(/[^/]*$/, '') + 'ws';
       let ws; try { ws = new WebSocket(url); } catch (e) { return setStatus('solo'); }
       this.ws = ws;
-      ws.onopen = () => { this.retry = 0; ws.send(JSON.stringify({ t: 'join', room: v.room, id: v.id, ticket, name: live.name, look: v.look, lvl: lvl(), x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir, wallet: { coins: v.coins, xp: v.xp }, inventory: { owned: v.owned, rod: v.rod } })); };
+      ws.onopen = () => {
+        this.retry = 0;
+        live.progressJoinSeedSignature = progressSignature();
+        ws.send(JSON.stringify({
+          t: 'join', room: v.room, id: v.id, ticket, name: live.name, look: v.look, lvl: lvl(),
+          x: +live.me.px.toFixed(2), y: +live.me.py.toFixed(2), dir: live.me.dir,
+          wallet: { coins: v.coins, xp: v.xp }, inventory: { owned: v.owned, rod: v.rod }, progress: progressSnapshot(),
+        }));
+      };
       ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } if (live) handle(m); };
       ws.onclose = () => {
         if (this.ws !== ws) return;
         this.ws = null;
         if (!live) return;
+        clearTimeout(live.progressTimer);
+        live.progressInFlight = null;
         live.online = false; live.others.clear(); live.lots = null; endRemoteMatch();
         if (this.closed) return setStatus('solo');
         setStatus('reconnecting');
@@ -316,6 +326,72 @@
     v.rod = inventory.rod;
     S.save(); hud();
   }
+  function progressSnapshot() {
+    const v = V();
+    return {
+      produce: v.produce,
+      fish: v.fish,
+      quests: v.quests,
+    };
+  }
+  function progressSignature(state = progressSnapshot()) {
+    return JSON.stringify(state);
+  }
+  function progressProfileMatches() {
+    const profile = S.active();
+    return Boolean(live && profile && profile.id === live.profileId);
+  }
+  function applyProgress(state) {
+    if (!progressProfileMatches() || !state || typeof state !== 'object' || Array.isArray(state)) return false;
+    const v = V(); if (!v) return false;
+    const cleanCounts = (source, allowed) => {
+      if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+      return Object.fromEntries(Object.entries(source)
+        .filter(([key, amount]) => Object.hasOwn(allowed, key) && Number.isSafeInteger(amount) && amount >= 0)
+        .map(([key, amount]) => [key, Math.min(1000, amount)]));
+    };
+    const rawQuests = state.quests && typeof state.quests === 'object' && !Array.isArray(state.quests) ? state.quests : {};
+    const quests = {
+      d: typeof rawQuests.d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawQuests.d) ? rawQuests.d : '',
+      list: Array.isArray(rawQuests.list) ? rawQuests.list.slice(0, 4).flatMap((quest) => {
+        if (!quest || typeof quest !== 'object' || Array.isArray(quest)
+          || typeof quest.k !== 'string' || !Object.hasOwn(R.QUEST_TARGETS, quest.k)) return [];
+        const target = R.QUEST_TARGETS[quest.k];
+        const progress = Number.isSafeInteger(quest.p) ? Math.max(0, Math.min(target, quest.p)) : 0;
+        const clean = { k: quest.k, p: progress, done: quest.done === true && progress >= target };
+        if (typeof quest.season === 'string' && /^[a-z0-9-]{1,32}$/i.test(quest.season)) clean.season = quest.season;
+        return [clean];
+      }) : [],
+    };
+    v.produce = cleanCounts(state.produce, R.DAIRY);
+    v.fish = cleanCounts(state.fish, R.FISH);
+    v.quests = quests;
+    live.progressSignature = progressSignature();
+    S.save(); hud();
+    return true;
+  }
+  function scheduleProgressSync() {
+    if (!live || !live.online || !progressProfileMatches() || !net.ws || net.ws.readyState !== 1) return;
+    const state = progressSnapshot(), signature = progressSignature(state);
+    if (signature === live.progressSignature) return;
+    live.progressQueued = true;
+    if (live.progressInFlight) return;
+    clearTimeout(live.progressTimer);
+    live.progressTimer = setTimeout(() => {
+      if (!live || !live.online || !progressProfileMatches() || !net.ws || net.ws.readyState !== 1 || live.progressInFlight) return;
+      const latest = progressSnapshot(), latestSignature = progressSignature(latest);
+      if (latestSignature === live.progressSignature) { live.progressQueued = false; return; }
+      live.progressQueued = false;
+      live.progressInFlight = { signature: latestSignature };
+      try {
+        net.ws.send(JSON.stringify({ t: 'progress-save', revision: live.progressRevision, state: latest }));
+      } catch (error) {
+        live.progressInFlight = null;
+        console.error('Could not send player progress:', error.message);
+      }
+    }, 300);
+  }
+  S.onSave(scheduleProgressSync);
   function handle(m) {
     const v = V();
     switch (m.t) {
@@ -323,6 +399,12 @@
         live.online = true; live.offset = m.now - Date.now(); live.lots = m.lots || new Array(R.LOTS).fill(null); live.room = m.room; live.serverV = m.v;
         applyWallet(m.wallet);
         applyInventory(m.inventory);
+        if (m.progress && Number.isSafeInteger(m.progress.revision) && m.progress.revision >= 0) {
+          live.progressRevision = m.progress.revision;
+          live.progressSignature = progressSignature(m.progress.state);
+          if (progressSignature() !== live.progressJoinSeedSignature) scheduleProgressSync();
+          else applyProgress(m.progress.state);
+        }
         live.others.clear(); (m.players || []).forEach(addOther);
         live.chat = (m.chat || []).slice(-CHAT_KEEP); renderChat();
         setStatus('online');
@@ -344,6 +426,23 @@
         applyInventory(m.inventory);
         const pending = net.pendingPurchase.get(m.op);
         if (pending) { clearTimeout(pending.timer); net.pendingPurchase.delete(m.op); pending.resolve(m); }
+        break;
+      }
+      case 'progress-result': {
+        const pending = live.progressInFlight;
+        if (!pending) break;
+        live.progressInFlight = null;
+        if (m.reason === 'storage') {
+          TG.toast(L('Ахиц серверт хадгалагдсангүй. Дахин холбогдоход дахин оролдоно.', 'Progress was not saved. It will retry after reconnecting.'));
+          break;
+        }
+        if (!Number.isSafeInteger(m.revision) || m.revision < 0 || !m.state) break;
+        live.progressRevision = m.revision;
+        if (progressSignature() === pending.signature && m.state) applyProgress(m.state);
+        else {
+          live.progressSignature = m.state ? progressSignature(m.state) : pending.signature;
+          scheduleProgressSync();
+        }
         break;
       }
       case 'wr-invite': case 'wr-declined': case 'wr-start': case 'wr-wait': case 'wr-result': case 'wr-end': onWrestleMsg(m); break;
@@ -552,7 +651,7 @@
     const qRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
     if (R.ROOM_RE.test(qRoom) && v.room !== qRoom) { v.room = qRoom; S.save(); }
     const sp = v.pos && !WD.blocked(Math.floor(v.pos.x + 0.5), Math.floor(v.pos.y + 0.82)) ? v.pos : { x: 17, y: 13 };
-    live = { root, canvas, els, name: prof.name, status: 'connecting', online: false, offset: 0, lots: null, room: v.room,
+    live = { root, canvas, els, name: prof.name, profileId: prof.id, status: 'connecting', online: false, offset: 0, lots: null, room: v.room,
       me: { x: Math.floor(sp.x + 0.5), y: Math.floor(sp.y + 0.82), px: sp.x, py: sp.y, vx: 0, vy: 0, path: [], dir: 0, moving: false, bubble: null, petPos: { x: sp.x, y: sp.y + 0.6 }, sent: { x: sp.x, y: sp.y }, netT: 0, stuck: 0 },
       season: TG.seasons.current().id, fx: [], cam: { x: sp.x, y: sp.y }, dog: { x: sp.x + 0.7, y: sp.y + 0.2, moving: false, flip: false, idle: 0, bubble: null, nextFact: performance.now() + 25000 }, keys: new Set(), others: new Map(), pending: null, floaters: [], match: null,
       sheep: [[24, 20], [28, 22], [31, 20], [26, 23]].map(([x, y], i) => ({ i, x, y, px: x, py: y, next: 1 + i, flip: false })),

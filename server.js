@@ -191,6 +191,33 @@ function inventorySeed(value) {
     rod: value && Number.isInteger(value.rod) ? Math.max(1, Math.min(2, value.rod)) : 1,
   };
 }
+function sanitizeProgress(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { produce: {}, fish: {}, quests: { d: '', list: [] } };
+  const counts = (source, allowed) => {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+    return Object.fromEntries(Object.entries(source)
+      .filter(([key, amount]) => Object.hasOwn(allowed, key) && Number.isSafeInteger(amount) && amount >= 0)
+      .map(([key, amount]) => [key, Math.min(1000, amount)]));
+  };
+  const rawQuests = value.quests && typeof value.quests === 'object' && !Array.isArray(value.quests) ? value.quests : {};
+  const parsedDay = typeof rawQuests.d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawQuests.d)
+    ? new Date(`${rawQuests.d}T00:00:00Z`) : null;
+  const day = parsedDay && !Number.isNaN(parsedDay.getTime()) && parsedDay.toISOString().slice(0, 10) === rawQuests.d ? rawQuests.d : '';
+  const list = Array.isArray(rawQuests.list) ? rawQuests.list.slice(0, 4).flatMap((quest) => {
+    if (!quest || typeof quest !== 'object' || Array.isArray(quest)
+      || typeof quest.k !== 'string' || !Object.hasOwn(R.QUEST_TARGETS, quest.k)) return [];
+    const target = R.QUEST_TARGETS[quest.k];
+    const progress = Number.isSafeInteger(quest.p) ? Math.max(0, Math.min(target, quest.p)) : 0;
+    const saved = { k: quest.k, p: progress, done: quest.done === true && progress >= target };
+    if (typeof quest.season === 'string' && /^[a-z0-9-]{1,32}$/i.test(quest.season)) saved.season = quest.season;
+    return [saved];
+  }) : [];
+  return {
+    produce: counts(value.produce, R.DAIRY),
+    fish: counts(value.fish, R.FISH),
+    quests: { d: day, list },
+  };
+}
 function ownedLook(look, inventory) {
   const clean = R.cleanLook(look);
   for (const slot of ['deel', 'hat', 'face', 'neck', 'pet']) {
@@ -495,6 +522,8 @@ function updatePresence(p) {
 
 async function joinPlayer(conn, message, code, id, now) {
   const account = await roomStore.getAccount(id, walletSeed(message.wallet), inventorySeed(message.inventory));
+  const storedProgress = await roomStore.getProgress(id, sanitizeProgress(message.progress));
+  const progress = { revision: storedProgress.revision, state: sanitizeProgress(storedProgress.state) };
   await leave(conn);
   const r = room(code);
   const latestState = await roomStore.getRoomState(code);
@@ -537,7 +566,8 @@ async function joinPlayer(conn, message, code, id, now) {
   ];
   conn.wallet = account.wallet;
   conn.inventory = account.inventory;
-  conn.send({ t: 'welcome', v: R.VERSION, now, room: code, players, lots: r.lots, chat: r.chat, wallet: account.wallet, inventory: account.inventory });
+  conn.progressRevision = progress.revision;
+  conn.send({ t: 'welcome', v: R.VERSION, now, room: code, players, lots: r.lots, chat: r.chat, wallet: account.wallet, inventory: account.inventory, progress });
   const replacing = Boolean(old || replacingRemote || previousInstance);
   broadcast(r, { t: 'join', p: pub(p), ...(replacing ? { replace: true } : {}) }, conn);
   census();
@@ -610,6 +640,22 @@ async function handleShopPurchase(conn, message) {
   } catch (error) {
     console.error('Could not purchase player shop item:', error.message);
     conn.send({ t: 'inventory-result', op: operation, accepted: false, reason: 'storage', wallet: conn.wallet, inventory: conn.inventory });
+  }
+}
+
+async function handleProgressSave(conn, message) {
+  if (!conn.player) return;
+  if (!Number.isSafeInteger(message.revision) || message.revision < 0
+    || !message.state || typeof message.state !== 'object' || Array.isArray(message.state)) {
+    return conn.send({ t: 'progress-result', accepted: false, reason: 'invalid', revision: conn.progressRevision });
+  }
+  try {
+    const result = await roomStore.saveProgress(conn.player.id, message.revision, sanitizeProgress(message.state));
+    conn.progressRevision = result.revision;
+    conn.send({ t: 'progress-result', ...result });
+  } catch (error) {
+    console.error('Could not save player progress:', error.message);
+    conn.send({ t: 'progress-result', accepted: false, reason: 'storage', revision: conn.progressRevision });
   }
 }
 
@@ -722,6 +768,9 @@ function onMessage(conn, text) {
       break;
     case 'shop-buy':
       handleShopPurchase(conn, m);
+      break;
+    case 'progress-save':
+      handleProgressSave(conn, m);
       break;
     // ---- own ger
     case 'ger-claim':
