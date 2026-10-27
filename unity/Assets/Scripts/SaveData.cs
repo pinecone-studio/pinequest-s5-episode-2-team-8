@@ -83,6 +83,7 @@ public sealed class SaveData
     public int histStep, histFound;                   // the historian's task chain: current step, and whether its item was found
     public List<string> campWon = new List<string>(); // defend-the-homeland chapters won
     public string ticket = "";                      // multiplayer identity ticket (64 hex)
+    public string fam = "";                         // the family code this child was added to (Family.cs)
     // the server account this device last saw (Net.Sync): what the device has on top of it is progress still to upload
     public bool hasSrv;
     public int srvCoins, srvXp, srvRod = 1;
@@ -143,7 +144,7 @@ public sealed class SaveData
     /** Fills in anything an older save didn't have. */
     SaveData Fix()
     {
-        ger ??= new GerSave(); shorn ??= new List<KV>();
+        ger ??= new GerSave(); shorn ??= new List<KV>(); fam ??= ""; server ??= "";
         if (gerBuilt && ger.stage == 0) { ger.stage = 9; ger.lot = lot.i; } // a ger bought before gers were built by hand
         if (string.IsNullOrEmpty(id)) id = Guid.NewGuid().ToString("N").Substring(0, 12);
         look ??= new Look(); horse ??= new HorseSave(); arch ??= new ArchSave(); wr ??= new WrSave(); emee ??= new EmeeSave(); lot ??= new LotSave();
