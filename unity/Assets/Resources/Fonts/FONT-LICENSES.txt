@@ -2,6 +2,10 @@ NaadamyPixel.ttf is the pixel font Tiny5 (as on the web version) with its Latin,
 letters, Ө Ү included), plus a few symbols (→ √ ● ► ■ ₮ …) from Noto Sans, Noto Sans Math and Noto Sans Symbols 2, scaled to fit.
 Unity draws it as hard pixels (Editor/NaadamyFontImport.cs). All fonts are under the SIL Open Font License 1.1:
 
+NaadamyBody.ttf is Nunito at weight 700 and NaadamyDisplay.ttf is Rubik at weight 800, the web version's text and heading
+fonts, made static from Google Fonts' variable files, with the arrows and shapes they lack (→ ● ♥ ✓ ★ …) copied from Noto Sans,
+Noto Sans Symbols, Noto Sans Symbols 2 and Noto Sans Math. Unity draws them smooth, for everything longer than a label.
+
 ===== Tiny5 =====
 Copyright 2022-2024 The Tiny5 Project Authors (https://github.com/Gissio/font_tiny5)
 
@@ -191,3 +195,12 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+
+
+===== Nunito =====
+Copyright 2014 The Nunito Project Authors (https://github.com/googlefonts/nunito)
+Licensed under the SIL Open Font License, Version 1.1 (the full text is above, under Tiny5).
+
+===== Rubik =====
+Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik)
+Licensed under the SIL Open Font License, Version 1.1 (the full text is above, under Tiny5).

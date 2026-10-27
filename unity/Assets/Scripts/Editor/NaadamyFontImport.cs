@@ -1,4 +1,5 @@
-// The game's pixel font (Resources/Fonts/NaadamyPixel.ttf, Tiny5 like the web version) is drawn as hard pixels, not smoothed.
+// The game's fonts (Resources/Fonts), as on the web version: Tiny5 for labels, drawn as hard pixels; Nunito for text and
+// Rubik for headings, drawn smooth so longer text is easy to read.
 using UnityEditor;
 using UnityEngine;
 
@@ -6,9 +7,10 @@ class NaadamyFontImport : AssetPostprocessor
 {
     void OnPreprocessAsset()
     {
-        if (!(assetImporter is TrueTypeFontImporter f) || !assetPath.EndsWith("NaadamyPixel.ttf")) return;
-        f.fontRenderingMode = FontRenderingMode.HintedRaster; // no anti-aliasing: every font pixel is a crisp square
+        if (!(assetImporter is TrueTypeFontImporter f) || !assetPath.Contains("/Resources/Fonts/")) return;
+        bool pixel = assetPath.EndsWith("NaadamyPixel.ttf");
+        f.fontRenderingMode = pixel ? FontRenderingMode.HintedRaster : FontRenderingMode.Smooth; // pixel letters: every font pixel a crisp square
         f.fontTextureCase = FontTextureCase.Dynamic;
-        f.includeFontData = true;                           // a browser has no system fonts to fall back on
+        f.includeFontData = true;                                                                   // a browser has no system fonts to fall back on
     }
 }

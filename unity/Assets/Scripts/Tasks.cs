@@ -226,7 +226,7 @@ public sealed partial class Game
                     for (int i = row * cols; i < Mathf.Min(n, row * cols + cols); i++)
                     {
                         var o = sp.options[i]; var br = GUILayoutUtility.GetRect(g.U(92), g.U(84), GUILayout.Width(g.U(92)));
-                        if (GUI.Button(br, "", i == s.sel ? g.sPrimary : g.sBtn)) { var id = o.id; g.Later(() => Pick(id)); }
+                        if (GUI.Button(br, "", i == s.sel ? g.sSel : g.sBtn)) { var id = o.id; g.Later(() => Pick(id)); }
                         if (o.icon != null) GUI.DrawTexture(new Rect(br.center.x - g.U(18), br.y + g.U(6), g.U(36), g.U(36)), g.Tex(o.icon));
                         GUI.Label(new Rect(br.x + 2, br.y + g.U(44), br.width - 4, g.U(38)), o.label.ToString(), new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, wordWrap = true });
                     }

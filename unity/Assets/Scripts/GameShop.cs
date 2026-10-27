@@ -29,7 +29,7 @@ public sealed partial class Game
             var V = g.V;
             GUILayout.BeginHorizontal(); g.Title(Loc.L("Наадмын дэлгүүр", "Naadam Shop")); GUILayout.FlexibleSpace(); g.IconAt(Px.Icon("ui:coin"), 22); GUILayout.Label("<b>" + V.coins + "</b>", g.sTitle); GUILayout.EndHorizontal();
             var tabs = new[] { ("wear", Loc.L("Хувцас", "Clothes")), ("pet", Loc.L("Тэжээвэр", "Pets")), ("tool", Loc.L("Багаж", "Tools")), ("sell", Loc.L("Зарах", "Sell")) };
-            int hit = g.Chips(tabs.Select(t => t.Item2).ToList(), System.Array.FindIndex(tabs, t => t.Item1 == cur), 90);
+            int hit = g.Chips(tabs.Select(t => t.Item2).ToList(), System.Array.FindIndex(tabs, t => t.Item1 == cur), 90, true);
             if (hit >= 0) { var k = tabs[hit].Item1; g.Later(() => cur = k); }
             g.Gap(6);
             if (cur == "sell") { Sell(g); }
@@ -95,11 +95,11 @@ public sealed partial class Game
             {
                 GUILayout.Label(title, g.sSmall);
                 GUILayout.BeginHorizontal();
-                if (slot != "deel" && GUILayout.Button("—", string.IsNullOrEmpty(g.Worn(slot)) ? g.sPrimary : g.sBtn, GUILayout.Width(g.U(42)), GUILayout.Height(g.U(42)))) { var s2 = slot; g.Later(() => g.Equip(s2, null)); }
+                if (slot != "deel" && GUILayout.Button("—", string.IsNullOrEmpty(g.Worn(slot)) ? g.sSel : g.sBtn, GUILayout.Width(g.U(42)), GUILayout.Height(g.U(42)))) { var s2 = slot; g.Later(() => g.Equip(s2, null)); }
                 foreach (var it in Rules.ITEMS.Where(i => i.slot == slot && V.owned.Contains(i.id)))
                 {
                     var r = GUILayoutUtility.GetRect(g.U(42), g.U(42), GUILayout.Width(g.U(42)), GUILayout.Height(g.U(42)));
-                    if (GUI.Button(r, "", g.Worn(slot) == it.val ? g.sPrimary : g.sBtn)) { var i2 = it; g.Later(() => g.Equip(i2.slot, i2.val)); }
+                    if (GUI.Button(r, "", g.Worn(slot) == it.val ? g.sSel : g.sBtn)) { var i2 = it; g.Later(() => g.Equip(i2.slot, i2.val)); }
                     GUI.DrawTexture(new Rect(r.x + g.U(5), r.y + g.U(5), r.width - g.U(10), r.height - g.U(10)), g.Tex(Px.Icon(Rules.ItemIcon(it))));
                 }
                 GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
@@ -152,12 +152,12 @@ public sealed partial class Game
             var V = g.V;
             GUILayout.BeginHorizontal(); g.Title(Loc.L("Хоол, ундаа", "Food & drink")); GUILayout.FlexibleSpace(); GUILayout.Label($"<b>{Mathf.RoundToInt(V.energy)}/{Rules.ENERGY_MAX}</b>", g.sTitle); GUILayout.EndHorizontal();
             g.Small(Loc.L("Гүйхэд хүч зарцуулна. Монгол хоол идэж хүчээ нөхөөрэй!", "Running uses energy. Eat Mongolian food to get it back!"));
-            int hit = g.Chips(Rules.FOOD_TABS.Select(t => t.name.ToString()).ToList(), System.Array.FindIndex(Rules.FOOD_TABS, t => t.id == cur), 90);
+            int hit = g.Chips(Rules.FOOD_TABS.Select(t => t.name.ToString()).ToList(), System.Array.FindIndex(Rules.FOOD_TABS, t => t.id == cur), 90, true);
             if (hit >= 0) { var k = Rules.FOOD_TABS[hit].id; g.Later(() => cur = k); }
             foreach (var f in Rules.FOODS.Where(x => x.kind == cur))
             {
                 bool mine = Rules.DAIRY.ContainsKey(f.id) && V.Have(f.id) > 0, free = home || mine || f.price == 0;
-                g.Row(Rules.DAIRY.ContainsKey(f.id) ? Px.Icon("dairy:" + f.id) : null, $"{f.name}  <size={Game.PxSize(g.U(11f) * 1.3f)}>+{f.energy}</size>", f.fact.ToString());
+                g.Row(Rules.DAIRY.ContainsKey(f.id) ? Px.Icon("dairy:" + f.id) : null, $"{f.name}  <size={g.Ts(11)}>+{f.energy}</size>", f.fact.ToString());
                 if (g.SmallBtn(free ? Loc.L("Идэх", "Eat") : f.price.ToString())) { var ff = f; g.Later(() => g.Eat(ff.id, home)); }
                 g.EndRow();
             }

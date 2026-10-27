@@ -168,7 +168,7 @@ public sealed partial class Game
                 GUILayout.BeginHorizontal(g.sBtn);
                 g.IconAt(Px.Icon(q.done ? "ui:star" : "ui:scroll"), 28);
                 GUILayout.BeginVertical();
-                GUILayout.Label((q.done ? "<color=#2ea35f>√</color> " : "") + $"<b>{d.t}</b>" + (q.season ? $"  <size={Game.PxSize(g.U(10f) * 1.3f)}><color=#c46d12>{Seasons.Current().name} ×1.5</color></size>" : ""), g.sLabel);
+                GUILayout.Label((q.done ? "<color=#2ea35f>√</color> " : "") + $"<b>{d.t}</b>" + (q.season ? $"  <size={g.Ts(10)}><color=#c46d12>{Seasons.Current().name} ×1.5</color></size>" : ""), g.sLabel);
                 g.Bar(GUILayoutUtility.GetRect(10, g.U(10), GUILayout.ExpandWidth(true)), q.p / (float)d.n, Px.Col("#2ea35f"));
                 float mul = q.season ? 1.5f : 1;
                 GUILayout.Label($"{q.p}/{d.n} · +{Mathf.RoundToInt(d.c * mul)} {Loc.L("зоос", "coins")} · +{Mathf.RoundToInt(d.x * mul)} XP", g.sSmall);
