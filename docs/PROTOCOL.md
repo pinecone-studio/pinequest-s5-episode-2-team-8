@@ -32,14 +32,17 @@ Shared lists (phrases, emotes, looks, roofs, moves…) live in `js/village/rules
 | `join` | `code, id, ticket, name, age, avatar, pics` | `{ ok, code }`: adds the child, or replaces their name, age, avatar and pictures (this also lifts a lock) |
 | `members` | `code` | `{ ok, members: [{ id, name, age, avatar, locked }] }` |
 | `login` | `code, id, pics` | `{ ok, id, ticket, name, age, avatar, code, cloud }`: `ticket` is new and belongs to this device; `cloud` is the child's cloud save |
+| `pictures` | `code, by, ticket, id, pics` | `{ ok, code, left }`: gives child `id` new pictures and lifts a lock (they forgot theirs) |
+| `remove` | `code, by, ticket, id` | `{ ok, code, left }`: takes child `id` out of the family; with `left: 0` the family is deleted |
 
 - `code`: 8 letters and digits from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown as `ABCD-2345`. Lower case, spaces and dashes are allowed when sending it.
 - `pics`: 3 picture indexes 0–8, in order (`TG.PIC_KEYS` on the web; Unity's `PicKey(i)` uses the same order). `avatar`: a mascot index 0–11. `name`: up to 20 characters.
 - `create` and `join` need the child's own `id` and `ticket`, so only a device that already plays as that child can add or change it.
+- `pictures` and `remove` are for a grown-up on any device of the family: `by` and `ticket` are one of the family's children that this device plays as, and `id` may be any child of the family. Taking a child out doesn't erase their progress or the tickets their devices already have; they just can't log in with the code any more.
 - A family has at most 8 children.
 - After 5 wrong `login` tries, that child is locked for 15 minutes (`reason: 'locked'`, `wait` in seconds). A wrong try answers `reason: 'wrong'` with `left` tries.
 - Each address gets at most 30 requests a minute (`429`, `reason: 'busy'`). Behind Render's proxy, the last `X-Forwarded-For` entry is used.
-- Other `reason` values: `invalid`, `identity`, `no-family`, `full`, `storage`.
+- Other `reason` values: `invalid`, `identity`, `no-family`, `no-member`, `full`, `storage`.
 - Pictures are stored as a salted scrypt hash. With only 729 combinations, the lock is what protects them, not the hash.
 
 The web client keeps `familyCode` in its stored state, and `fam` (the family code) on each profile that is in the family. Unity (`Family.cs`) keeps `familyCode` and `server` (the address it last used) in `AppState`, and `fam` in each `SaveData`; its picture codes are saved as `"0-4-2"` and sent as `[0,4,2]`. Because Unity has no page origin, its family login also asks for the server address.

@@ -21,7 +21,8 @@ const base = `http://localhost:${port}`;
 const results = [];
 const ok = (label) => results.push('✓ ' + label);
 
-const api = async (body) => (await fetch(`${base}/api/family`, { method: 'POST', body: JSON.stringify(body) })).json();
+// `from`: the address the request seems to come from (behind a proxy), each with its own limit of requests a minute
+const api = async (body, from) => (await fetch(`${base}/api/family`, { method: 'POST', body: JSON.stringify(body), headers: from ? { 'x-forwarded-for': from } : {} })).json();
 const ticket = () => crypto.randomBytes(32).toString('hex');
 /** Joins a room over the WebSocket and resolves with the server's first answer: welcome or error. */
 function joinRoom(id, t) {
@@ -90,6 +91,21 @@ try {
   const aLogin = await api({ act: 'login', code, id: a.id, pics: [8, 8, 8] });
   assert.deepEqual([aLogin.ok, aLogin.age], [true, 9]);
   ok("new pictures from the child's own device replace the old ones and lift the lock");
+
+  // a grown-up on Бат's device helps Сараа, who forgot her pictures, then they leave the family
+  const grownUp = '10.0.0.2';
+  assert.equal((await api({ act: 'pictures', code, by: b.id, ticket: ticket(), id: a.id, pics: [6, 6, 6] }, grownUp)).reason, 'identity');
+  const stranger = { id: 'stranger-' + crypto.randomBytes(3).toString('hex'), ticket: ticket() };
+  assert.equal((await api({ act: 'pictures', code, by: stranger.id, ticket: stranger.ticket, id: a.id, pics: [6, 6, 6] }, grownUp)).reason, 'identity');
+  assert.equal((await api({ act: 'pictures', code, by: b.id, ticket: b.ticket, id: a.id, pics: [6, 6, 6] }, grownUp)).ok, true);
+  assert.equal((await api({ act: 'login', code, id: a.id, pics: [6, 6, 6] }, grownUp)).ok, true);
+  ok("a grown-up on another child's device gives new pictures; a stranger or a wrong ticket cannot");
+  assert.deepEqual(await api({ act: 'remove', code, by: b.id, ticket: b.ticket, id: a.id }, grownUp), { ok: true, code, left: 1 });
+  assert.deepEqual((await api({ act: 'members', code }, grownUp)).members.map((m) => m.id), [b.id]);
+  assert.equal((await api({ act: 'login', code, id: a.id, pics: [6, 6, 6] }, grownUp)).reason, 'no-family');
+  assert.deepEqual(await api({ act: 'remove', code, by: b.id, ticket: b.ticket, id: b.id }, grownUp), { ok: true, code, left: 0 });
+  assert.equal((await api({ act: 'members', code }, grownUp)).reason, 'no-family');
+  ok('a child can be taken out of the family; the last one out deletes it');
 
   assert.equal((await fetch(`${base}/api/family`)).status, 405);
   assert.equal((await api({ act: 'nope' })).reason, 'invalid');
@@ -168,16 +184,25 @@ try {
   ok('another device logs in with the code and the pictures, and has the same coins and XP');
 
   // a stamp earned on the other device reaches the first one
-  const answeredBefore = await other.evaluate(() => TG._village.cloudAt());
-  await other.evaluate(() => { TG.store.active().passport.stamps.uvs = 5000; TG.store.save(); });
-  // uploads are at most every 3 s; wait for the server's answer to this one
-  await until(() => other.evaluate((before) => TG._village.cloudAt() > before, answeredBefore), 'the other device uploads the stamp', 15000);
+  const stampedAt = await other.evaluate(() => { TG.store.active().passport.stamps.uvs = 5000; TG.store.save(); return Date.now(); });
+  // uploads are at most every 3 s: wait until the stamp went up and the server answered after that
+  await until(() => other.evaluate((t) => { const c = TG._village.cloud(); return c.sent.includes('"uvs"') && c.at > t; }, stampedAt), 'the other device uploads the stamp', 15000);
   await home.evaluate(() => TG.go('village'));
   await until(() => home.evaluate(() => TG._village.live() && TG._village.live().online), 'the first device is back online');
   await home.evaluate(() => TG._village.reconnect());
   await until(() => home.evaluate(() => TG.store.active().passport.stamps.uvs === 5000), 'the first device gets the stamp from the other one', 15000);
   assert.equal(await home.evaluate(() => TG.store.active().passport.stamps.tuv), 4000, 'its own stamp stays');
   ok('progress made on either device reaches the other');
+
+  // the parent dashboard lists every child of the family and can take one out (the last one out deletes the family)
+  await home.evaluate(() => TG.go('family'));
+  await home.waitForSelector(`[data-member="${homeId}"]`);
+  await home.evaluate((id) => [...document.querySelectorAll(`[data-member="${id}"] button`)].find((x) => /Remove/.test(x.textContent)).click(), homeId);
+  await home.waitForSelector('.modal .btn.danger');
+  await home.evaluate(() => document.querySelector('.modal .btn.danger').click());
+  await until(() => home.evaluate(() => !TG.store.state.familyCode && !TG.store.active().fam), 'the child is taken out of the family');
+  assert.equal((await api({ act: 'members', code: webCode }, '10.0.0.3')).reason, 'no-family');
+  ok('the parent dashboard lists the family and takes a child out of it');
   assert.deepEqual(errors, []);
 
   console.log(results.join('\n'));

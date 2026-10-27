@@ -86,6 +86,25 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     });
   }
 
+  /** A grown-up on any device of the family (one that plays as one of its children, `by`) gives another child new pictures
+   *  (they forgot them; this also lifts a lock) or takes a child out of the family. The last child out deletes the family. */
+  async function manage(message, act) {
+    const code = familyCode(message.code), by = String(message.by || ''), id = String(message.id || '');
+    const pics = act === 'pictures' ? pictures(message.pics) : null;
+    if (!code || !PLAYER_ID.test(by) || !PLAYER_ID.test(id) || !PLAYER_TICKET.test(message.ticket || '') || (act === 'pictures' && !pics)) return { ok: false, reason: 'invalid' };
+    if (!(await roomStore.authenticatePlayer(by, message.ticket))) return { ok: false, reason: 'identity' };
+    const salt = crypto.randomBytes(16).toString('hex'), hash = pics ? await hashPictures(pics, salt) : '';
+    return roomStore.mutateFamily(code, (family) => {
+      if (!family) return { changed: false, result: { ok: false, reason: 'no-family' } };
+      if (!family.members.some((m) => m.id === by)) return { changed: false, result: { ok: false, reason: 'identity' } };
+      const i = family.members.findIndex((m) => m.id === id);
+      if (i < 0) return { changed: false, result: { ok: false, reason: 'no-member' } };
+      if (act === 'remove') family.members.splice(i, 1);
+      else Object.assign(family.members[i], { salt, hash, fails: 0, until: 0 });
+      return { changed: true, result: { ok: true, code, left: family.members.length } };
+    });
+  }
+
   async function members(message) {
     const family = await roomStore.getFamily(familyCode(message.code));
     if (!family) return { ok: false, reason: 'no-family' };
@@ -143,6 +162,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
         if (message.act === 'join') return send(200, await add(message, false));
         if (message.act === 'members') return send(200, await members(message));
         if (message.act === 'login') return send(200, await login(message));
+        if (message.act === 'pictures' || message.act === 'remove') return send(200, await manage(message, message.act));
         send(400, { ok: false, reason: 'invalid' });
       } catch (error) {
         console.error('Family:', error.message);

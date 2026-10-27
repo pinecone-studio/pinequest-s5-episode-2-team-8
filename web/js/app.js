@@ -398,7 +398,7 @@
   }
 
   // ---------------- family / parent dashboard ----------------
-  let parentChild = null;
+  let parentChild = null, familyList = { code: null, members: null };
   /** The family code: made here, then each child is added with their 3 pictures so they can log in on other devices. */
   function familyCard() {
     const st = S.state, F = TG.family, code = st.familyCode;
@@ -411,6 +411,7 @@
       if (!F.picIndexes(p.code)) return setPictures(p, () => addChild(p));
       const r = await F.link(p);
       TG.toast(r.ok ? L(`${p.name} гэр бүлд нэмэгдлээ`, `${p.name} is in the family`) : r.text || F.why(r));
+      familyList = { code: null, members: null }; // fetch the family again
       render();
     };
     const title = h('h3', null, '🔑 ', L('Гэр бүлийн код', 'Family code'));
@@ -429,13 +430,37 @@
         h('p', { class: 'muted', style: { marginTop: '12px' } }, L('Өөр төхөөрөмж дээр код үүсгэсэн бол:', 'Made a code on another device already?')),
         h('div', { class: 'inline' }, input, h('button', { class: 'btn ghost', onclick: joinExisting }, L('Нэгдэх', 'Join'))), err);
     }
+    // every child of the family, also those only on other devices: new pictures (forgotten ones), or out of the family
+    if (familyList.code !== code) {
+      familyList = { code, members: null };
+      F.api({ act: 'members', code }).then((r) => { if (familyList.code !== code) return; familyList.members = r.ok ? r.members : []; render(); });
+    }
+    const local = (m) => st.profiles.find((p) => p.village && p.village.id === m.id);
+    const refresh = (r, done) => { if (r.ok) { familyList = { code: null, members: null }; TG.toast(done); } else TG.toast(F.why(r)); render(); };
+    const newPictures = (m) => {
+      const p = local(m);
+      if (p) return setPictures(p, () => addChild(p)); // a child on this device: its own device changes them
+      const close = TG.modal(h('div', { class: 'center' }, h('h2', null, `${(TG.MASCOTS[m.avatar] || TG.MASCOTS[0]).e} ${m.name}`),
+        h('p', { class: 'muted' }, L('Шинэ 3 нууц зураг сонгоорой. Дараалал нь чухал.', 'Choose 3 new secret pictures. The order matters.')),
+        picPad(async (pics) => { close(); refresh(await F.manage('pictures', m.id, F.picIndexes(pics)), L(`${m.name}-ийн зураг солигдлоо`, `${m.name} has new pictures`)); })));
+    };
+    const remove = (m) => {
+      const close = TG.modal(h('div', { class: 'center' }, h('h2', null, L(`${m.name}-г гэр бүлээс хасах уу?`, `Take ${m.name} out of the family?`)),
+        h('p', { class: 'muted' }, L('Өөр төхөөрөмж дээр гэр бүлийн кодоор нэвтэрч чадахгүй болно. Ахиц нь устахгүй.', 'They can no longer log in with the family code on another device. Their progress is not erased.')),
+        h('div', { class: 'row-btns' }, h('button', { class: 'btn ghost', onclick: () => close() }, L('Болих', 'Cancel')),
+          h('button', { class: 'btn danger', onclick: async () => { close(); refresh(await F.manage('remove', m.id), L(`${m.name} гэр бүлээс гарлаа`, `${m.name} left the family`)); } }, L('Хасах', 'Remove')))));
+    };
+    const members = familyList.members || [];
     return h('section', { class: 'card', 'data-family': code }, title,
       h('div', { class: 'fam-code' }, F.showCode(code)),
       h('p', { class: 'muted' }, L('Өөр төхөөрөмж дээр: нэвтрэх хуудас → “Гэр бүлийн кодоор нэвтрэх”. Кодыг зөвхөн гэр бүлдээ хэлээрэй.', 'On another device: the login page → “Log in with a family code”. Share the code only with your family.')),
-      st.profiles.map((p) => h('div', { class: 'child-row' }, h('span', null, p.avatar, ' ', h('b', null, p.name)),
-        p.fam === code
-          ? h('span', null, h('span', { class: 'tag ok' }, '✓ ', L('Гэр бүлд', 'In the family')), ' ', h('button', { class: 'link-btn', onclick: () => setPictures(p, () => addChild(p)) }, L('Зураг солих', 'Change pictures')))
-          : h('button', { class: 'btn sm primary', onclick: () => addChild(p) }, L('Гэр бүлд нэмэх', 'Add to family')))));
+      familyList.members ? null : h('p', { class: 'muted' }, L('Ачаалж байна…', 'Loading…')),
+      members.map((m) => h('div', { class: 'child-row', 'data-member': m.id }, h('span', null, (TG.MASCOTS[m.avatar] || TG.MASCOTS[0]).e, ' ', h('b', null, m.name),
+        local(m) ? '' : h('small', { class: 'muted' }, ' · ', L('өөр төхөөрөмж', 'other device')), m.locked ? ' ⏳' : ''),
+        h('span', null, h('button', { class: 'link-btn', onclick: () => newPictures(m) }, L('Шинэ зураг', 'New pictures')), ' ',
+          h('button', { class: 'link-btn danger', onclick: () => remove(m) }, L('Хасах', 'Remove'))))),
+      st.profiles.filter((p) => !members.some((m) => p.village && m.id === p.village.id)).map((p) => h('div', { class: 'child-row' }, h('span', null, p.avatar, ' ', h('b', null, p.name)),
+        h('button', { class: 'btn sm primary', onclick: () => addChild(p) }, L('Гэр бүлд нэмэх', 'Add to family')))));
   }
   SCREENS.family = () => {
     if (Date.now() >= parentUntil) { setTimeout(openFamily, 0); return shell([h('p', { class: 'muted' }, '🔒')]); }

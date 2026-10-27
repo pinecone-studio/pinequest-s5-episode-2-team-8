@@ -34,6 +34,7 @@
       case 'wrong': return L(`Зураг буруу байна. ${result.left} оролдлого үлдлээ.`, `Wrong pictures. ${result.left} tries left.`);
       case 'locked': return L(`Олон удаа буруу дарлаа. ${Math.ceil(result.wait / 60)} минутын дараа дахин оролдоорой.`, `Too many wrong tries. Try again in ${Math.ceil(result.wait / 60)} minutes.`);
       case 'busy': return L('Хэт олон оролдлого. Түр хүлээгээрэй.', 'Too many tries. Wait a moment.');
+      case 'no-member': return L('Энэ хүүхэд гэр бүлд байхгүй байна.', 'This child is not in the family.');
       case 'identity': return L('Энэ профайлыг сервер танисангүй.', 'The server did not recognise this profile.');
       default: return L('Алдаа гарлаа. Дахин оролдоорой.', 'Something went wrong. Try again.');
     }
@@ -71,5 +72,20 @@
     return { ok: true, profile: p };
   }
 
-  TG.family = { api, link, login, why, picIndexes, picCode, showCode, avatarIndex };
+  /** A grown-up's change to any child of the family, from this device (which plays as one of its children): new pictures
+   *  for a child who forgot them, or taking a child out ('remove'). This device leaves the family when none of its children
+   *  are in it any more. */
+  async function manage(act, id, pics) {
+    const code = S.state.familyCode, me = S.state.profiles.find((p) => p.fam === code && p.village && /^[a-f0-9]{64}$/i.test(p.village.ticket || ''));
+    if (!me) return { ok: false, reason: 'identity' };
+    const result = await api({ act, code, by: me.village.id, ticket: me.village.ticket, id, pics });
+    if (result.ok && act === 'remove') {
+      for (const p of S.state.profiles) if (p.village && p.village.id === id) p.fam = null;
+      if (!result.left || !S.state.profiles.some((p) => p.fam === code)) S.state.familyCode = null;
+      S.save();
+    }
+    return result;
+  }
+
+  TG.family = { api, link, login, manage, why, picIndexes, picCode, showCode, avatarIndex };
 })(window.TG);

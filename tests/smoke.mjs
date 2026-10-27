@@ -616,6 +616,8 @@ try {
   }
   await sleep(1500);
   await page.evaluate(() => { const bt = TG._village.battleState(), e = bt && bt.enemies[0], sc = TG._village.fpScene; if (e) { sc.me.x = e.x - 1; sc.me.y = e.y; } }); await sleep(200);
+  // the bow may still be reloading from an earlier shot (cd > 0): F only fires once it is ready
+  await page.waitForFunction(() => !(TG._village.battleState().cd > 0), { timeout: 4000, polling: 100 }).catch(() => {});
   const shots0 = await page.evaluate(() => TG._village.battleState().shots || 0);
   await page.keyboard.press('KeyF'); await sleep(100);
   // a raider one step away is hit (and the arrow gone) within a frame or two, so count the shot itself
@@ -665,7 +667,8 @@ try {
 
   // aimag passport: Ulaanbaatar first, then the next province unlocks
   step = 'aimag passport';
-  await page.evaluate(() => TG.go('passport')); await sleep(300);
+  await page.evaluate(() => TG.go('passport'));
+  await page.waitForSelector('.pp-grid .pp-slot.next', { timeout: 3000 }).catch(() => {}); // after the page transition
   await check('passport', '.pp-grid .pp-slot.next');
   await page.evaluate(() => TG.go('aimag', { id: 'tuv' })); await sleep(250);
   if (await page.evaluate(() => !!document.querySelector('.pp-visit'))) errors.push('passport: Töv should be locked before Ulaanbaatar is stamped');
@@ -734,13 +737,15 @@ try {
   if (!traced) errors.push('academy: tracing the letter carefully did not earn a star');
   await check('academy after a good tracing', '.bc-tile.done');
   for (const screen of ['memories', 'about']) {
-    await page.evaluate((s) => TG.go(s), screen); await sleep(250);
+    await page.evaluate((s) => TG.go(s), screen);
+    await page.waitForSelector(screen === 'about' ? '.about' : '.shell', { timeout: 3000 }).catch(() => {}); // after the page transition
     await check(`screen ${screen}`, screen === 'about' ? '.about' : '.shell');
     if (screen === 'about' && !(await page.evaluate(() => /Phaser 4/.test((document.querySelector('.about') || {}).textContent || '')))) errors.push('about: the pitch page should say the village is built with Phaser 4');
   }
 
   step = 'log out and log in with the picture password';
-  await page.evaluate(() => { TG.store.state.loggedIn = false; TG.go('auth', { tab: 'login' }); }); await sleep(300);
+  await page.evaluate(() => { TG.store.state.loggedIn = false; TG.go('auth', { tab: 'login' }); });
+  await page.waitForSelector('.auth-prof', { timeout: 3000 }); // after the page transition
   await page.evaluate(() => document.querySelector('.auth-prof').click()); await sleep(200);
   for (const k of [0, 4, 7]) await page.evaluate((k) => document.querySelectorAll('.pic-key')[k].click(), k); // wrong
   await sleep(400);

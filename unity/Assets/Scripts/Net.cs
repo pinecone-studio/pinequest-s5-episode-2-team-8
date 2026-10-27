@@ -243,8 +243,7 @@ public sealed class Net
                 return;
             case "cloud":
                 if (g.V == null) return;
-                if (Cloud.Apply(g.V, m["cloud"])) g.V.Save();
-                cloudSent = Cloud.Of(g.V);
+                if (Cloud.Apply(g.V, m["cloud"])) g.V.Save(); // cloudSent stays what was sent: anything newer goes up next time
                 return;
             case "join": AddOther(m["p"]); AddChat(g, new ChatLine { k = "join", id = m["p"]["id"].S, n = m["p"]["name"].S }); g.Toast(m["p"]["name"].S + Loc.L(" нутагт ирлээ", " joined the village")); return;
             case "leave": if (others.TryGetValue(m["id"].S, out var gone)) AddChat(g, new ChatLine { k = "leave", id = gone.id, n = gone.name }); others.Remove(m["id"].S); return;
