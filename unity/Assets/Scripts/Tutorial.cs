@@ -57,7 +57,7 @@ public sealed partial class Game
         var d = dialog; if (d == null) return;
         // the story box, as on the web version: black with a white pixel border, her portrait on the left, white pixel text typing out
         float w = Mathf.Min(vw - 16, 680), pad = 12, pic = 72, tx = pad * 2 + pic, tw = w - tx - pad;
-        var st = new GUIStyle(sLabel) { wordWrap = true, fontSize = PxSize(U(16)), normal = { textColor = Color.white } };
+        var st = new GUIStyle(sPixel) { wordWrap = true, alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16)), normal = { textColor = Color.white } }; // the story box is pixel text, as on the web
         float th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
         float h = Mathf.Max(pic + pad * 2, pad + 24 + th + (n > 0 ? 8 + n * 46 : 18) + pad);
         float x = vw / 2 - w / 2, y = d.top ? 60 : vh - h - 70;
@@ -68,7 +68,7 @@ public sealed partial class Game
         PxCanvas face = d.who == "basar" ? Px.BankharFace(d.Typing && (int)(Time.time * 8) % 2 == 0 ? 1 : 0) : NominFace(d.face, d.Typing && (int)(Time.time * 9) % 2 == 0, Time.time % 3.7f < 0.12f);
         Box(UR(x + pad - 2, y + pad - 2, pic + 4, pic + 4), Color.white); Box(UR(x + pad, y + pad, pic, pic), Px.Col("#2b2140"));
         GUI.DrawTexture(UR(x + pad, y + pad, pic, pic), Tex(face));
-        GUI.Label(UR(x + tx, y + pad - 2, tw, 24), d.name.ToUpper(), new GUIStyle(sLabel) { wordWrap = false, fontSize = PxSize(U(16)), normal = { textColor = Px.Col(d.who == "basar" ? "#e9a91f" : "#f7c646") } });
+        GUI.Label(UR(x + tx, y + pad - 2, tw, 24), d.name.ToUpper(), new GUIStyle(sPixel) { alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16)), normal = { textColor = Px.Col(d.who == "basar" ? "#e9a91f" : "#f7c646") } });
         string vis = d.text.Substring(0, Mathf.Min(d.text.Length, (int)d.shown));
         GUI.Label(UR(x + tx, y + pad + 24, tw, th + 4), vis + "<color=#00000000>" + d.text.Substring(vis.Length) + "</color>", st);
         if (!d.Typing && n == 0) GUI.Label(UR(x + w - 30, y + h - 28, 20, 20), (int)(Time.time * 2) % 2 == 0 ? "▼" : "", st);

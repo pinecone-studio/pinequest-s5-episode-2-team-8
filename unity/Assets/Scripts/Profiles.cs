@@ -81,7 +81,7 @@ public sealed partial class Game
     /** Big number buttons (easier than the phone keyboard for little ones). */
     public string NumPad(string v)
     {
-        GUILayout.Label(v == "" ? " " : v, new GUIStyle(sBtn) { fontSize = PxSize(U(22f) * 1.3f), fontStyle = FontStyle.Bold }, GUILayout.MinHeight(U(44)));
+        GUILayout.Label(v == "" ? " " : v, new GUIStyle(sBtn) { fontSize = Ts(22), fontStyle = FontStyle.Bold }, GUILayout.MinHeight(U(44)));
         string[] keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "←", "0", "OK" };
         for (int r = 0; r < 4; r++)
         {
@@ -180,7 +180,7 @@ public sealed partial class Game
                 var p = SaveData.Load(id);
                 GUILayout.BeginHorizontal(g.sBtn);
                 g.IconAt(Px.Mascot(p.avatar), 40);
-                GUILayout.Label($"<b>{p.name}</b>\n<size={Game.PxSize(g.U(11f) * 1.3f)}>{p.age} {Loc.L("нас", "yrs")}{(p.code != "" ? " · " + Loc.L("нууцтай", "locked") : "")}</size>", g.sLabel);
+                GUILayout.Label($"<b>{p.name}</b>\n<size={g.Ts(11)}>{p.age} {Loc.L("нас", "yrs")}{(p.code != "" ? " · " + Loc.L("нууцтай", "locked") : "")}</size>", g.sLabel);
                 GUILayout.FlexibleSpace();
                 if (g.SmallBtn(Loc.L("Тоглох", "Play"))) { var pp = p; g.Later(() => { if (pp.code == "") g.Enter(pp); else { picking = pp; sel.Clear(); } }); }
                 GUILayout.EndHorizontal();
@@ -210,7 +210,7 @@ public sealed partial class Game
             if (step == 0)
             {
                 Basar(g, Loc.L("Вуф! Би Басар. Чиний нэрийг хэн гэдэг вэ?", "Woof! I’m Basar. What’s your name?"));
-                name = GUILayout.TextField(name, 20, new GUIStyle(g.sBtn) { fontSize = Game.PxSize(g.U(18f) * 1.3f) }, GUILayout.MinHeight(g.U(44)));
+                name = GUILayout.TextField(name, 20, new GUIStyle(g.sBtn) { fontSize = g.Ts(18) }, GUILayout.MinHeight(g.U(44)));
                 if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel);
                 if (g.Btn(Loc.L("Цааш →", "Next →"), true, 46)) g.Later(() => { if (name.Trim() == "") err = Loc.L("Нэрээ бичээрэй", "Please write your name"); else { err = ""; name = name.Trim(); step = 1; } });
             }
@@ -218,7 +218,7 @@ public sealed partial class Game
             {
                 Basar(g, Loc.L($"Сайн уу, {name}! Хэдэн настай вэ? Насаа бичээрэй. Том хүмүүс ч тоглож болно!", $"Hi {name}! How old are you? Write your age. Grown-ups can play too!"));
                 // the age is written, not picked from a list: any age from 3 to 120
-                ageText = new string(GUILayout.TextField(ageText, 3, new GUIStyle(g.sBtn) { fontSize = Game.PxSize(g.U(18f) * 1.3f) }, GUILayout.MinHeight(g.U(44))).Where(char.IsDigit).ToArray());
+                ageText = new string(GUILayout.TextField(ageText, 3, new GUIStyle(g.sBtn) { fontSize = g.Ts(18) }, GUILayout.MinHeight(g.U(44))).Where(char.IsDigit).ToArray());
                 if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel);
                 GUILayout.BeginHorizontal();
                 if (g.Btn("←")) g.Later(() => { err = ""; step = 0; });
@@ -238,9 +238,9 @@ public sealed partial class Game
                     for (int c = 0; c < 4; c++)
                     {
                         int i = r * 4 + c; var rr = GUILayoutUtility.GetRect(g.U(70), g.U(64), GUILayout.ExpandWidth(true));
-                        if (GUI.Button(rr, "", i == avatar ? g.sPrimary : g.sBtn)) { avatar = i; Sfx.Pop(); }
+                        if (GUI.Button(rr, "", i == avatar ? g.sSel : g.sBtn)) { avatar = i; Sfx.Pop(); }
                         GUI.DrawTexture(new Rect(rr.center.x - g.U(18), rr.y + g.U(4), g.U(36), g.U(36)), g.Tex(Px.Mascot(i)));
-                        GUI.Label(new Rect(rr.x, rr.y + g.U(40), rr.width, g.U(22)), Profiles.MASCOTS[i].name.ToString(), new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Game.PxSize(g.U(12)) });
+                        GUI.Label(new Rect(rr.x, rr.y + g.U(40), rr.width, g.U(22)), Profiles.MASCOTS[i].name.ToString(), new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = g.Ts(12) });
                     }
                     GUILayout.EndHorizontal();
                 }

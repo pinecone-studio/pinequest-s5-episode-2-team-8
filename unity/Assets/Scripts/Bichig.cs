@@ -90,7 +90,7 @@ public sealed partial class Game
         {
             var g = I; lw = Mathf.CeilToInt(Bichig.W / (float)CELL); lh = Mathf.CeilToInt(Bichig.H / (float)CELL); live = new Live(lw, lh);
             var all = Bichig.ALL; idx = all.FindIndex(it => Unlocked(g, all.IndexOf(it)) && SaveData.Get(g.V.bichig, it.id) == 0); if (idx < 0) idx = 0;
-            say = Loc.L("Сайн уу, шавь минь! Би чамд монгол бичиг заая. Доорх үсгээс эхэлье.", "Hello, my student! I will teach you Mongol script. Let’s begin with the letter below.");
+            say = Tip(Item);
         }
         static bool Unlocked(Game g, int i) => i == 0 || SaveData.Get(g.V.bichig, Bichig.ALL[i - 1].id) > 0;
         Bichig.Item Item => Bichig.ALL[idx];
@@ -99,8 +99,9 @@ public sealed partial class Game
         {
             if (!Unlocked(g, i)) { Sfx.Bad(); say = Loc.L("Эхлээд өмнөх үсгээ бичээрэй.", "Write the one before first."); return; }
             idx = i; strokes.Clear(); mode = "trace"; result = null; demoT = -1;
-            say = Item.tip + " " + Loc.L("Эхлээд “Багш үзүүлэх” дээр дараад, дараа нь дээрээс доош даган бич.", "Press “Show me” first, then trace it from the top down.");
+            say = Tip(Item);
         }
+        static string Tip(Bichig.Item it) => it.tip + " " + Loc.L("Эхлээд “Багш үзүүлэх” дээр дараад, дараа нь дээрээс доош даган бич.", "Press “Show me” first, then trace it from the top down.");
         void Paint()
         {
             var x = live.c; var gl = Bichig.Get(Item.cell); float t = Time.time;
@@ -157,22 +158,23 @@ public sealed partial class Game
         protected override void Body(Game g)
         {
             var V = g.V; var item = Item; int st = SaveData.Get(V.bichig, item.id);
-            GUILayout.BeginHorizontal(g.sPanel); g.IconAt(Px.Char(MASTER, 0, 0), 56);
-            GUILayout.BeginVertical(); GUILayout.Label("<b>" + Loc.L("Бичээч багш", "The Master Scribe") + "</b>", g.sTitle); g.Text(say); GUILayout.EndVertical(); GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal(g.sPanel); g.IconAt(Px.Char(MASTER, 0, 0), 64); g.Gap(12);
+            GUILayout.BeginVertical(); GUILayout.Label(Loc.L("МОНГОЛ БИЧГИЙН АКАДЕМИ", "MONGOL SCRIPT ACADEMY"), g.sKicker); GUILayout.Label(Loc.L("Бичээч багш", "The Master Scribe"), g.sTitle); GUILayout.Label(say, g.sTeach); GUILayout.EndVertical(); GUILayout.EndHorizontal();
             GUILayout.BeginVertical(g.sPanel);
-            GUILayout.Label("<b>" + Loc.L("Багшийн зөвлөгөө", "The master’s rules") + "</b>", g.sLabel);
-            foreach (var r in new[] { Loc.L("Монгол бичгийг дээрээс доош, мөрийг зүүнээс баруун тийш бичнэ.", "Write from top to bottom; columns go left to right."), Loc.L("Үсэг бүр “нуруу” гэдэг босоо шугамд өлгөөтэй.", "Every letter hangs on a vertical line called the spine (нуруу)."), Loc.L("Үсгийн хэсгүүд: титэм (эхэнд), шүд, гэдэс, сүүл (төгсгөлд).", "Parts of a letter: crown (титэм) at the start, teeth (шүд), bellies (гэдэс), tail (сүүл) at the end.") }) GUILayout.Label("• " + r, g.sSmall);
+            GUILayout.Label(Loc.L("Багшийн зөвлөгөө", "The master’s rules"), new GUIStyle(g.sLabel) { font = g.sTitle.font });
+            foreach (var r in new[] { Loc.L("Монгол бичгийг дээрээс доош, мөрийг зүүнээс баруун тийш бичнэ.", "Write from top to bottom; columns go left to right."), Loc.L("Үсэг бүр “нуруу” гэдэг босоо шугамд өлгөөтэй.", "Every letter hangs on a vertical line called the spine (нуруу)."), Loc.L("Үсгийн хэсгүүд: титэм (эхэнд), шүд, гэдэс, сүүл (төгсгөлд).", "Parts of a letter: crown (титэм) at the start, teeth (шүд), bellies (гэдэс), tail (сүүл) at the end.") }) GUILayout.Label("  •  " + r, g.sLabel);
             GUILayout.EndVertical();
             GUILayout.BeginVertical(g.sPanel);
-            GUILayout.BeginHorizontal(); g.IconAt(Bichig.Pixel(item.cell, 22, 48), 44);
-            GUILayout.BeginVertical(); GUILayout.Label($"<b>{item.cyr} · {item.lat}</b>", g.sTitle);
-            g.Small($"{Bichig.UNITS.First(u => u.id == item.unit).name} · {idx + 1}/{Bichig.Count}   " + new string('♦', st) + new string('◊', 3 - st) + (V.bichigMem.Contains(item.id) ? "  " + Loc.L("санаж бичсэн", "from memory") : ""));
+            GUILayout.BeginHorizontal(); g.IconAt(Bichig.Pixel(item.cell, 22, 48), 44); g.Gap(12);
+            GUILayout.BeginVertical(); GUILayout.Label($"{item.cyr} • {item.lat}", g.sTitle);
+            g.Small($"{Bichig.UNITS.First(u => u.id == item.unit).name} · {idx + 1}/{Bichig.Count}" + (V.bichigMem.Contains(item.id) ? "  · " + Loc.L("санаж бичсэн", "from memory") : ""));
+            GUILayout.Label("<color=#f2a516>" + new string('★', st) + new string('☆', 3 - st) + "</color>", new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(20)) });
             GUILayout.EndVertical(); GUILayout.EndHorizontal();
             // the writing area: draw with a finger, pen or mouse
             Paint();
             float maxH = Mathf.Min(420, Screen.height / g.UiScale * 0.55f);
             var rr = live.Show(g, maxH);
-            if (!(demoT >= 0)) { var tl = live.At(Bichig.Get(item.cell).right / (float)CELL + 4, Bichig.Get(item.cell).top / (float)CELL); g.Outlined(Mathf.Min(rr.xMax - g.U(30), tl.x + g.U(20)), tl.y, Loc.L("эхлэл ↓", "start ↓"), g.U(11), Px.Col("#e14b3d")); }
+            if (!(demoT >= 0)) { var tl = live.At(Bichig.Get(item.cell).right / (float)CELL + 4, Bichig.Get(item.cell).top / (float)CELL); GUI.Label(new Rect(Mathf.Min(rr.xMax - g.U(70), tl.x + g.U(8)), tl.y - g.U(10), g.U(80), g.U(20)), Loc.L("эхлэл ↓", "start ↓"), new GUIStyle(g.sLabel) { font = g.sTitle.font, fontSize = g.Ts(11), wordWrap = false, normal = { textColor = Px.Col("#e14b3d") } }); }
             var e = Event.current;
             Vector2 ToW(Vector2 m) { var p = live.Pick(m); return new Vector2(p.x * CELL, p.y * CELL); }
             if (e.type == EventType.MouseDown && rr.Contains(e.mousePosition) && demoT < 0) { cur = new List<Vector2> { ToW(e.mousePosition) }; strokes.Add(cur); result = null; e.Use(); }
@@ -180,25 +182,25 @@ public sealed partial class Game
             else if (e.type == EventType.MouseUp && cur != null) { cur = null; e.Use(); }
             GUILayout.BeginHorizontal();
             if (g.Btn(Loc.L("► Багш үзүүлэх", "► Show me"))) g.Later(() => { strokes.Clear(); result = null; demoT = Time.time; Sfx.Pop(); say = Loc.L("Хараарай: дээрээс эхлээд нуруугаа даган доош бичнэ. Монгол бичгийн мөр зүүнээс баруун тийш явдаг.", "Watch: start at the top and write down along the spine. Columns of Mongol script go from left to right."); });
-            if (g.Btn(Loc.L("Арилгах", "Clear"))) g.Later(() => { strokes.Clear(); result = null; });
+            if (g.Btn("↻ " + Loc.L("Арилгах", "Clear"))) g.Later(() => { strokes.Clear(); result = null; });
             if (g.Btn(mode == "trace" ? Loc.L("Санаж бичих", "From memory") : Loc.L("Даган бичих", "Trace"))) g.Later(() => { mode = mode == "trace" ? "memory" : "trace"; strokes.Clear(); result = null; say = mode == "memory" ? Loc.L("Одоо загваргүйгээр санаж бичээд үз! Улаан тасархай шугам бол нуруу.", "Now write it from memory, with no guide! The red dashed line is the spine.") : item.tip.ToString(); });
-            if (g.Btn("√ " + Loc.L("Шалгах", "Check"), true)) g.Later(() => CheckIt(g));
+            if (g.Btn("✓ " + Loc.L("Шалгах", "Check"), true)) g.Later(() => CheckIt(g));
             GUILayout.EndHorizontal();
             if (result.HasValue && !result.Value.empty)
             {
                 var r = result.Value; string Pct(float v) => Mathf.RoundToInt(v * 100) + "%";
                 GUILayout.BeginHorizontal(g.sBtn);
-                GUILayout.Label($"{Loc.L("Бүрхсэн", "Covered")} <b>{Pct(r.cov)}</b>", g.sLabel); GUILayout.Label($"{Loc.L("Шугамандаа", "On the line")} <b>{Pct(r.prec)}</b>", g.sLabel); GUILayout.Label($"{Loc.L("Чиглэл", "Direction")} <b>{(r.down && r.top ? "↓ √" : "X")}</b>", g.sLabel);
+                GUILayout.Label($"{Loc.L("Бүрхсэн", "Covered")} <b>{Pct(r.cov)}</b>", g.sLabel); GUILayout.Label($"{Loc.L("Шугамандаа", "On the line")} <b>{Pct(r.prec)}</b>", g.sLabel); GUILayout.Label($"{Loc.L("Чиглэл", "Direction")} <b>{(r.down && r.top ? "↓ ✓" : "✕")}</b>", g.sLabel);
                 GUILayout.EndHorizontal();
                 if (resultOk && idx + 1 < Bichig.Count && g.Btn(Loc.L("Дараагийнх →", "Next →"), true, 44)) g.Later(() => Select(g, idx + 1));
             }
             if (g.Btn(Loc.L("Басараас асуух", "Ask Basar"), false, 34)) g.Later(() => g.Open(new BasarChat(g, Loc.L($"Би “{item.cyr}” гэж Монгол бичгээр бичиж сурч байна.", $"I’m learning to write “{item.lat}” in Mongol script."), null)));
             GUILayout.EndVertical();
-            GUILayout.Label(Loc.L($"Бичсэн: {g.BichigDone()}/{Bichig.Count}", $"Written: {g.BichigDone()}/{Bichig.Count}"), g.sLabel);
+            GUILayout.Label(Loc.L($"<b>Бичсэн:</b> {g.BichigDone()}/{Bichig.Count}", $"<b>Written:</b> {g.BichigDone()}/{Bichig.Count}"), g.sCenter);
             foreach (var u in Bichig.UNITS)
             {
-                GUILayout.BeginVertical(g.sPanel);
-                GUILayout.BeginHorizontal(); g.IconAt(Bichig.Pixel(u.iconCell, 12, 26), 26); GUILayout.Label("<b>" + u.name + "</b>", g.sTitle); GUILayout.EndHorizontal();
+                GUILayout.BeginVertical(); g.Gap(10);
+                GUILayout.BeginHorizontal(); g.IconAt(Bichig.Pixel(u.iconCell, 12, 26), 22); g.Gap(8); GUILayout.Label(u.name.ToString(), new GUIStyle(g.sLabel) { font = g.sTitle.font, fontSize = g.Ts(14) }); GUILayout.EndHorizontal();
                 int cols = Mathf.Max(4, Mathf.FloorToInt(Mathf.Min(Screen.safeArea.width, g.U(720)) / g.U(70)));
                 for (int i = 0; i < u.items.Count; i += cols)
                 {
@@ -207,11 +209,12 @@ public sealed partial class Game
                     {
                         var it = Bichig.ALL.First(q => q.id == u.items[k]); int ai = Bichig.ALL.IndexOf(it), s2 = SaveData.Get(V.bichig, it.id); bool lockd = !Unlocked(g, ai);
                         var r = GUILayoutUtility.GetRect(g.U(62), g.U(96), GUILayout.Width(g.U(62)));
-                        if (GUI.Button(r, "", ai == idx ? g.sPrimary : g.sBtn)) { int j = ai; g.Later(() => Select(g, j)); }
+                        if (GUI.Button(r, "", ai == idx ? g.sSel : g.sBtn)) { int j = ai; g.Later(() => Select(g, j)); }
                         var old = GUI.color; if (lockd) GUI.color = new Color(1, 1, 1, 0.4f);
-                        GUI.DrawTexture(new Rect(r.center.x - g.U(13), r.y + g.U(6), g.U(26), g.U(56)), g.Tex(Bichig.Pixel(it.cell, 16, 34, ai == idx ? "#ffffff" : "#2b1e2e")));
-                        GUI.Label(new Rect(r.x, r.y + g.U(62), r.width, g.U(16)), lockd ? "?" : it.cyr, new GUIStyle(ai == idx ? g.sPrimary.Clean() : g.sSmall) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Game.PxSize(g.U(10f) * 1.3f) });
-                        if (s2 > 0) GUI.Label(new Rect(r.x, r.y + g.U(78), r.width, g.U(16)), "<color=#f7c646>" + new string('♦', s2) + "</color>", new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter });
+                        GUI.DrawTexture(new Rect(r.center.x - g.U(13), r.y + g.U(6), g.U(26), g.U(56)), g.Tex(Bichig.Pixel(it.cell, 16, 34, "#2b1e2e")));
+                        if (lockd) { var dim = GUI.color; GUI.color = old; GUI.DrawTexture(new Rect(r.center.x - g.U(8), r.y + g.U(64), g.U(16), g.U(16)), g.Tex(Px.Icon("ui:lock"))); GUI.color = dim; } // still locked: write the one before first
+                        else GUI.Label(new Rect(r.x, r.y + g.U(62), r.width, g.U(18)), it.cyr, new GUIStyle(g.sCenter) { wordWrap = false });
+                        if (s2 > 0) GUI.Label(new Rect(r.x, r.y + g.U(78), r.width, g.U(16)), "<color=#f2a516>" + new string('★', s2) + "</color>", new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter });
                         GUI.color = old;
                     }
                     GUILayout.EndHorizontal();

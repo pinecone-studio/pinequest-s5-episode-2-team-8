@@ -586,17 +586,17 @@ public sealed partial class Game
             // the buttons, like the 2D scenes
             var safe = Screen.safeArea; float sx = safe.x, sy = sh - safe.yMax, vw = safe.width / g.UiScale, vh = safe.height / g.UiScale;
             GUI.BeginGroup(new Rect(sx, sy, safe.width, safe.height));
-            if (g.Button(g.URect(8, 8, 48, 44), "X")) g.Later(g.Close);
-            var tr = g.URect(64, 8, Mathf.Min(360, vw - 72), 44); GUI.Box(tr, $"<b>{src.title}</b>" + (src.sub != null ? $"  <size={Game.PxSize(g.U(11f) * 1.3f)}>{src.sub}</size>" : ""), g.sToast);
+            if (g.Button(g.URect(8, 8, 44, 44), "×")) g.Later(g.Close);
+            var tr = g.URect(64, 8, Mathf.Min(360, vw - 72), 44); GUI.Box(tr, $"<b>{src.title}</b>" + (src.sub != null ? $"  <size={g.Ts(11)}>{src.sub}</size>" : ""), g.sNote);
             if (g.battle != null) GUI.Box(g.URect(vw / 2 - 210, 58, 420, 30), g.BattleLabel(), g.sToast);
-            if (!Game.TouchUI && building == null) GUI.Box(g.URect(vw / 2 - 190, 94, 380, 30), locked ? Loc.L("Esc: Нутаг руу буцах", "Esc: back to Nutag") : Loc.L("Дарж эргэн харна · Esc: гарах", "Click to look around · Esc: leave"), g.sToast);
+            if (!Game.TouchUI && building == null) GUI.Box(g.URect(vw / 2 - 190, 94, 380, 30), locked ? Loc.L("Esc: Нутаг руу буцах", "Esc: back to Nutag") : Loc.L("Дарж эргэн харна · Esc: гарах", "Click to look around · Esc: leave"), g.sNote);
             string info = src.info?.Invoke();
-            if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, vh - 140, Mathf.Min(520, vw - 16), 72); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sToast) { alignment = TextAnchor.MiddleLeft, fontSize = Game.PxSize(g.U(12f) * 1.3f), wordWrap = true }); }
+            if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, vh - 140, Mathf.Min(520, vw - 16), 72); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sNote) { alignment = TextAnchor.MiddleLeft, fontSize = g.Ts(12), wordWrap = true }); }
             float bx0 = 8;
-            foreach (var (label, run) in src.buttons) { string l = label(); float w = Mathf.Max(90, l.Length * 8 + 24); if (g.Button(g.URect(bx0, vh - 60, w, 52), l)) g.Later(run); bx0 += w + 6; }
+            foreach (var (label, run) in src.buttons) { string l = label(); float w = Mathf.Max(90, l.Length * 10 + 32); if (g.Button(g.URect(bx0, vh - 60, w, 52), l)) g.Later(run); bx0 += w + 6; }
             if (g.riding && g.Button(g.URect(bx0, vh - 60, 110, 52), Loc.L("Мориноос буух", "Get off"))) g.Later(g.Dismount);
-            if (g.Button(g.URect(vw - 290, vh - 60, 56, 52), runLock ? Loc.L("Алхах", "Walk") : Loc.L("Гүйх", "Run"), runLock ? g.sPrimary : g.sBtn)) runLock = !runLock;
-            if (g.Button(g.URect(vw - 228, vh - 60, 56, 52), Loc.L("Үсрэх", "Jump"))) DoJump();
+            if (g.Button(g.URect(vw - 340, vh - 60, 82, 52), runLock ? Loc.L("Алхах", "Walk") : Loc.L("Гүйх", "Run"), runLock ? g.sPrimary : g.sBtn)) runLock = !runLock;
+            if (g.Button(g.URect(vw - 256, vh - 60, 82, 52), Loc.L("Үсрэх", "Jump"))) DoJump();
             if (g.battle != null && Game.TouchUI && g.Button(g.URect(vw - 166, vh - 124, 158, 52), Loc.L("Сум харвах", "Shoot"), g.sPrimary)) g.Later(g.ShootNearest);
             bool was = GUI.enabled; GUI.enabled = nl != null;
             string act = nl != null ? nl + (Game.TouchUI ? "" : " (E)") : Game.TouchUI ? Loc.L("Ойртож хараад товчийг дар", "Face something and tap the button") : src.hint?.Invoke() ?? Loc.L("Ойртож харвал E", "Face something and press E");

@@ -119,7 +119,7 @@ public sealed partial class Game
         foreach (var (cat, name) in Achievements.CATS)
         {
             var list = Achievements.LIST.Where(a => a.cat == cat).ToList();
-            GUILayout.Label($"<b>{name}</b>  <size={PxSize(U(11f) * 1.3f)}>{list.Count(a => v.ach.Exists(x => x.k == a.id))}/{list.Count}</size>", sTitle);
+            GUILayout.Label($"<b>{name}</b>  <size={Ts(11)}>{list.Count(a => v.ach.Exists(x => x.k == a.id))}/{list.Count}</size>", sTitle);
             int cols = Mathf.Max(2, Mathf.FloorToInt(Mathf.Min(Screen.safeArea.width, U(720)) / U(170)));
             for (int i = 0; i < list.Count; i += cols)
             {

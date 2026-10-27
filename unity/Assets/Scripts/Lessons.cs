@@ -50,11 +50,11 @@ public sealed partial class Game
             foreach (var (m, icon, t1, t2) in new[] { ("solo", "🙋", Loc.L("Ганцаараа", "On my own"), Loc.L("Өөрөө дадлага хийх", "Practise alone")), ("family", "👨‍👩‍👧", Loc.L("Гэр бүлтэйгээ", "With family"), Loc.L("Ээлжлэн тоглож +½ шагнал", "Take turns, +50% reward")), ("friends", "🧑‍🤝‍🧑", Loc.L("Найзуудтайгаа", "With friends"), Loc.L("Хэн илүү мэдэх вэ?", "Who knows more?")) })
             {
                 var r = GUILayoutUtility.GetRect(g.U(110), g.U(96), GUILayout.ExpandWidth(true));
-                if (GUI.Button(r, "", mode == m ? g.sPrimary : g.sBtn)) { var mm = m; g.Later(() => { mode = mm; picked.Clear(); if (mm == "solo") onPick("solo", Me(g)); }); }
+                if (GUI.Button(r, "", mode == m ? g.sSel : g.sBtn)) { var mm = m; g.Later(() => { mode = mm; picked.Clear(); if (mm == "solo") onPick("solo", Me(g)); }); }
                 GUI.DrawTexture(new Rect(r.center.x - g.U(14), r.y + g.U(6), g.U(28), g.U(28)), g.Tex(Emo.Icon(icon)));
                 var st = new GUIStyle(mode == m ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.UpperCenter };
                 GUI.Label(new Rect(r.x + g.U(4), r.y + g.U(38), r.width - g.U(8), g.U(22)), "<b>" + t1 + "</b>", st);
-                GUI.Label(new Rect(r.x + g.U(4), r.y + g.U(58), r.width - g.U(8), g.U(34)), t2, new GUIStyle(st) { fontSize = Game.PxSize(g.U(10f) * 1.3f) });
+                GUI.Label(new Rect(r.x + g.U(4), r.y + g.U(58), r.width - g.U(8), g.U(34)), t2, new GUIStyle(st) { fontSize = g.Ts(10) });
             }
             GUILayout.EndHorizontal();
             if (mode != "family" && mode != "friends") return;
@@ -68,7 +68,7 @@ public sealed partial class Game
                 {
                     var p = list[k]; bool on = picked.Exists(x => x.name == p.name);
                     var r = GUILayoutUtility.GetRect(g.U(100), g.U(40), GUILayout.ExpandWidth(true));
-                    if (GUI.Button(r, "", on ? g.sPrimary : g.sBtn)) g.Later(() => { if (on) picked.RemoveAll(x => x.name == p.name); else { if (picked.Count >= 3) picked.RemoveAt(0); picked.Add(p); } });
+                    if (GUI.Button(r, "", on ? g.sSel : g.sBtn)) g.Later(() => { if (on) picked.RemoveAll(x => x.name == p.name); else { if (picked.Count >= 3) picked.RemoveAt(0); picked.Add(p); } });
                     GUI.DrawTexture(new Rect(r.x + g.U(6), r.center.y - g.U(12), g.U(24), g.U(24)), g.Tex(p.face));
                     GUI.Label(new Rect(r.x + g.U(34), r.y, r.width - g.U(36), r.height), p.name, new GUIStyle(on ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
                 }
@@ -201,8 +201,8 @@ public sealed partial class Game
             var r = GUILayoutUtility.GetRect(g.U(100), g.U(86), GUILayout.ExpandWidth(true));
             bool hit = GUI.Button(r, "", g.sBtn);
             if (icon != null) GUI.DrawTexture(new Rect(r.center.x - g.U(14), r.y + g.U(6), g.U(28), g.U(28)), g.Tex(icon));
-            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(38), r.width - g.U(4), g.U(22)), "<b>" + title + "</b>", new GUIStyle(g.sLabel) { alignment = TextAnchor.UpperCenter, fontSize = Game.PxSize(g.U(11f) * 1.3f) });
-            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(60), r.width - g.U(4), g.U(20)), sub, new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, fontSize = Game.PxSize(g.U(10f) * 1.3f) });
+            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(38), r.width - g.U(4), g.U(22)), "<b>" + title + "</b>", new GUIStyle(g.sLabel) { alignment = TextAnchor.UpperCenter, fontSize = g.Ts(11) });
+            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(60), r.width - g.U(4), g.U(20)), sub, new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, fontSize = g.Ts(10) });
             return hit;
         }
         void LessonCard(Game g, J l)

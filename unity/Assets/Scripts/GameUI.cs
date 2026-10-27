@@ -96,31 +96,51 @@ public sealed partial class Game
     }
 
     // ================================================================ styles (rebuilt when the screen size changes)
-    // the layout is about 520 units tall and at least 900 wide, so a wide screen gets room to the sides (landscape, not a stretched portrait)
-    public float UiScale => Mathf.Max(1, Mathf.Min(Screen.height / 520f, Screen.width / 900f));
+    // One unit is one CSS pixel of the web version (screen pixels per CSS pixel, as the browser's devicePixelRatio), so a
+    // laptop shows the same sizes as the web page; a short screen scales down so the layout's 520 × 900 units still fit.
+    public float UiScale => Mathf.Min(Dpr, Screen.height / 520f, Screen.width / 900f);
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [System.Runtime.InteropServices.DllImport("__Internal")] static extern float NaadamyDpr(); // Plugins/WebGL/NaadamyPointer.jslib
+    static float Dpr => NaadamyDpr();
+#else
+    static float Dpr => Application.isMobilePlatform && Screen.dpi > 0 ? Mathf.Clamp(Screen.dpi / 160f, 1, 3) : 1;
+#endif
     /** Phones and tablets get on-screen buttons and touch hints; a computer uses the keys Bolormaa teaches. */
     public static bool TouchUI => Application.isMobilePlatform;
     float builtFor = -1;
-    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt;
+    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt, sSel, sPixel, sTeach, sKicker, sNote;
     Texture2D white;
     readonly Dictionary<PxCanvas, Texture2D> texCache = new Dictionary<PxCanvas, Texture2D>();
     public Texture2D Tex(PxCanvas c) { if (!texCache.TryGetValue(c, out var t)) texCache[c] = t = c.ToTexture(); return t; }
 
-    /** A pixel frame: dark outline, a fill, and a lighter line along the top, at b screen pixels per art pixel. */
-    static Texture2D Frame(string fill, string outl, int b)
+    /** A frame drawn like the web version's CSS: rings of colour from the edge inwards (its inset box-shadows), cut corners
+     *  (its clip-path) and a darker copy below (a button's press shadow), at u screen pixels per CSS pixel. */
+    static Texture2D Frame(string fill, (string col, int w)[] rings, int cut, string drop, int dropH, int u)
     {
-        int n = 6 * b; var c = new PxCanvas(n, n); Color32 f = Px.Col(fill), o = Px.Col(outl), hi = Px.Col(Px.Shade(fill, 0.25));
-        for (int y = 0; y < n; y++) for (int x = 0; x < n; x++)
+        int ring = 0; foreach (var r in rings) ring += r.w;
+        int n = 2 * (ring + cut + 1) * u + 2, H = n + dropH * u; var c = new PxCanvas(n, H);
+        Color32 F = Px.Col(fill), D = drop != null ? Px.Col(drop) : default;
+        Color32? At(int x, int y)
         {
-            bool edge = x < b || y < b || x >= n - b || y >= n - b, corner = (x < b || x >= n - b) && (y < b || y >= n - b);
-            if (corner) continue;
-            c.Put(x, y, edge ? o : y < 2 * b ? hi : f);
+            float dx = Mathf.Min(x, n - 1 - x) / (float)u, dy = Mathf.Min(y, n - 1 - y) / (float)u;
+            if (dx + dy < cut) return null;
+            float d = Mathf.Min(dx, dy), acc = 0;
+            foreach (var r in rings) { acc += r.w; if (d < acc) return Px.Col(r.col); }
+            return F;
+        }
+        for (int y = 0; y < H; y++) for (int x = 0; x < n; x++)
+        {
+            var top = y < n ? At(x, y) : null;
+            if (top != null) c.Put(x, y, top.Value);
+            else if (drop != null && y >= dropH * u && At(x, y - dropH * u) != null) c.Put(x, y, D);
         }
         return c.ToTexture();
     }
-    GUIStyle Style(Texture2D bg, Texture2D bgOn, int b, int size, Color text, TextAnchor align, bool wrap = false)
+    /** A style on a Frame texture: its corners and press shadow stay sharp, the middle stretches. */
+    GUIStyle Style(Texture2D bg, Texture2D bgOn, Font font, int size, Color text, TextAnchor align, bool wrap = false)
     {
-        var s = new GUIStyle { fontSize = size, alignment = align, wordWrap = wrap, richText = true, border = new RectOffset(2 * b, 2 * b, 2 * b, 2 * b), padding = new RectOffset(3 * b, 3 * b, 2 * b, 2 * b) };
+        int e = (bg.width - 2) / 2, drop = bg.height - bg.width;
+        var s = new GUIStyle { font = font, fontSize = size, alignment = align, wordWrap = wrap, richText = true, border = new RectOffset(e, e, e, e + drop), padding = new RectOffset(e + size / 3, e + size / 3, e + size / 4, e + drop + size / 4) };
         s.normal.background = bg; s.normal.textColor = text;
         s.hover.background = bg; s.hover.textColor = text;
         s.active.background = bgOn ?? bg; s.active.textColor = text;
@@ -129,22 +149,31 @@ public sealed partial class Game
     void BuildStyles()
     {
         float s = UiScale; if (Mathf.Approximately(s, builtFor) && sPanel != null) return;
-        builtFor = s; int b = Mathf.Max(1, Mathf.RoundToInt(s * 1.5f));
+        builtFor = s; int u = Mathf.Max(1, Mathf.RoundToInt(s));
         int F(float v) => PxSize(v * s * 1.3f); // pixel letters need to be a bit bigger than smooth ones to read easily
+        int T(float css) => Mathf.Max(10, Mathf.RoundToInt(css * s)); // smooth text, in the web version's CSS pixels
         white = Texture2D.whiteTexture;
-        Color ink = Px.Col("#2b1e2e"), paper = Color.white;
-        sPanel = Style(Frame("#f6dca8", "#2b1e2e", b), null, b, F(13), ink, TextAnchor.UpperLeft, true); sPanel.padding = new RectOffset(F(14), F(14), F(12), F(12));
-        sBtn = Style(Frame("#f4efe3", "#2b1e2e", b), Frame("#d8cfba", "#2b1e2e", b), b, F(14), ink, TextAnchor.MiddleCenter, true);
-        sPrimary = Style(Frame("#3f76db", "#2b1e2e", b), Frame("#2b52a5", "#2b1e2e", b), b, F(14), paper, TextAnchor.MiddleCenter, true); sPrimary.fontStyle = FontStyle.Normal;
-        sChip = Style(Frame("#3a2c3e", "#1a1418", b), null, b, F(13), paper, TextAnchor.MiddleLeft); sChip.fontStyle = FontStyle.Normal; sChipText = sChip.Clean();
-        sToast = Style(Frame("#2b1e2e", "#1a1418", b), null, b, F(13), paper, TextAnchor.MiddleCenter, true); sToast.padding = new RectOffset(F(10), F(10), F(6), F(6));
-        sOpt = Style(Frame("#08060e", "#ffffff", b), Frame("#2b1e2e", "#f7c646", b), b, F(14), paper, TextAnchor.MiddleLeft, true); // an answer in the story box
-        sTag = Style(Frame("#fff8e6", "#2b1e2e", b), null, b, F(11), ink, TextAnchor.MiddleCenter); sTag.padding = new RectOffset(F(5), F(5), F(2), F(2));
-        sLabel = new GUIStyle { fontSize = F(13), wordWrap = true, richText = true, normal = { textColor = ink } };
-        sSmall = new GUIStyle(sLabel) { fontSize = F(11), normal = { textColor = Px.Col("#6b4220") } };
-        sTitle = new GUIStyle(sLabel) { fontSize = F(19) };
-        sBig = new GUIStyle(sLabel) { fontSize = F(30), alignment = TextAnchor.MiddleCenter };
+        Color ink = Px.Col("#4a2a12"), paper = Color.white;
+        // the web version's village skin (styles.css): parchment, wood frames, Rubik buttons and headings, Nunito text, Tiny5 labels
+        (string, int)[] Ring(string c, int w) => new[] { (c, w) };
+        sPanel = Style(Frame("#f6dca8", new[] { ("#5a2d10", 2), ("#e5a157", 3), ("#8a4b1f", 3) }, 6, null, 0, u), null, bodyFont, T(15), ink, TextAnchor.UpperLeft, true);
+        sPanel.padding = new RectOffset(T(28), T(28), T(30), T(26));
+        sBtn = Style(Frame("#fbe8c2", Ring("#c99a5a", 2), 0, "#8a4b1f", 3, u), Frame("#f1d7a6", Ring("#c99a5a", 2), 0, "#8a4b1f", 3, u), displayFont, T(16), ink, TextAnchor.MiddleCenter, true);
+        sPrimary = Style(Frame("#e9a24a", Ring("#f7c98a", 2), 0, "#8a4b1f", 3, u), Frame("#d98f35", Ring("#f7c98a", 2), 0, "#8a4b1f", 3, u), displayFont, T(16), Px.Col("#3a1e08"), TextAnchor.MiddleCenter, true);
+        sSel = Style(Frame("#fff3c4", Ring("#e14b3d", 3), 0, null, 0, u), null, displayFont, T(16), ink, TextAnchor.MiddleCenter, true); // a picked tile or swatch: a red outline
+        sChip = Style(Frame("#f6dca8", new[] { ("#e5a157", 2), ("#8a4b1f", 2) }, 4, "#5a2d10", 4, u), null, pixelFont, F(11), ink, TextAnchor.MiddleLeft); sChipText = sChip.Clean();
+        sToast = Style(Frame("#141b2d", new (string, int)[0], 4, null, 0, u), null, bodyFont, T(15), paper, TextAnchor.MiddleCenter, true); sToast.padding = new RectOffset(T(18), T(18), T(10), T(10));
+        sOpt = Style(Frame("#08060e", Ring("#ffffff", 3), 0, null, 0, u), Frame("#08060e", Ring("#f7c646", 3), 0, null, 0, u), pixelFont, F(14), paper, TextAnchor.MiddleLeft, true); // an answer in the story box
+        sTag = Style(Frame("#fbe8c2", Ring("#c99a5a", 2), 0, null, 0, u), null, pixelFont, F(10), ink, TextAnchor.MiddleCenter); sTag.padding = new RectOffset(T(6), T(6), T(2), T(2));
+        sLabel = new GUIStyle { font = bodyFont, fontSize = T(15), wordWrap = true, richText = true, normal = { textColor = ink } };
+        sSmall = new GUIStyle(sLabel) { fontSize = T(13), normal = { textColor = Px.Col("#7a5432") } };
+        sTitle = new GUIStyle(sLabel) { font = displayFont, fontSize = T(23), normal = { textColor = Px.Col("#5a2d10") } };
+        sBig = new GUIStyle(sTitle) { fontSize = T(34), alignment = TextAnchor.MiddleCenter };
         sCenter = new GUIStyle(sLabel) { alignment = TextAnchor.MiddleCenter };
+        sPixel = new GUIStyle(sCenter) { font = pixelFont, wordWrap = false }; // the village's labels, as the web version draws them in Tiny5
+        sTeach = Style(Frame("#fffaf0", Ring("#c99a5a", 2), 0, null, 0, u), null, bodyFont, T(15), ink, TextAnchor.UpperLeft, true); sTeach.padding = new RectOffset(T(12), T(12), T(8), T(8)); // what a person says, in a speech box
+        sKicker = new GUIStyle(sLabel) { fontSize = T(12), normal = { textColor = Px.Col("#6b7280") } }; // the small grey line above a heading
+        sNote = new GUIStyle(sChip) { font = bodyFont, fontSize = T(14), wordWrap = true, alignment = TextAnchor.MiddleCenter }; // a parchment box over a scene: its title, a hint
     }
     public float U(float v) => v * UiScale;
     Rect UR(float x, float y, float w, float h) => new Rect(U(x), U(y), U(w), U(h));
@@ -170,7 +199,7 @@ public sealed partial class Game
     public void Outlined(float x, float y, string text, float size, Color col, float alpha = 1)
     {
         if (string.IsNullOrEmpty(text)) return;
-        var st = new GUIStyle(sCenter) { fontSize = PxSize(size), fontStyle = FontStyle.Normal, wordWrap = false };
+        var st = new GUIStyle(sPixel) { fontSize = PxSize(size) };
         var r = new Rect(x - U(150), y - size, U(300), size * 2); float o = Mathf.Max(1, Mathf.Round(PxSize(size) / 8f));
         st.normal.textColor = new Color(0.17f, 0.12f, 0.18f, alpha);
         foreach (var (dx, dy) in new[] { (-o, 0f), (o, 0f), (0f, -o), (0f, o), (-o, -o), (o, o), (-o, o), (o, -o) }) GUI.Label(new Rect(r.x + dx, r.y + dy, r.width, r.height), text, st);
@@ -179,13 +208,15 @@ public sealed partial class Game
 
     // ================================================================ OnGUI
     // every text is pixel text, as on the web version: Tiny5 (Resources/Fonts, drawn as hard pixels by Editor/NaadamyFontImport)
-    static Font pixelFont;
+    static Font pixelFont, bodyFont, displayFont;
     /** Tiny5 is crisp at multiples of 8 screen pixels. */
     public static int PxSize(float v) => Mathf.Max(16, Mathf.FloorToInt(v / 8f + 0.6f) * 8); // rounds up a little sooner, so small labels stay readable
+    /** A size for the smooth fonts, from the old pixel-font units (Nunito reads well a little smaller than Tiny5). */
+    public int Ts(float units) => Mathf.Max(9, Mathf.RoundToInt(units * 1.15f * UiScale));
     void OnGUI()
     {
-        if (pixelFont == null) pixelFont = Resources.Load<Font>("Fonts/NaadamyPixel");
-        if (pixelFont != null) GUI.skin.font = pixelFont;
+        if (pixelFont == null) { pixelFont = Resources.Load<Font>("Fonts/NaadamyPixel"); bodyFont = Resources.Load<Font>("Fonts/NaadamyBody"); displayFont = Resources.Load<Font>("Fonts/NaadamyDisplay"); }
+        if (bodyFont != null) GUI.skin.font = bodyFont;
         BuildStyles(); scrollN = 0; scrollOpen.Clear();
         if (Event.current.type == EventType.Repaint) { var t = drawRects; drawRects = drawNext; drawNext = t; drawNext.Clear(); }
         if (Event.current.type == EventType.Repaint) uiNext.Clear();
@@ -267,7 +298,7 @@ public sealed partial class Game
     void MyLabel(float ts)
     {
         var p = PxGui(px * T + 8, py * T - 16 - (riding ? 10 : 0));
-        var st = new GUIStyle(sCenter) { fontSize = PxSize(ts), fontStyle = FontStyle.Bold, wordWrap = false };
+        var st = new GUIStyle(sCenter) { font = displayFont, fontSize = Mathf.RoundToInt(ts), wordWrap = false };
         string lv = Rules.Level(V.xp).l.ToString(), nm = MyName;
         float pad = ts * 0.45f, th = ts + U(4), lw = st.CalcSize(new GUIContent(lv)).x + pad * 2, nw = st.CalcSize(new GUIContent(nm)).x + pad * 2, gap = U(3), x0 = p.x - (lw + gap + nw) / 2, y = p.y - th / 2, u = Mathf.Max(1, U(1));
         void BoxT(float bx, float w, string bg, string fg, string text) { Box(new Rect(bx - u, y - u, w + 2 * u, th + 2 * u), Px.Col("#2b1e2e")); Box(new Rect(bx, y, w, th), Px.Col(bg)); st.normal.textColor = Px.Col(fg); GUI.Label(new Rect(bx, y, w, th), text, st); }
@@ -347,7 +378,7 @@ public sealed partial class Game
             var r = UR(x, vh - 56, 48, 48);
             if (Button(r, "")) Later(() => { if (Rules.DAIRY[k].food) Eat(k); else Toast($"{Rules.DAIRY[k].name}: " + Loc.L("тавиур, тулга, хөхүүр дээр цагаан идээ хийнэ.", "make dairy foods at the rack, stove or churn.")); });
             GUI.DrawTexture(UR(x + 10, vh - 53, 28, 28), Tex(Px.Icon("dairy:" + k)));
-            GUI.Label(UR(x + 4, vh - 26, 40, 16), n.ToString(), new GUIStyle(sCenter) { fontSize = PxSize(U(11f) * 1.3f), fontStyle = FontStyle.Bold });
+            GUI.Label(UR(x + 4, vh - 26, 40, 16), n.ToString(), new GUIStyle(sCenter) { fontSize = Ts(11), fontStyle = FontStyle.Bold });
             x += 52;
         }
         if (x == 8 && Button(UR(x, vh - 56, 48, 48), "")) Later(() => GoTo(9, 14, null)); // nothing yet: a shortcut to the dairy yard
@@ -382,13 +413,13 @@ public sealed partial class Game
         if (e.type == EventType.Repaint) { var pr = GUILayoutUtility.GetLastRect(); modalPanel = new Rect(pr.x + (Screen.width - w) / 2, pr.y + U(12), pr.width, pr.height); }
         GUILayout.FlexibleSpace();
         GUILayout.EndArea();
-        if (m.CanEscape && modalPanel.width > 0 && GUI.Button(new Rect(modalPanel.xMax - U(40), modalPanel.y + U(6), U(34), U(34)), "X", sBtn)) Later(() => { if (modal == m) Close(); });
+        if (m.CanEscape && modalPanel.width > 0 && GUI.Button(new Rect(modalPanel.xMax - U(44), modalPanel.y + U(10), U(34), U(34)), "×", sBtn)) Later(() => { if (modal == m) Close(); });
     }
 
     // ---------------------------------------------------------------- scroll views that a finger can drag and that fit their content
     // IMGUI scroll views only follow the mouse wheel and their scrollbar, and they either collapse or stretch instead of
     // fitting what is inside. These remember last frame's content height and view rect (by the order they are drawn in).
-    readonly List<Rect> scrollViews = new List<Rect>(); readonly List<float> scrollContent = new List<float>(); readonly Stack<int> scrollOpen = new Stack<int>();
+    readonly List<Rect> scrollViews = new List<Rect>(); readonly List<float> scrollContent = new List<float>(), scrollWheel = new List<float>(); readonly List<Vector2> scrollAt = new List<Vector2>(); readonly Stack<int> scrollOpen = new Stack<int>();
     int scrollN, scrollArmed = -1; bool scrollMoving; Vector2 scrollFrom;
     // a finger on a picture you draw or play on (Live, below) belongs to it, not to the scroll view around it
     List<Rect> drawRects = new List<Rect>(), drawNext = new List<Rect>();
@@ -398,7 +429,8 @@ public sealed partial class Game
     public Vector2 BeginScroll(Vector2 pos, float maxH = -1)
     {
         int k = scrollN++; scrollOpen.Push(k);
-        while (scrollViews.Count <= k) { scrollViews.Add(Rect.zero); scrollContent.Add(-1); }
+        while (scrollViews.Count <= k) { scrollViews.Add(Rect.zero); scrollContent.Add(-1); scrollWheel.Add(0); scrollAt.Add(Vector2.zero); }
+        if (scrollWheel[k] != 0) { pos.y += scrollWheel[k]; scrollWheel[k] = 0; }
         var e = Event.current; var view = scrollViews[k];
         if (e.type == EventType.MouseDown && TouchUI && view.Contains(e.mousePosition) && !OnDrawing(e.mousePosition)) { scrollArmed = k; scrollMoving = false; scrollFrom = e.mousePosition; }
         else if (e.type == EventType.MouseDrag && scrollArmed == k)
@@ -408,7 +440,7 @@ public sealed partial class Game
         }
         else if (e.type == EventType.MouseUp && scrollArmed == k) { scrollArmed = -1; if (scrollMoving) { scrollMoving = false; e.Use(); } }
         var opts = maxH > 0 ? new[] { GUILayout.Height(Mathf.Min(scrollContent[k] > 0 ? scrollContent[k] + 2 : maxH, maxH)) } : new GUILayoutOption[0];
-        pos = GUILayout.BeginScrollView(pos, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, opts);
+        pos = GUILayout.BeginScrollView(pos, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, opts); scrollAt[k] = pos;
         GUILayout.BeginVertical();
         return pos;
     }
@@ -417,6 +449,9 @@ public sealed partial class Game
         int k = scrollOpen.Count > 0 ? scrollOpen.Pop() : 0;
         GUILayout.EndVertical();
         if (Event.current.type == EventType.Repaint) scrollContent[k] = GUILayoutUtility.GetLastRect().height;
+        // a browser's wheel moves Unity's scroll views only a few pixels: a notch scrolls about three lines, in the innermost view under the mouse
+        var e = Event.current;
+        if (e.type == EventType.ScrollWheel && scrollViews[k].Contains(e.mousePosition + scrollViews[k].position - scrollAt[k])) { scrollWheel[k] += Mathf.Sign(e.delta.y) * Mathf.Max(Mathf.Abs(e.delta.y) * U(20), U(60)); e.Use(); }
         GUILayout.EndScrollView();
         if (Event.current.type == EventType.Repaint) scrollViews[k] = GUILayoutUtility.GetLastRect();
     }
@@ -484,10 +519,10 @@ public sealed partial class Game
         GUILayout.EndHorizontal();
     }
     /** Chips to pick one of several values; returns the picked index or -1. */
-    public int Chips(IList<string> labels, int current, float minW = 60)
+    public int Chips(IList<string> labels, int current, float minW = 60, bool tabs = false)
     {
         // three to a row on one line each: pixel letters are wide, and wrapped chips spill over each other
-        int hit = -1; GUILayout.BeginHorizontal(); var on = new GUIStyle(sPrimary) { wordWrap = false }; var off = new GUIStyle(sBtn) { wordWrap = false };
+        int hit = -1; GUILayout.BeginHorizontal(); GUIStyle on = new GUIStyle(tabs ? sPrimary : sSel) { wordWrap = false }, off = new GUIStyle(sBtn) { wordWrap = false }; // tabs fill orange, a picked option gets a red outline
         float w = U(minW); foreach (var l in labels) w = Mathf.Max(w, off.CalcSize(new GUIContent(l)).x); // all as wide as the widest, so the rows line up
         for (int i = 0; i < labels.Count; i++) { if (i > 0 && i % 3 == 0) { GUILayout.EndHorizontal(); GUILayout.BeginHorizontal(); } if (GUILayout.Button(labels[i], i == current ? on : off, GUILayout.MinWidth(w), GUILayout.MinHeight(U(36)))) hit = i; }
         if (labels.Count > 3) for (int i = labels.Count % 3; i > 0 && i < 3; i++) GUILayoutUtility.GetRect(w, U(36), GUILayout.ExpandWidth(true)); // a short last row keeps the same chip width
@@ -496,7 +531,7 @@ public sealed partial class Game
     public bool Swatch(Color c, bool on, float size = 36)
     {
         var r = GUILayoutUtility.GetRect(U(size), U(size), GUILayout.Width(U(size)), GUILayout.Height(U(size)));
-        bool hit = GUI.Button(r, "", on ? sPrimary : sBtn); Box(new Rect(r.x + U(5), r.y + U(5), r.width - U(10), r.height - U(10)), c); return hit;
+        bool hit = GUI.Button(r, "", on ? sSel : sBtn); Box(new Rect(r.x + U(5), r.y + U(5), r.width - U(10), r.height - U(8)), c); return hit;
     }
 
     // ---------------------------------------------------------------- a picture redrawn every frame (mini-games, scenes)
