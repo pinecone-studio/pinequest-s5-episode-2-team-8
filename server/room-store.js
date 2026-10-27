@@ -299,6 +299,11 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           )
         `);
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_players_room_idx ON naadamy_players (room_code)');
+        // Supabase serves every public table over its REST API to anyone with the project's anon key. Row level security with
+        // no policies closes that door; the server connects as the tables' owner, which RLS does not apply to.
+        for (const table of ['naadamy_rooms', 'naadamy_players', 'naadamy_identities', 'naadamy_wallets', 'naadamy_wallet_ops', 'naadamy_player_progress']) {
+          await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+        }
         for (const [code, state] of Object.entries(legacy)) {
           if (!ROOM_CODE.test(code)) continue;
           await client.query(
@@ -618,6 +623,8 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
     },
     async close(instanceId) {
       if (instanceId) await pool.query('DELETE FROM naadamy_players WHERE instance_id = $1', [instanceId]);
+      // the LISTEN connection is checked out for the server's whole life; pool.end() waits forever unless it is given back
+      if (subscriber) { subscriber.release(true); subscriber = null; }
       await pool.end();
     },
   };

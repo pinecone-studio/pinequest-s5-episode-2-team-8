@@ -248,16 +248,16 @@ try {
   const restWithoutHome = await sendDailyActivityClaim('rest');
   if (restWithoutHome.accepted || restWithoutHome.reason !== 'server-only'
     || restWithoutHome.wallet.revision !== initialClaimWallet.revision) throw new Error('the server accepted a client-reported rest reward');
-  await walletProbe.evaluate((stage) => window.walletSocket.send(JSON.stringify({ t: 'ger-claim', i: 0, stage })), rules.GER_DONE);
+  await walletProbe.evaluate((stage) => window.walletSocket.send(JSON.stringify({ t: 'ger-claim', i: 0, stage })), 3); // a ger already part-way up from solo play
   await until(() => walletProbe.evaluate((id) => window.walletEvents.some((message) => message.t === 'lot' && message.act === 'claim' && message.by === id), probeId),
     'wallet probe claims its home');
   const claimedLot = await walletProbe.evaluate((id) => window.walletEvents.find((message) => message.t === 'lot' && message.act === 'claim' && message.by === id), probeId);
-  if (claimedLot.lot.stage !== 1) throw new Error('the server trusted a client-submitted initial ger stage');
+  if (claimedLot.lot.stage !== 3) throw new Error('a ger built part-way in solo play lost its stage when claimed online');
   await walletProbe.evaluate((stage) => window.walletSocket.send(JSON.stringify({ t: 'ger-stage', stage })), rules.GER_DONE);
   await until(() => walletProbe.evaluate(() => window.walletEvents.some((message) => message.t === 'deny' && message.act === 'ger' && message.why === 'stage')),
     'server rejects skipped ger construction stages');
-  await walletProbe.evaluate(() => window.walletSocket.send(JSON.stringify({ t: 'ger-stage', stage: 2 })));
-  await until(() => walletProbe.evaluate((id) => window.walletEvents.some((message) => message.t === 'lot' && message.act === 'stage' && message.by === id && message.lot.stage === 2), probeId),
+  await walletProbe.evaluate(() => window.walletSocket.send(JSON.stringify({ t: 'ger-stage', stage: 4 })));
+  await until(() => walletProbe.evaluate((id) => window.walletEvents.some((message) => message.t === 'lot' && message.act === 'stage' && message.by === id && message.lot.stage === 4), probeId),
     'server accepts the next ger construction stage');
   const restClaim = await sendDailyActivityClaim('rest');
   if (restClaim.accepted || restClaim.reason !== 'server-only' || restClaim.wallet.revision !== initialClaimWallet.revision) {
@@ -536,7 +536,7 @@ try {
   errors.push(e.message);
 }
 await browser.close();
-server.kill();
+if (server.exitCode === null) await new Promise((resolveExit) => { server.once('exit', resolveExit); server.kill(); }); // it saves the rooms on its way out
 rmSync(dataDir, { recursive: true, force: true });
 console.log(results.join('\n'));
 if (errors.length) { console.error('Multiplayer test failed:\n- ' + errors.join('\n- ')); process.exit(1); }

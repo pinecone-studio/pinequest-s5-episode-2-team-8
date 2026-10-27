@@ -72,13 +72,13 @@ public sealed class SaveData
     public List<KV> quizTopicTotal = new List<KV>(), quizTopicRight = new List<KV>();
     public List<KV> seasonDone = new List<KV>();
     // the aimag passport and the trips
-    public List<KV> stamps = new List<KV>();        // province id �+' when it was stamped (unix ms)
+    public List<KV> stamps = new List<KV>();        // province id → when it was stamped (unix ms)
     public List<string> seenMarks = new List<string>(); // "province:landmark" visited on a trip
     public List<string> travelFam = new List<string>(); // provinces whose herder family you visited
     public long aimagPass;                              // when the travel pass was bought (0: not yet)
     public string travelView = "2d";
-    public List<KV> ach = new List<KV>();             // achievement id �+' when it was earned
-    public List<KV> bichig = new List<KV>();          // Mongol script: letter/word id �+' best score
+    public List<KV> ach = new List<KV>();             // achievement id → when it was earned
+    public List<KV> bichig = new List<KV>();          // Mongol script: letter/word id → best score
     public List<string> bichigMem = new List<string>(); // letters written from memory
     public int histStep, histFound;                   // the historian's task chain: current step, and whether its item was found
     public List<string> campWon = new List<string>(); // defend-the-homeland chapters won
@@ -96,7 +96,7 @@ public sealed class SaveData
     /** True the first time a key is marked, so a fact card can say "Did you know?" instead of "Remember". */
     public bool FirstTime(string k) { if (seen.Contains(k)) return false; seen.Add(k); return true; }
     public NpcSave Npc(string id) { var s = npc.Find(n => n.id == id); if (s == null) npc.Add(s = new NpcSave { id = id }); return s; }
-    /** True once a day for a home activity (tea, music�?�). */
+    /** True once a day for a home activity (tea, music…). */
     public bool DayOnce(string k) { long d = long.Parse(DayKey().Replace("-", "")); if (Find(homeDay, k) == d) return false; Put(homeDay, k, d); return true; }
 
     public static string DayKey() => DateTime.Now.ToString("yyyy-MM-dd");
