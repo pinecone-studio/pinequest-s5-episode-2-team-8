@@ -76,6 +76,7 @@ public sealed partial class Game
     public void OpenFamily() { if (Time.realtimeSinceStartup < parentUntil) Open(new FamilyPage()); else Open(new ParentGate(() => { parentUntil = Time.realtimeSinceStartup + 600; Open(new FamilyPage()); })); }
     sealed class FamilyPage : Page
     {
+        protected override string Tab => "family";
         string childId; string famName = ""; int famFace;
         protected override string Title => Loc.L("Эцэг эхийн самбар", "Parent dashboard");
         protected override void Body(Game g)

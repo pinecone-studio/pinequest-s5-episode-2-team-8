@@ -96,26 +96,87 @@ public sealed partial class Game
     public abstract class Page : Modal
     {
         public override bool FullScreen => true;
-        protected Vector2 scroll; protected virtual bool Back => true; protected virtual string Bg => "#f6efe0";
+        protected Vector2 scroll; protected virtual bool Back => true; protected virtual string Bg => "#f6f4ef";
         protected abstract string Title { get; }
         protected abstract void Body(Game g);
         protected virtual void Header(Game g) { }
+        /** Pages of the app (web version's shell): the header bar and the tab bar. The sign-up and the character creator stand alone. */
+        protected virtual bool Shell => true;
+        /** The page opens with its own hero card, so no title line above it (as on the web version). */
+        protected virtual bool Hero => false;
+        /** Which tab of the tab bar this page belongs to. */
+        protected virtual string Tab => null;
         public override void Press(Game g) { }
         public override void Draw(Game g)
         {
             g.Box(new Rect(0, 0, Screen.width, Screen.height), Px.Col(Bg));
             var safe = Screen.safeArea; var area = new Rect(safe.x, Screen.height - safe.yMax, safe.width, safe.height);
-            float w = Mathf.Min(area.width - g.U(16), g.U(760)); // wide pages, but not edge to edge on a laptop
-            GUILayout.BeginArea(new Rect(area.x + (area.width - w) / 2, area.y + g.U(8), w, area.height - g.U(16)));
+            if (!Shell)
+            {
+                float w0 = Mathf.Min(area.width - g.U(16), g.U(760));
+                GUILayout.BeginArea(new Rect(area.x + (area.width - w0) / 2, area.y + g.U(8), w0, area.height - g.U(16)));
+                GUILayout.BeginHorizontal();
+                if (Back && GUILayout.Button("←", g.sBtn, GUILayout.Width(g.U(48)), GUILayout.Height(g.U(44)))) g.Later(g.Close);
+                GUILayout.Label(Title, new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleLeft }, GUILayout.Height(g.U(44)));
+                GUILayout.FlexibleSpace(); Header(g);
+                GUILayout.EndHorizontal();
+                scroll = g.BeginScroll(scroll); Body(g); g.EndScroll();
+                GUILayout.EndArea();
+                return;
+            }
+            // the header bar: (back), the logo that goes home, then the language and your profile (it opens the menu)
+            float hb = g.U(62);
+            g.Box(new Rect(0, 0, Screen.width, area.y + hb), Px.Col("#f2f0ea")); g.Box(new Rect(0, area.y + hb - g.U(1), Screen.width, g.U(1)), Px.Col("#e3ded3"));
+            GUILayout.BeginArea(new Rect(area.x + g.U(16), area.y + g.U(12), area.width - g.U(32), g.U(40)));
             GUILayout.BeginHorizontal();
-            if (Back && GUILayout.Button("←", g.sBtn, GUILayout.Width(g.U(48)), GUILayout.Height(g.U(44)))) g.Later(g.Close);
-            GUILayout.Label(Title, new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleLeft }, GUILayout.Height(g.U(44)));
-            GUILayout.FlexibleSpace(); Header(g);
+            bool nested = false; foreach (var m in g.under) if (m is Page) nested = true;
+            if (nested && Back) { if (GUILayout.Button("←", g.sWhite, GUILayout.Width(g.U(38)), GUILayout.Height(g.U(38)))) g.Later(g.Close); GUILayout.Space(g.U(10)); }
+            var br = GUILayoutUtility.GetRect(g.U(150), g.U(38), GUILayout.Width(g.U(150)));
+            if (GUI.Button(br, "", GUIStyle.none)) g.Later(g.CloseAll);
+            g.Logo(new Rect(br.x, br.y + g.U(2), g.U(34), g.U(34)));
+            GUI.Label(new Rect(br.x + g.U(44), br.y, br.width - g.U(44), br.height), "Naadamy", new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(21)), alignment = TextAnchor.MiddleLeft, normal = { textColor = Px.Col("#141b2d") } });
+            GUILayout.FlexibleSpace(); Header(g); GUILayout.Space(g.U(8));
+            var chip = new GUIStyle(g.sWhite) { fontSize = Mathf.RoundToInt(g.U(13)), alignment = TextAnchor.MiddleLeft, normal = { textColor = Px.Col("#344054") } };
+            var lr = GUILayoutUtility.GetRect(g.U(66), g.U(38), GUILayout.Width(g.U(66)));
+            if (GUI.Button(lr, "", g.sWhite)) { Loc.En = !Loc.En; g.App.en = Loc.En; g.App.Save(); }
+            GUI.DrawTexture(new Rect(lr.x + g.U(12), lr.y + g.U(11), g.U(16), g.U(16)), g.Tex(Emo.Icon("🌐")), ScaleMode.ScaleToFit);
+            GUI.Label(new Rect(lr.x + g.U(32), lr.y, g.U(32), lr.height), Loc.En ? "МН" : "EN", chip);
+            GUILayout.Space(g.U(8));
+            var V = g.V; float nw = Mathf.Min(150, chip.CalcSize(new GUIContent(V.name)).x / g.UiScale + 52);
+            var pr = GUILayoutUtility.GetRect(g.U(nw), g.U(38), GUILayout.Width(g.U(nw)));
+            if (GUI.Button(pr, "", g.sWhite)) g.Later(() => g.Open(new MenuModal()));
+            g.Box(new Rect(pr.x + g.U(4), pr.y + g.U(4), g.U(30), g.U(30)), Px.Col("#ffe8c4")); GUI.DrawTexture(new Rect(pr.x + g.U(7), pr.y + g.U(7), g.U(24), g.U(24)), g.Tex(Px.Mascot(V.avatar)), ScaleMode.ScaleToFit);
+            GUI.Label(new Rect(pr.x + g.U(40), pr.y, pr.width - g.U(44), pr.height), V.name, new GUIStyle(chip) { fontSize = Mathf.RoundToInt(g.U(14)), normal = { textColor = Px.Col("#141b2d") } });
             GUILayout.EndHorizontal();
+            GUILayout.EndArea();
+            // the page: up to 1000 wide, with room at the bottom for the tab bar
+            float w = Mathf.Min(area.width - g.U(32), g.U(968));
+            GUILayout.BeginArea(new Rect(area.x + (area.width - w) / 2, area.y + hb + g.U(18), w, area.height - hb - g.U(18)));
             scroll = g.BeginScroll(scroll);
+            if (!Hero) GUILayout.Label(Title, new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(28)), normal = { textColor = Px.Col("#141b2d") } });
             Body(g);
+            GUILayout.Space(g.U(96));
             g.EndScroll();
             GUILayout.EndArea();
+            // the tab bar, floating at the bottom
+            float tw = Mathf.Min(area.width - g.U(24), g.U(560)), th = g.U(64);
+            var nav = new Rect(area.x + (area.width - tw) / 2, area.yMax - g.U(10) - th, tw, th); g.UiAdd(nav);
+            GUI.Box(nav, "", g.sNav);
+            var tabs = new (string id, PxCanvas icon, string name)[] { ("village", Emo.Icon("🌱"), Loc.L("Нутаг", "Nutag")), ("learn", Px.Icon("ui:book"), Loc.L("Сурах", "Learn")), ("basar", Px.BankharFace(0), Loc.L("Басар", "Basar")), ("achievements", Emo.Icon("✨"), Loc.L("Амжилт", "Badges")), ("family", Emo.Icon("👨‍👩‍👧"), Loc.L("Гэр бүл", "Family")) };
+            float cw = (tw - g.U(12)) / tabs.Length;
+            for (int i = 0; i < tabs.Length; i++)
+            {
+                var (id, icon, name) = tabs[i]; bool on = Tab == id;
+                var r = new Rect(nav.x + g.U(6) + i * cw, nav.y + g.U(6), cw - g.U(2), th - g.U(12));
+                if (GUI.Button(r, "", on ? g.sNavOn : GUIStyle.none)) g.Later(() =>
+                {
+                    if (id == "basar") { g.OpenBasar(); return; }
+                    g.CloseAll();
+                    if (id == "learn") g.Open(new LearnPage()); else if (id == "achievements") g.Open(new AchievementsPage()); else if (id == "family") g.OpenFamily();
+                });
+                GUI.DrawTexture(new Rect(r.center.x - g.U(11), r.y + g.U(5), g.U(22), g.U(22)), g.Tex(icon), ScaleMode.ScaleToFit);
+                GUI.Label(new Rect(r.x, r.y + g.U(29), r.width, g.U(16)), name, new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(11)), alignment = TextAnchor.MiddleCenter, wordWrap = false, normal = { textColor = Px.Col(on ? "#2f6bff" : "#6b7280") } });
+            }
         }
     }
 
@@ -128,6 +189,7 @@ public sealed partial class Game
         public AuthPage() { tab = I.App.profiles.Count > 0 ? "login" : "register"; }
         protected override bool Back => false;
         public override bool CanEscape => false;
+        protected override bool Shell => false;
         protected override string Title => "Naadamy";
         protected override string Bg => "#76b947";
         protected override void Header(Game g) { if (GUILayout.Button(Loc.En ? "МН" : "EN", g.sBtn, GUILayout.Width(g.U(56)), GUILayout.Height(g.U(40)))) { Loc.En = !Loc.En; g.App.en = Loc.En; g.App.Save(); } }
@@ -140,23 +202,31 @@ public sealed partial class Game
             float run = (t * 22) % 220 - 30; int f = 1 + (int)(t * 8) % 2;
             x.Blit(Px.Animal("foal", f), Js.Round(run), 64); x.Blit(Px.Animal("foal", 3 - f), Js.Round(run - 18), 67); x.Blit(Px.Bankhar(f), Js.Round(run - 42), 66);
             float k = Mathf.Max(Screen.width / 160f, Screen.height / 90f); live.ShowAt(new Rect((Screen.width - 160 * k) / 2, (Screen.height - 90 * k) / 2, 160 * k, 90 * k));
-            var safe = Screen.safeArea; float w = Mathf.Min(safe.width - g.U(16), g.U(600));
-            GUILayout.BeginArea(new Rect(safe.x + (safe.width - w) / 2, Screen.height - safe.yMax + g.U(8), w, safe.height - g.U(16)));
-            GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace(); Header(g); GUILayout.EndHorizontal();
+            // as the web version's sign-up: the logo, a big title over the steppe, two tabs, then the card
+            var safe = Screen.safeArea; float top = Screen.height - safe.yMax, w = Mathf.Min(safe.width - g.U(32), g.U(460));
+            var er = new Rect(safe.xMax - g.U(16) - g.U(52), top + g.U(16), g.U(52), g.U(38));
+            if (GUI.Button(er, Loc.En ? "МН" : "EN", new GUIStyle(g.sWhite) { fontSize = Mathf.RoundToInt(g.U(13)) })) { Loc.En = !Loc.En; g.App.en = Loc.En; g.App.Save(); }
+            GUILayout.BeginArea(new Rect(safe.x + (safe.width - w) / 2, top + g.U(16), w, safe.height - g.U(32)));
             GUILayout.FlexibleSpace();
-            GUILayout.BeginVertical(g.sPanel);
-            GUILayout.BeginHorizontal(); g.IconAt(Px.Icon("ui:logo"), 44); GUILayout.BeginVertical(); GUILayout.Label("<b>Naadamy</b>", g.sTitle); g.Small(Loc.L("Монгол өв соёлоо гэр бүл, найзуудтайгаа хамт сурцгаая", "Learn Mongolian heritage together with family and friends")); GUILayout.EndVertical(); GUILayout.EndHorizontal();
+            var lr = GUILayoutUtility.GetRect(w, g.U(72)); g.Logo(new Rect(lr.center.x - g.U(36), lr.y, g.U(72), g.U(72)));
+            void Shadowed(string text, GUIStyle st, float h) { var r = GUILayoutUtility.GetRect(w, g.U(h)); var sh = new GUIStyle(st) { normal = { textColor = new Color(0.17f, 0.12f, 0.18f, 0.55f) } }; GUI.Label(new Rect(r.x, r.y + g.U(2), r.width, r.height), text, sh); GUI.Label(r, text, st); }
+            Shadowed("Naadamy", new GUIStyle(g.sBig) { fontSize = Mathf.RoundToInt(g.U(46)), normal = { textColor = Color.white } }, 56);
+            Shadowed(Loc.L("Монгол өв соёлоо гэр бүл, найзуудтайгаа хамт сурцгаая", "Learn Mongolian heritage together with family and friends"), new GUIStyle(g.sCenter) { fontSize = Mathf.RoundToInt(g.U(14)), normal = { textColor = Color.white } }, 22);
+            g.Gap(12);
             GUILayout.BeginHorizontal();
             bool was = GUI.enabled; GUI.enabled = g.App.profiles.Count > 0;
-            if (GUILayout.Button(Loc.L("Нэвтрэх", "Log in"), tab == "login" ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) g.Later(() => { tab = "login"; picking = null; });
-            GUI.enabled = was;
-            if (GUILayout.Button(Loc.L("Бүртгүүлэх", "Register"), tab == "register" ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) g.Later(() => { tab = "register"; step = 0; });
+            if (GUILayout.Button(Loc.L("Нэвтрэх", "Log in"), tab == "login" ? g.sBtn : g.sTabOff, GUILayout.MinHeight(g.U(44)))) g.Later(() => { tab = "login"; picking = null; });
+            GUI.enabled = was; GUILayout.Space(g.U(8));
+            if (GUILayout.Button(Loc.L("Бүртгүүлэх", "Register"), tab == "register" ? g.sBtn : g.sTabOff, GUILayout.MinHeight(g.U(44)))) g.Later(() => { tab = "register"; step = 0; });
             GUILayout.EndHorizontal();
-            scroll = g.BeginScroll(scroll, safe.height - g.U(200)); // whatever is left under the header; the rest scrolls
+            g.Gap(10);
+            GUILayout.BeginVertical(g.sPanel);
+            scroll = g.BeginScroll(scroll, safe.height - g.U(330)); // whatever is left under the header; the rest scrolls
             if (tab == "login" && g.App.profiles.Count > 0) Login(g); else Register(g);
             g.EndScroll();
             GUILayout.EndVertical();
-            if (GUILayout.Button(Loc.L("Төслийн тухай", "About the project"), g.sSmall)) g.Later(() => g.Open(new AboutPage()));
+            g.Gap(8);
+            if (GUILayout.Button("<u>" + Loc.L("Төслийн тухай", "About the project") + "</u>", new GUIStyle(g.sCenter) { fontSize = Mathf.RoundToInt(g.U(14)), normal = { textColor = Color.white } })) g.Later(() => g.Open(new AboutPage()));
             GUILayout.FlexibleSpace();
             GUILayout.EndArea();
         }
@@ -197,28 +267,28 @@ public sealed partial class Game
                 for (int c = 0; c < 3; c++)
                 {
                     int i = row * 3 + c; var r = GUILayoutUtility.GetRect(g.U(60), g.U(56), GUILayout.ExpandWidth(true));
-                    if (GUI.Button(r, "", g.sBtn) && sel.Count < 3) { Sfx.Tap(); g.Later(() => { sel.Add(i); if (sel.Count == 3) { string code = string.Join("-", sel); onPick(code); } }); }
+                    if (GUI.Button(r, "", g.sTile) && sel.Count < 3) { Sfx.Tap(); g.Later(() => { sel.Add(i); if (sel.Count == 3) { string code = string.Join("-", sel); onPick(code); } }); }
                     float s = Mathf.Min(r.height, r.width) - g.U(14); GUI.DrawTexture(new Rect(r.center.x - s / 2, r.center.y - s / 2, s, s), g.Tex(Px.PicKey(i)));
                 }
                 GUILayout.EndHorizontal();
             }
         }
-        void Basar(Game g, string text) { GUILayout.BeginHorizontal(g.sBtn); g.IconAt(Px.BankharFace(1), 40); GUILayout.Label(text, g.sLabel); GUILayout.EndHorizontal(); }
+        void Basar(Game g, string text) { GUILayout.BeginHorizontal(); g.IconAt(Px.BankharFace(1), 40); g.Gap(10); GUILayout.Label(text, g.sTeach); GUILayout.EndHorizontal(); g.Gap(8); }
         void Register(Game g)
         {
-            GUILayout.Label(string.Concat(Enumerable.Range(0, 4).Select(k => k <= step ? "<color=#3f76db>●</color> " : "○ ")), g.sLabel);
+            g.Steps(step, 4);
             if (step == 0)
             {
                 Basar(g, Loc.L("Вуф! Би Басар. Чиний нэрийг хэн гэдэг вэ?", "Woof! I’m Basar. What’s your name?"));
-                name = GUILayout.TextField(name, 20, new GUIStyle(g.sBtn) { fontSize = g.Ts(18) }, GUILayout.MinHeight(g.U(44)));
+                name = g.Field(name, 20, Loc.L("Нэрээ бич...", "Write your name...")); g.Gap(14);
                 if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel);
-                if (g.Btn(Loc.L("Цааш →", "Next →"), true, 46)) g.Later(() => { if (name.Trim() == "") err = Loc.L("Нэрээ бичээрэй", "Please write your name"); else { err = ""; name = name.Trim(); step = 1; } });
+                if (g.Btn(Loc.L("Цааш →", "Next →"), true, 54)) g.Later(() => { if (name.Trim() == "") err = Loc.L("Нэрээ бичээрэй", "Please write your name"); else { err = ""; name = name.Trim(); step = 1; } });
             }
             else if (step == 1)
             {
                 Basar(g, Loc.L($"Сайн уу, {name}! Хэдэн настай вэ? Насаа бичээрэй. Том хүмүүс ч тоглож болно!", $"Hi {name}! How old are you? Write your age. Grown-ups can play too!"));
                 // the age is written, not picked from a list: any age from 3 to 120
-                ageText = new string(GUILayout.TextField(ageText, 3, new GUIStyle(g.sBtn) { fontSize = g.Ts(18) }, GUILayout.MinHeight(g.U(44))).Where(char.IsDigit).ToArray());
+                ageText = new string(g.Field(ageText, 3, Loc.L("Насаа бич...", "Your age...")).Where(char.IsDigit).ToArray()); g.Gap(14);
                 if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel);
                 GUILayout.BeginHorizontal();
                 if (g.Btn("←")) g.Later(() => { err = ""; step = 0; });
@@ -238,9 +308,9 @@ public sealed partial class Game
                     for (int c = 0; c < 4; c++)
                     {
                         int i = r * 4 + c; var rr = GUILayoutUtility.GetRect(g.U(70), g.U(64), GUILayout.ExpandWidth(true));
-                        if (GUI.Button(rr, "", i == avatar ? g.sSel : g.sBtn)) { avatar = i; Sfx.Pop(); }
+                        if (GUI.Button(rr, "", i == avatar ? g.sSel : g.sTile)) { avatar = i; Sfx.Pop(); }
                         GUI.DrawTexture(new Rect(rr.center.x - g.U(18), rr.y + g.U(4), g.U(36), g.U(36)), g.Tex(Px.Mascot(i)));
-                        GUI.Label(new Rect(rr.x, rr.y + g.U(40), rr.width, g.U(22)), Profiles.MASCOTS[i].name.ToString(), new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = g.Ts(12) });
+                        GUI.Label(new Rect(rr.x, rr.y + g.U(42), rr.width, g.U(18)), Profiles.MASCOTS[i].name.ToString(), new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Mathf.RoundToInt(g.U(10.5f)) });
                     }
                     GUILayout.EndHorizontal();
                 }

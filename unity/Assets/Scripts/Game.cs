@@ -359,7 +359,11 @@ public sealed partial class Game : MonoBehaviour
         }
         for (int i = poolUsed; i < pool.Count; i++) pool[i].enabled = false;
         // camera: follow, stay inside the map, snap to whole screen pixels so the pixel art doesn't shimmer
-        cam.orthographicSize = Mathf.Max(5.6f, 9f / Mathf.Max(0.3f, cam.aspect));
+        // a whole number of screen pixels per art pixel, about 24 tiles across (11 on a phone), never showing past the map (view.js measure)
+        float cssW = Screen.width / Mathf.Max(1, Dpr);
+        int zoom = Mathf.Max(1, Mathf.RoundToInt(Screen.width / ((cssW < 640 ? 11f : 24f) * T)));
+        zoom = Mathf.Max(zoom, Mathf.CeilToInt(Screen.width / (float)(World.W * T)), Mathf.CeilToInt(Screen.height / (float)(World.H * T)));
+        cam.orthographicSize = Screen.height / (2f * zoom * T);
         float hh = cam.orthographicSize, hw = hh * cam.aspect;
         float cx = hw * 2 > World.W ? World.W / 2f : Mathf.Clamp(camPos.x + 0.5f, hw, World.W - hw);
         float cy = hh * 2 > World.H ? -World.H / 2f : Mathf.Clamp(-(camPos.y + 0.5f), -World.H + hh, -hh);

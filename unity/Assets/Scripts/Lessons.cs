@@ -166,61 +166,78 @@ public sealed partial class Game
     // ================================================================ the heritage school
     sealed class LearnPage : Page
     {
+        protected override bool Hero => true; protected override string Tab => "learn";
         readonly Dictionary<string, Live> thumbs = new Dictionary<string, Live>();
         protected override string Title => Loc.L("Өв соёлын сургууль", "Heritage school");
         protected override void Body(Game g)
         {
             var V = g.V;
-            GUILayout.BeginHorizontal(g.sPanel); g.IconAt(Px.BankharFace(0), 64);
-            GUILayout.BeginVertical(); GUILayout.Label("<b>" + Loc.L("Хамтдаа сурцгаая!", "Let’s learn together!") + "</b>", g.sTitle);
+            GUILayout.BeginHorizontal(g.sPanel); g.IconAt(Px.BankharFace(0), 64); g.Gap(12);
+            GUILayout.BeginVertical(); GUILayout.Label(Loc.L("ӨВ СОЁЛЫН СУРГУУЛЬ", "HERITAGE SCHOOL"), g.sKicker); GUILayout.Label(Loc.L("Хамтдаа сурцгаая!", "Let’s learn together!"), new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(28)) });
             g.Text(Loc.L("Тоглоод сур, сурснаа гэр бүлтэйгээ бодит амьдрал дээр хий.", "Learn by playing, then do it for real with your family.")); GUILayout.EndVertical(); GUILayout.EndHorizontal();
+            g.Gap(12);
+            // the page's width inside the scroll view, for the grids below (the web version's CSS grid)
+            float W = Mathf.Min(Screen.safeArea.width - g.U(32), g.U(968)) - g.U(20), gap = g.U(12);
             GUILayout.BeginHorizontal();
-            if (HubCard(g, Emo.Icon("🔤"), Loc.L("Монгол бичиг", "Mongol script"), $"{g.BichigDone()}/{Bichig.Count}")) g.Later(() => g.Open(new BichigPage()));
-            if (HubCard(g, Emo.Icon("🛂"), Loc.L("Аймгийн паспорт", "Aimag passport"), Loc.L($"{g.StampCount()}/22 тамга", $"{g.StampCount()}/22 stamps"))) g.Later(() => g.Open(new PassportPage()));
-            if (HubCard(g, Emo.Icon(Seasons.Current().id == "winter" ? "❄️" : Seasons.Current().id == "autumn" ? "🍂" : Seasons.Current().id == "spring" ? "🌸" : "☀️"), Seasons.Current().name.ToString(), Loc.L("Улирлын тухай", "About the season"))) g.Later(() => g.Open(new SeasonModal()));
-            GUILayout.EndHorizontal();
-            int cols = Mathf.Max(1, Mathf.FloorToInt(Mathf.Min(Screen.safeArea.width, g.U(720)) / g.U(330)));
-            var all = Lessons.ALL.ToList();
+            float hw = (W - 3 * gap) / 4;
+            if (HubCard(g, hw, Emo.Icon("🔤"), Loc.L("Монгол бичиг", "Mongol script"), $"{g.BichigDone()}/{Bichig.Count}")) g.Later(() => g.Open(new BichigPage()));
+            GUILayout.Space(gap);
+            if (HubCard(g, hw, Emo.Icon("🛂"), Loc.L("Аймгийн паспорт", "Aimag passport"), Loc.L($"{g.StampCount()}/22 тамга", $"{g.StampCount()}/22 stamps"))) g.Later(() => g.Open(new PassportPage()));
+            GUILayout.Space(gap);
+            var sea = Seasons.Current();
+            if (HubCard(g, hw, Emo.Icon(sea.id == "winter" ? "❄️" : sea.id == "autumn" ? "🍂" : sea.id == "spring" ? "🌸" : "☀️"), sea.name.ToString(), Loc.L("Улирлын тухай", "About the season"))) g.Later(() => g.Open(new SeasonModal()));
+            GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
+            g.Gap(12);
+            var all = Lessons.ALL.ToList(); int cols = W > g.U(820) ? 3 : W > g.U(520) ? 2 : 1; float cw = (W - gap * (cols - 1)) / cols;
             for (int i = 0; i < all.Count; i += cols)
             {
                 GUILayout.BeginHorizontal();
-                for (int k = i; k < Mathf.Min(all.Count, i + cols); k++) LessonCard(g, all[k]);
-                GUILayout.EndHorizontal();
+                for (int k = i; k < Mathf.Min(all.Count, i + cols); k++) { if (k > i) GUILayout.Space(gap); LessonCard(g, all[k], cw); }
+                GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
+                g.Gap(12);
             }
             GUILayout.BeginVertical(g.sPanel);
-            GUILayout.Label("<b>" + Loc.L("Басарын асуулт хариулт", "Basar’s quiz") + "</b>", g.sTitle);
-            g.Small(Loc.L($"Зөв хариулт: {V.quizRight} / {V.quizTotal}", $"Correct answers: {V.quizRight} / {V.quizTotal}") + " · " + Loc.L("Сэдвээ сонгоод ганцаараа, гэр бүл эсвэл найзуудтайгаа ээлжлэн тоглоорой.", "Pick a topic and play alone, or take turns with family or friends."));
+            GUILayout.BeginHorizontal(); var tic = Emo.Icon("🎯"); if (tic != null) { g.IconAt(tic, 26); g.Gap(6); } GUILayout.Label(Loc.L("Басарын асуулт хариулт", "Basar’s quiz"), g.sTitle); GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
+            GUILayout.Label(Loc.L($"Зөв хариулт: {V.quizRight} / {V.quizTotal}", $"Correct answers: {V.quizRight} / {V.quizTotal}"), g.sSmall);
+            GUILayout.Label(Loc.L("Сэдвээ сонгоод ганцаараа, гэр бүл эсвэл найзуудтайгаа ээлжлэн тоглоорой.", "Pick a topic and play alone, or take turns with family or friends."), g.sSmall);
             var topics = new List<(string id, string name)> { ("mix", Loc.L("Холимог", "Mixed")) }; topics.AddRange(Basar.Topics.Select(t => (t.id, t.name.ToString())));
             int hit = g.Chips(topics.Select(t => t.name).ToList(), -1, 80);
             if (hit >= 0) { var tp = topics[hit].id; g.Later(() => g.Open(new QuizPartyModal(g, tp))); }
-            if (g.Btn(Loc.L("Басараас юу ч асуух", "Ask Basar anything"), true, 42)) g.Later(() => g.OpenBasar());
+            g.Gap(6);
+            if (g.Btn(Loc.L("Басараас юу ч асуух", "Ask Basar anything"), true, 46)) g.Later(() => g.OpenBasar());
             GUILayout.EndVertical();
         }
-        bool HubCard(Game g, PxCanvas icon, string title, string sub)
+        bool HubCard(Game g, float w, PxCanvas icon, string title, string sub)
         {
-            var r = GUILayoutUtility.GetRect(g.U(100), g.U(86), GUILayout.ExpandWidth(true));
-            bool hit = GUI.Button(r, "", g.sBtn);
-            if (icon != null) GUI.DrawTexture(new Rect(r.center.x - g.U(14), r.y + g.U(6), g.U(28), g.U(28)), g.Tex(icon));
-            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(38), r.width - g.U(4), g.U(22)), "<b>" + title + "</b>", new GUIStyle(g.sLabel) { alignment = TextAnchor.UpperCenter, fontSize = g.Ts(11) });
-            GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(60), r.width - g.U(4), g.U(20)), sub, new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, fontSize = g.Ts(10) });
+            var r = GUILayoutUtility.GetRect(w, g.U(100), GUILayout.Width(w), GUILayout.Height(g.U(100)));
+            bool hit = GUI.Button(r, "", g.sPanel);
+            if (icon != null) GUI.DrawTexture(new Rect(r.center.x - g.U(14), r.y + g.U(16), g.U(28), g.U(28)), g.Tex(icon), ScaleMode.ScaleToFit);
+            GUI.Label(new Rect(r.x + g.U(8), r.y + g.U(48), r.width - g.U(16), g.U(20)), title, new GUIStyle(g.sLabel) { font = g.sTitle.font, alignment = TextAnchor.UpperCenter, fontSize = Mathf.RoundToInt(g.U(15)), wordWrap = false });
+            GUI.Label(new Rect(r.x + g.U(8), r.y + g.U(68), r.width - g.U(16), g.U(18)), sub, new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, wordWrap = false });
             return hit;
         }
-        void LessonCard(Game g, J l)
+        /** A lesson as the web version's card: its picture, icon and title, what it is about and its tags. The whole card opens it. */
+        void LessonCard(Game g, J l, float w)
         {
             string id = l["id"].S; var pr = g.V.learn.Find(x => x.id == id);
             if (!thumbs.TryGetValue(id, out var live)) { thumbs[id] = live = new Live(Scenes.W, Scenes.H); var st = new SceneState { sub = 1 }; Lessons.Apply(st, l["final"]); Scenes.ByName(l["scene"].S)(live.c, st, 2); }
-            GUILayout.BeginVertical(g.sPanel, GUILayout.MinWidth(g.U(300)));
-            var r = GUILayoutUtility.GetRect(10, g.U(120), GUILayout.ExpandWidth(true));
-            float s = Mathf.Min(r.width / Scenes.W, r.height / Scenes.H); live.ShowAt(new Rect(r.center.x - Scenes.W * s / 2, r.y, Scenes.W * s, Scenes.H * s));
-            GUILayout.BeginHorizontal(); var ic = Emo.Icon(l["icon"].S); if (ic != null) g.IconAt(ic, 22); GUILayout.Label("<b>" + l["title"].T + "</b>", g.sLabel); GUILayout.EndHorizontal();
-            g.Small(l["desc"].T.ToString());
-            GUILayout.BeginHorizontal();
-            GUILayout.Label(pr != null && pr.done ? "<color=#2ea35f>√ " + Loc.L("Сурсан", "Learned") + "</color>" : Loc.L("Шинэ", "New"), g.sSmall);
-            if (pr != null && pr.family > 0) GUILayout.Label("<color=#c2427e>" + Loc.L("Хамт хийсэн", "Done together") + "</color>", g.sSmall);
-            if (id == "ger" && !(pr != null && pr.done)) GUILayout.Label("<color=#c46d12>" + Loc.L("Нутагт гэр барих эрх нээнэ", "Unlocks your own ger in Nutag") + "</color>", g.sSmall);
-            GUILayout.EndHorizontal();
-            if (g.Btn(pr != null && pr.done ? Loc.L("Дахин үзэх", "Again") : Loc.L("Эхлэх", "Start"), true, 38)) g.Later(() => g.OpenLesson(id));
-            GUILayout.EndVertical();
+            float pad = g.U(14), iw = w - pad * 2, ih = iw * Scenes.H / Scenes.W;
+            var r = GUILayoutUtility.GetRect(w, ih + g.U(150), GUILayout.Width(w), GUILayout.Height(ih + g.U(150)));
+            if (GUI.Button(r, "", g.sPanel)) g.Later(() => g.OpenLesson(id));
+            live.ShowAt(new Rect(r.x + pad, r.y + pad, iw, ih));
+            float y = r.y + pad + ih + g.U(10);
+            var ic = Emo.Icon(l["icon"].S); if (ic != null) GUI.DrawTexture(new Rect(r.x + pad, y + g.U(2), g.U(20), g.U(20)), g.Tex(ic), ScaleMode.ScaleToFit);
+            GUI.Label(new Rect(r.x + pad + g.U(26), y, iw - g.U(26), g.U(26)), l["title"].T.ToString(), new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(18)), wordWrap = false });
+            GUI.Label(new Rect(r.x + pad, y + g.U(30), iw, g.U(60)), l["desc"].T.ToString(), new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(13)), normal = { textColor = Px.Col("#6b4220") } });
+            float tx = r.x + pad, ty = r.yMax - pad - g.U(24);
+            void Tag(string text, string col)
+            {
+                var ts = new GUIStyle(g.sWhite) { font = g.sLabel.font, fontSize = Mathf.RoundToInt(g.U(11)), normal = { textColor = Px.Col(col) } };
+                float tw = ts.CalcSize(new GUIContent(text)).x + g.U(4); GUI.Label(new Rect(tx, ty, tw, g.U(22)), text, ts); tx += tw + g.U(6);
+            }
+            Tag(pr != null && pr.done ? "✓ " + Loc.L("Сурсан", "Learned") : Loc.L("Шинэ", "New"), pr != null && pr.done ? "#2e7d32" : "#344054");
+            if (pr != null && pr.family > 0) Tag(Loc.L("Хамт хийсэн", "Done together"), "#c2427e");
+            if (id == "ger" && !(pr != null && pr.done)) Tag(Loc.L("Нутагт гэр барих эрх нээнэ", "Unlocks your own ger in Nutag"), "#c46d12");
         }
     }
 
@@ -251,6 +268,7 @@ public sealed partial class Game
     // ================================================================ one lesson
     sealed class LessonPage : Page
     {
+        protected override string Tab => "learn";
         readonly J l; readonly string id; readonly SceneState st = new SceneState(); readonly Live live = new Live(Scenes.W, Scenes.H); readonly Action<PxCanvas, SceneState, float> draw;
         WithPicker picker; List<Player> players = new List<Player>(); string mode = "solo"; int i, turn;
         string say; bool solved; List<J> opts; readonly HashSet<int> wrong = new HashSet<int>();
