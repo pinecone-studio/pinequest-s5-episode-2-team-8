@@ -17,6 +17,7 @@ public sealed class AppState
     public float musicVolume = 0.35f;
     public string activeId = "";
     public string server = "", familyCode = "";   // the server this device last used, and its family code (Family.cs)
+    public string playMode = "";                   // "solo": play alone, never connect · "multi": connect and play with others (ModeModal)
     public List<string> profiles = new List<string>();
     public List<FamilyMember> family = new List<FamilyMember>
     {
