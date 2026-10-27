@@ -66,7 +66,7 @@ class FakePool {
           }
           return { rows: [] };
         }
-        if (/^SELECT coins, xp, revision, inventory FROM naadamy_wallets/.test(statement)) {
+        if (/^SELECT coins, xp, revision, inventory(, earned)? FROM naadamy_wallets/.test(statement)) {
           const wallet = this.wallets.get(values[0]);
           return { rows: wallet ? [{ ...wallet }] : [] };
         }
@@ -90,7 +90,7 @@ class FakePool {
         if (/^UPDATE naadamy_wallets SET coins =/.test(statement)) {
           this.wallets.set(values[0], {
             coins: values[1], xp: values[2], revision: values[3],
-            inventory: JSON.parse(values[4]), inventoryMigrated: true,
+            inventory: JSON.parse(values[4]), earned: JSON.parse(values[5]), inventoryMigrated: true,
           });
           return { rows: [] };
         }
@@ -169,6 +169,15 @@ try {
   assert.deepEqual(pgReplay.inventory, pgSpend.inventory, 'a replay returns the current canonical inventory');
   const pgRejected = await store.mutateWallet('identity-player', '2'.repeat(32), () => ({ changed: false, result: { accepted: false, reason: 'insufficient' } }));
   assert.equal(pgRejected.wallet.coins, 400, 'rejected PostgreSQL spends leave the wallet unchanged');
+  assert.deepEqual(pgRejected.result, { accepted: false, reason: 'insufficient' }, 'a rejected PostgreSQL operation reports its own result');
+  await store.mutateWallet('legacy-inventory', '6'.repeat(32), (wallet, inventory, earned) => {
+    assert.deepEqual(earned, { d: '', coins: 0, xp: 0 }, 'a PostgreSQL wallet starts with nothing earned today');
+    return { changed: true, wallet: { ...wallet, xp: wallet.xp + 5 }, earned: { d: '2026-10-27', coins: 0, xp: 5 }, result: { accepted: true } };
+  });
+  await store.mutateWallet('legacy-inventory', '7'.repeat(32), (wallet, inventory, earned) => {
+    assert.deepEqual(earned, { d: '2026-10-27', coins: 0, xp: 5 }, 'PostgreSQL keeps the daily earned tally');
+    return { changed: false, result: { accepted: true } };
+  });
   assert.equal((await store.mutateWallet('identity-player', '2'.repeat(32), () => { throw new Error('rejected operation was retried'); })).duplicate, true,
     'rejected PostgreSQL operations are also idempotent');
   const pgMatchReward = await store.mutateWallet('identity-player', 'wrestle:w-match-0001', (wallet) => ({
@@ -292,6 +301,13 @@ try {
     throw new Error('daily activity reward was applied twice');
   });
   assert.equal(jsonActivityReplay.duplicate, true, 'JSON daily activity rewards remain idempotent after restart');
+  await jsonStore.mutateWallet('json-player', '6'.repeat(32), (wallet) => ({
+    changed: true, wallet: { ...wallet, coins: wallet.coins + 7 }, earned: { d: '2026-10-27', coins: 7, xp: 0 }, result: { accepted: true },
+  }));
+  await restartedJsonStore.mutateWallet('json-player', '7'.repeat(32), (wallet, inventory, earned) => {
+    assert.deepEqual(earned, { d: '2026-10-27', coins: 7, xp: 0 }, 'JSON mode keeps the daily earned tally across a restart');
+    return { changed: false, result: { accepted: true } };
+  });
   await jsonStore.save({ NUTAG: { lots: [], chat: [] } });
   assert.deepEqual(await jsonStore.load(), { NUTAG: { lots: [], chat: [] } }, 'JSON storage still saves snapshots');
   const jsonMutation = await jsonStore.mutateRoom('NUTAG', { lots: [], chat: [] }, (state) => {

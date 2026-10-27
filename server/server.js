@@ -650,6 +650,59 @@ async function handleWalletOperation(conn, message) {
   }
 }
 
+/** Progress a device made since it last saw the server wallet (offline play, or rewards earned while connected), added to the account.
+ *  Coins and XP count against the player's daily earn cap; what goes over is left out of `applied` so the device keeps it and tries
+ *  again on a later day. Coins spent on the device come off the balance, never below zero. Shop items are combined with the
+ *  account's, as long as the player's level allows them. */
+const SYNC_MAX = 1_000_000;
+async function handleSync(conn, message) {
+  const p = conn.player;
+  if (!p) return;
+  const operation = String(message.op || '');
+  const reply = (fields) => conn.send({ t: 'sync-result', op: operation.slice(0, 40), wallet: conn.wallet, inventory: conn.inventory, ...fields });
+  const { coins, xp, rod } = message;
+  const owned = Array.isArray(message.owned) ? message.owned.slice(0, R.ITEMS.length) : [];
+  if (!/^[a-f0-9]{32}$/i.test(operation) || !Number.isSafeInteger(coins) || Math.abs(coins) > SYNC_MAX
+    || !Number.isSafeInteger(xp) || xp < 0 || xp > SYNC_MAX || (rod !== undefined && rod !== 1 && rod !== 2)) {
+    return reply({ accepted: false, reason: 'invalid' });
+  }
+  try {
+    const outcome = await roomStore.mutateWallet(p.id, operation, (wallet, inventory, earned) => {
+      const day = villageDay();
+      const today = earned.d === day ? earned : { d: day, coins: 0, xp: 0 };
+      const addXp = Math.max(0, Math.min(xp, R.DAILY_EARN_CAP.xp - today.xp, WALLET_MAX - wallet.xp));
+      const addCoins = coins >= 0
+        ? Math.max(0, Math.min(coins, R.DAILY_EARN_CAP.coins - today.coins, WALLET_MAX - wallet.coins))
+        : -Math.min(-coins, wallet.coins);
+      const level = R.level(wallet.xp + addXp).l;
+      const allowed = (item) => item && item.lvl <= level;
+      const nextOwned = [...inventory.owned];
+      for (const id of owned) {
+        const item = typeof id === 'string' ? R.ITEMS.find((entry) => entry.id === id && entry.cat !== 'tool') : null;
+        if (allowed(item) && !nextOwned.includes(item.id)) nextOwned.push(item.id);
+      }
+      const rodItem = R.ITEMS.find((entry) => entry.cat === 'tool' && entry.val === rod);
+      const nextRod = rod > inventory.rod && allowed(rodItem) ? rod : inventory.rod;
+      const result = { accepted: true, applied: { coins: addCoins, xp: addXp } };
+      if (!addXp && !addCoins && nextOwned.length === inventory.owned.length && nextRod === inventory.rod) return { changed: false, result };
+      return {
+        changed: true,
+        wallet: { coins: wallet.coins + addCoins, xp: wallet.xp + addXp },
+        inventory: { owned: nextOwned, rod: nextRod },
+        earned: { d: day, coins: today.coins + Math.max(0, addCoins), xp: today.xp + addXp },
+        result,
+      };
+    });
+    conn.wallet = outcome.wallet;
+    conn.inventory = outcome.inventory;
+    syncPlayerLevel(conn);
+    reply({ ...outcome.result, wallet: outcome.wallet, inventory: outcome.inventory });
+  } catch (error) {
+    console.error('Could not sync player progress:', error.message);
+    reply({ accepted: false, reason: 'storage' });
+  }
+}
+
 function villageDay(date = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en', {
     timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -850,6 +903,9 @@ function onMessage(conn, text) {
       break;
     case 'shop-buy':
       handleShopPurchase(conn, m);
+      break;
+    case 'sync':
+      handleSync(conn, m);
       break;
     case 'progress-save':
       handleProgressSave(conn, m);

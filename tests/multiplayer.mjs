@@ -89,31 +89,31 @@ try {
     throw new Error('local fish and dairy progress did not survive reconnect');
   }
   ok('unverified gameplay progress remains local instead of syncing to the server');
-  const walletBefore = await a.evaluate(() => {
+  // A's profile was made before it ever went online (600 coins, 200 XP, some clothes): joining uploads all of it instead of wiping it
+  await until(() => a.evaluate(() => !TG.store.active().village.syncOp && TG._village.live().walletRevision === 1), 'offline progress is uploaded');
+  const uploaded = await a.evaluate(() => {
     const v = TG.store.active().village;
-    return { coins: v.coins, xp: v.xp, revision: TG._village.live().walletRevision };
+    return { coins: v.coins, xp: v.xp, srv: v.srv, owned: v.owned };
   });
-  if (walletBefore.coins !== 40 || walletBefore.xp !== 0 || walletBefore.revision !== 0) throw new Error('the server trusted client-provided initial wallet data');
-  const rejectedOnlineReward = await a.evaluate(() => {
-    const before = { coins: TG.store.active().village.coins, xp: TG.store.active().village.xp };
-    const result = TG.villageReward(12, 7);
-    const after = { coins: TG.store.active().village.coins, xp: TG.store.active().village.xp };
-    return { result, before, after, revision: TG._village.live().walletRevision };
-  });
-  if (rejectedOnlineReward.result !== null || rejectedOnlineReward.before.coins !== rejectedOnlineReward.after.coins
-    || rejectedOnlineReward.before.xp !== rejectedOnlineReward.after.xp || rejectedOnlineReward.revision !== 0) {
-    throw new Error(`an unverified online reward changed the local wallet: ${JSON.stringify(rejectedOnlineReward)}`);
+  if (uploaded.coins !== 600 || uploaded.xp !== 200 || uploaded.srv.coins !== 600 || uploaded.srv.xp !== 200
+    || !uploaded.srv.owned.includes('pet-lamb') || !uploaded.owned.includes('neck-khadag')) {
+    throw new Error(`offline progress was not merged into the server account: ${JSON.stringify(uploaded)}`);
   }
-  ok('unverified local rewards do not change the wallet while connected');
+  ok('offline coins, XP and clothes are uploaded and merged on first join');
+  const onlineReward = await a.evaluate(() => TG.villageReward(12, 7));
+  if (!onlineReward || onlineReward.coins !== 12) throw new Error('an online reward was not given');
+  await until(() => a.evaluate(() => TG._village.live().walletRevision === 2 && TG.store.active().village.srv.coins === 612), 'online reward reaches the server');
+  if (!(await a.evaluate(() => TG.store.active().village.coins === 612 && TG.store.active().village.xp === 207))) throw new Error('an online reward was counted twice or lost');
+  ok('rewards earned while connected are uploaded once');
   const food = await a.evaluate(async () => {
     const item = TG.FOODS.find((entry) => entry.price > 0);
     const ok = await TG.villageEat(item.id), v = TG.store.active().village, live = TG._village.live();
     return { ok, price: item.price, coins: v.coins, xp: v.xp, revision: live.walletRevision, online: live.online };
   });
   if (!food.ok) throw new Error(`a valid wallet purchase was rejected: ${JSON.stringify(food)}`);
-  await until(() => a.evaluate(() => TG._village.live().walletRevision === 1), 'server confirms spending');
+  await until(() => a.evaluate((price) => { const srv = TG.store.active().village.srv; return srv.coins === 612 - price && srv.xp === 212; }, food.price), 'server confirms spending and the first-taste XP');
   const spentWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
-  if (spentWallet.coins !== 40 - food.price || spentWallet.xp !== 0) throw new Error('the server did not persist the wallet spend');
+  if (spentWallet.coins !== 612 - food.price || spentWallet.xp !== 207 + 5) throw new Error(`the server did not persist the wallet spend: ${JSON.stringify(spentWallet)}`);
   await a.evaluate(() => TG._village.reconnect());
   await until(() => a.evaluate(() => TG._village.live().online), 'player reconnects');
   const restoredWallet = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
@@ -275,6 +275,38 @@ try {
   if (invalidActivity.accepted || invalidActivity.reason !== 'invalid'
     || invalidActivity.wallet.revision !== initialClaimWallet.revision) throw new Error('the server accepted an unknown daily activity');
   ok('unverified daily ger-activity claims are denied without changing the wallet');
+  const sendSync = async (upload) => {
+    const previous = await walletProbe.evaluate((id) => window.walletEvents.filter((message) => message.t === 'sync-result' && message.op === id).length, upload.op);
+    await walletProbe.evaluate((payload) => window.walletSocket.send(JSON.stringify({ t: 'sync', ...payload })), upload);
+    await until(() => walletProbe.evaluate(({ op, previous }) => window.walletEvents.filter((message) => message.t === 'sync-result' && message.op === op).length > previous, { op: upload.op, previous }), `sync ${upload.op}`);
+    return walletProbe.evaluate((id) => {
+      const events = window.walletEvents.filter((message) => message.t === 'sync-result' && message.op === id);
+      return events[events.length - 1];
+    }, upload.op);
+  };
+  const lowLevelItems = await sendSync({ op: '1'.repeat(32), coins: 0, xp: 0, owned: ['deel-red', 'hat-crown', 'made-up'], rod: 2 });
+  if (!lowLevelItems.accepted || !lowLevelItems.inventory.owned.includes('deel-red') || lowLevelItems.inventory.owned.includes('hat-crown')
+    || lowLevelItems.inventory.owned.includes('made-up') || lowLevelItems.inventory.rod !== 1) {
+    throw new Error(`uploaded items were not checked against the catalog and level: ${JSON.stringify(lowLevelItems)}`);
+  }
+  const bigUpload = await sendSync({ op: '2'.repeat(32), coins: 5000, xp: 5000, owned: [] });
+  if (!bigUpload.accepted || bigUpload.applied.coins !== rules.DAILY_EARN_CAP.coins || bigUpload.applied.xp !== rules.DAILY_EARN_CAP.xp
+    || bigUpload.wallet.coins !== rules.DAILY_EARN_CAP.coins || bigUpload.wallet.xp !== rules.DAILY_EARN_CAP.xp) {
+    throw new Error(`an upload was not held to the daily earn cap: ${JSON.stringify(bigUpload)}`);
+  }
+  const replayedUpload = await sendSync({ op: '2'.repeat(32), coins: 5000, xp: 5000, owned: [] });
+  if (replayedUpload.applied.coins !== bigUpload.applied.coins || replayedUpload.wallet.coins !== bigUpload.wallet.coins) {
+    throw new Error('a repeated upload was counted twice');
+  }
+  const overCap = await sendSync({ op: '3'.repeat(32), coins: 10, xp: 10, owned: [] });
+  if (!overCap.accepted || overCap.applied.coins !== 0 || overCap.applied.xp !== 0) throw new Error('an upload went over the daily earn cap');
+  const offlineSpend = await sendSync({ op: '4'.repeat(32), coins: -999_999, xp: 0, owned: [] });
+  if (!offlineSpend.accepted || offlineSpend.applied.coins !== -bigUpload.wallet.coins || offlineSpend.wallet.coins !== 0) {
+    throw new Error(`coins spent on the device did not come off the balance, down to zero: ${JSON.stringify(offlineSpend)}`);
+  }
+  const badUpload = await sendSync({ op: '5'.repeat(32), coins: 1.5, xp: -3, owned: [] });
+  if (badUpload.accepted || badUpload.reason !== 'invalid') throw new Error('a malformed upload was accepted');
+  ok('uploads are capped per day, idempotent, catalog- and level-checked, and spends stop at zero');
   await walletProbe.close();
   ok('wallet overspending is denied and transaction replays do not duplicate changes');
   const questProbe = await browser.newPage();
@@ -422,14 +454,14 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 80));
     scene.interact();
   });
-  await sleep(500);
-  const snackWalletAfter = await a.evaluate(() => ({ coins: TG.store.active().village.coins, xp: TG.store.active().village.xp }));
-  if (snackWalletAfter.coins !== snackWalletBefore.coins || snackWalletAfter.xp !== snackWalletBefore.xp) {
-    throw new Error(`an unverified online ger snack changed the wallet: ${JSON.stringify({ snackWalletBefore, snackWalletAfter })}`);
-  }
+  const snack = rules.DAILY_ACTIVITY_REWARDS.snack;
+  await until(() => a.evaluate(({ before, snack }) => {
+    const v = TG.store.active().village;
+    return v.coins === before.coins + snack.coins && v.xp === before.xp + snack.xp && v.srv.xp === v.xp && !v.syncOp;
+  }, { before: snackWalletBefore, snack }), 'the online ger snack reward reaches the server');
   await a.evaluate(() => { document.querySelectorAll('.modal-x').forEach((button) => button.click()); TG._village.ger.close(); });
   await sleep(250);
-  ok('the online ger snack interaction does not grant an unverified wallet reward');
+  ok('the online ger snack reward is given once and uploaded');
 
   // live wrestling: A invites B, B accepts, both play exchanges until someone wins
   const bId = await b.evaluate(() => TG.store.active().village.id);

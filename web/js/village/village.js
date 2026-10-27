@@ -29,6 +29,7 @@
     if (!v || !Number.isInteger(coins) || coins < 0 || v.coins < coins) return false;
     if (!coins) return true;
     if (live && live.online) {
+      await net.sync(); // coins earned on this device reach the server first, so they can be spent
       const result = await net.walletOperation('spend', coins, 0);
       if (result && result.accepted) return true;
       if (result && result.reason === 'insufficient') TG.toast(L('Зоос хүрэлцэхгүй байна.', 'Not enough coins.'));
@@ -49,20 +50,12 @@
   }
 
   // ================================================================ rewards + quests (also used by the rest of Naadamy)
-  function notifyUnverifiedOnlineReward() {
-    if (live && !live.rewardNoticeShown) {
-      live.rewardNoticeShown = true;
-      TG.toast(L('Онлайн шагналыг сервер баталгаажуулах үед олгоно.', 'Online rewards are granted only after server verification.'));
-    }
-  }
+  /** Rewards land on this device first (online or not) and are uploaded to the server account by net.sync. */
   function reward(coins, xp) {
     const v = V(); if (!v) return null;
-    if (live && live.status !== 'solo') {
-      notifyUnverifiedOnlineReward();
-      return null;
-    }
     const before = R.level(v.xp).l;
     v.coins += coins; v.xp += xp; S.save();
+    net.queueSync();
     const after = R.level(v.xp).l;
     announceLevelUp(before, after);
     if (live) hud();
@@ -219,6 +212,7 @@
       TG.toast(L('Энэ төхөөрөмж аюулгүй нэвтрэх түлхүүр үүсгэж чадсангүй.', 'This device could not create a secure sign-in key.'));
       return null;
     }
+    serverBase(v); // decided before the ticket exists: this profile has never been online, so all its progress is still to upload
     const bytes = window.crypto.getRandomValues(new Uint8Array(32));
     v.ticket = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
     S.save();
@@ -266,6 +260,7 @@
         this.ws = null;
         if (!live) return;
         live.online = false; live.others.clear(); live.lots = null; endRemoteMatch();
+        if (this.syncDone) this.syncDone(null);
         if (this.closed) return setStatus('solo');
         setStatus('reconnecting');
         this.timer = setTimeout(() => this.open(), Math.min(10000, 1500 * ++this.retry));
@@ -273,11 +268,9 @@
     },
     pendingWallet: new Map(),
     pendingPurchase: new Map(),
-    pendingQuestClaims: new Map(),
-    pendingDailyActivityClaims: new Map(),
     walletOperation(action, coins, xp) {
       if (!this.ws || this.ws.readyState !== 1 || !live || !live.online) return Promise.resolve(null);
-      const op = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      const op = newOp();
       return new Promise((resolve) => {
         const timer = setTimeout(() => { this.pendingWallet.delete(op); resolve(null); }, 8000);
         this.pendingWallet.set(op, { resolve, timer });
@@ -291,7 +284,7 @@
     },
     purchaseItem(item) {
       if (!this.ws || this.ws.readyState !== 1 || !live || !live.online) return Promise.resolve(null);
-      const op = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      const op = newOp();
       return new Promise((resolve) => {
         const timer = setTimeout(() => { this.pendingPurchase.delete(op); resolve(null); }, 8000);
         this.pendingPurchase.set(op, { resolve, timer });
@@ -303,59 +296,64 @@
         }
       });
     },
-    claimQuest(quest) {
-      if (!this.ws || this.ws.readyState !== 1 || !live || !live.online || !progressProfileMatches()) return Promise.resolve(null);
-      if (this.pendingQuestClaims.has(quest)) return this.pendingQuestClaims.get(quest).promise;
-      let pending;
-      const promise = new Promise((resolve) => {
-        pending = { resolve, promise: null };
-        pending.timer = setTimeout(() => {
-          this.pendingQuestClaims.delete(quest);
-          resolve(null);
-        }, 8000);
-        this.pendingQuestClaims.set(quest, pending);
-        try {
-          this.ws.send(JSON.stringify({ t: 'quest-claim', quest }));
-        } catch (error) {
-          clearTimeout(pending.timer); this.pendingQuestClaims.delete(quest); resolve(null);
-          console.error('Could not send daily quest claim:', error.message);
-        }
-      });
-      pending.promise = promise;
-      return promise;
-    },
-    claimDailyActivity(activity) {
-      if (!this.ws || this.ws.readyState !== 1 || !live || !live.online) return Promise.resolve(null);
-      if (this.pendingDailyActivityClaims.has(activity)) return this.pendingDailyActivityClaims.get(activity).promise;
-      let pending;
-      const promise = new Promise((resolve) => {
-        pending = { resolve, promise: null };
-        pending.timer = setTimeout(() => {
-          this.pendingDailyActivityClaims.delete(activity);
-          resolve(null);
-        }, 8000);
-        this.pendingDailyActivityClaims.set(activity, pending);
-        try { this.ws.send(JSON.stringify({ t: 'daily-activity-claim', activity })); }
+    /** Upload what this device earned, spent or bought since it last saw the server wallet (see unsynced). One upload at a time;
+     *  its op id is saved with the profile, so after a reload or a dropped connection it is sent again and counted only once. */
+    syncing: null, syncTimer: 0,
+    queueSync() { clearTimeout(this.syncTimer); this.syncTimer = setTimeout(() => this.sync(), 800); },
+    sync() {
+      const v = V();
+      if (this.syncing) return this.syncing;
+      if (!v || !this.ws || this.ws.readyState !== 1 || !live || !live.online || !progressProfileMatches()) return Promise.resolve(null);
+      if (!v.syncOp) {
+        const u = unsynced(v), capped = live.capDay === live.serverDay; // over today's cap: coins and XP wait for tomorrow
+        const coins = capped ? Math.min(0, u.coins) : u.coins, xp = capped ? 0 : u.xp;
+        if (!coins && !xp && !u.owned.length && !u.rod) return Promise.resolve(null);
+        v.syncOp = { op: newOp(), coins, xp, owned: v.owned.slice(), rod: v.rod };
+        S.save();
+      }
+      const op = v.syncOp.op;
+      this.syncing = new Promise((resolve) => {
+        const timer = setTimeout(() => { this.syncing = null; this.syncDone = null; resolve(null); }, 8000);
+        this.syncDone = (m) => { clearTimeout(timer); this.syncing = null; this.syncDone = null; resolve(m); };
+        try { this.ws.send(JSON.stringify({ t: 'sync', ...v.syncOp })); }
         catch (error) {
-          clearTimeout(pending.timer); this.pendingDailyActivityClaims.delete(activity); resolve(null);
-          console.error('Could not send daily activity claim:', error.message);
+          this.syncDone(null);
+          console.error('Could not send progress upload:', error.message);
         }
       });
-      pending.promise = promise;
-      return promise;
+      this.syncing.op = op;
+      return this.syncing;
     },
     send(m) { if (this.ws && this.ws.readyState === 1 && live && live.online) this.ws.send(JSON.stringify(m)); },
     close() { this.closed = true; clearTimeout(this.timer); if (this.ws) { const w = this.ws; this.ws = null; try { w.close(); } catch (e) { /* closing */ } } },
     rejoin() { this.close(); if (!live) return; this.closed = false; live.online = false; live.others.clear(); setStatus('connecting'); this.open(); },
   };
-  function applyWallet(wallet) {
+  const newOp = () => Array.from(window.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  /** The server account this device last saw. What the device has on top of it is progress not uploaded yet. A profile made before
+   *  uploads existed starts from the server's starter wallet, so everything it earned goes up; one that already went online had its
+   *  wallet replaced by the server's then, so it starts from what it has now. */
+  function serverBase(v) {
+    if (!v.srv) v.srv = v.ticket ? { coins: v.coins, xp: v.xp, owned: v.owned.slice(), rod: v.rod } : { coins: 40, xp: 0, owned: ['deel-blue'], rod: 1 };
+    return v.srv;
+  }
+  function unsynced(v) {
+    const base = serverBase(v);
+    return { coins: v.coins - base.coins, xp: Math.max(0, v.xp - base.xp), owned: v.owned.filter((id) => !base.owned.includes(id)), rod: v.rod > base.rod ? v.rod : 0 };
+  }
+  /** Take a server wallet while keeping this device's not-yet-uploaded progress on top. `applied` is what an upload just added,
+   *  which is no longer this device's alone. An older wallet (lower revision) than one already seen only takes `applied` off. */
+  function applyWallet(wallet, applied = { coins: 0, xp: 0 }) {
     if (!wallet || !Number.isSafeInteger(wallet.coins) || wallet.coins < 0 || !Number.isSafeInteger(wallet.xp) || wallet.xp < 0
       || !Number.isSafeInteger(wallet.revision) || wallet.revision < 0) return;
-    if (live.walletRevision !== undefined && wallet.revision < live.walletRevision) return;
     const v = V(); if (!v) return;
-    // Do not blindly overwrite if we just uploaded; prefer server merged value but don't clobber local gains in offline mode
-    const oldLevel = R.level(v.xp).l;
-    v.coins = wallet.coins; v.xp = wallet.xp; live.walletRevision = wallet.revision;
+    const base = serverBase(v), oldLevel = R.level(v.xp).l;
+    if (live.walletRevision !== undefined && wallet.revision < live.walletRevision) {
+      v.coins = Math.max(0, v.coins - applied.coins); v.xp = Math.max(0, v.xp - applied.xp);
+    } else {
+      v.coins = Math.max(0, wallet.coins + v.coins - base.coins - applied.coins);
+      v.xp = Math.max(0, wallet.xp + v.xp - base.xp - applied.xp);
+      base.coins = wallet.coins; base.xp = wallet.xp; live.walletRevision = wallet.revision;
+    }
     const newLevel = R.level(v.xp).l;
     if (newLevel !== oldLevel && net && net.send) net.send({ t: 'look', look: v.look, lvl: newLevel });
     S.save(); if (live) hud();
@@ -366,8 +364,10 @@
     const owned = [...new Set(inventory.owned.filter((id) => typeof id === 'string' && allowed.has(id)))];
     if (!owned.includes('deel-blue')) owned.unshift('deel-blue');
     const v = V(); if (!v) return;
-    v.owned = owned;
-    v.rod = inventory.rod;
+    const base = serverBase(v);
+    base.owned = owned; base.rod = inventory.rod;
+    v.owned = [...new Set([...owned, ...v.owned.filter((id) => allowed.has(id))])]; // things bought on this device stay; the next upload adds them
+    v.rod = Math.max(v.rod, inventory.rod);
     S.save(); if (live) hud();
   }
   function progressProfileMatches() {
@@ -388,14 +388,9 @@
           me.x = Math.floor(me.px + 0.5); me.y = Math.floor(me.py + 0.82);
           live.cam.x = me.px; live.cam.y = me.py; v.pos = { x: me.px, y: me.py }; S.save();
         }
-        const localWalletChanged = m.wallet && (v.coins !== m.wallet.coins || v.xp !== m.wallet.xp);
-        const localInventoryChanged = m.inventory && (v.rod !== m.inventory.rod
-          || v.owned.length !== m.inventory.owned.length || v.owned.some((item) => !m.inventory.owned.includes(item)));
-        // For first online join of existing profile, merge local wallet/inventory if different from starter
-        if (m.wallet && v.coins === 40 && v.xp === 0 && (m.wallet.coins !== 40 || m.wallet.xp !== 0)) {
-          // prefer server account but do not wipe; server already authoritative
-        }
-        applyWallet(m.wallet);
+        // An upload still on its way: its reply settles the wallet (the server may or may not have counted it yet)
+        live.walletRevision = undefined;
+        if (!v.syncOp) applyWallet(m.wallet);
         applyInventory(m.inventory);
         if (m.look && typeof m.look === 'object') { v.look = m.look; S.save(); }
         quests();
@@ -403,10 +398,7 @@
         live.chat = (m.chat || []).slice(-CHAT_KEEP); renderChat();
         setStatus('online');
         TG.toast(`🟢 ${L('Нутагт холбогдлоо', 'Connected to village')} · ${m.room}` + (live.others.size ? ` · ${live.others.size} ${L('найз байна', 'friends here')}` : ''));
-        if (localWalletChanged || localInventoryChanged) setTimeout(() => live && TG.toast(L(
-          'Офлайн зоос, XP болон дэлгүүрийн өмчлөл серверт импортлогдохгүй. Серверийн хадгалсан өгөгдлийг ашиглана.',
-          'Offline coins, XP and shop ownership are not imported; the server account is authoritative.',
-        )), 1800);
+        net.sync();
         TG.gerwork.sync();
         if (m.v !== R.VERSION) setTimeout(() => TG.toast(L('⚠️ Тоглоом болон серверийн хувилбар зөрж байна. Хуудсаа дахин ачаалж, серверээ шинэчилнэ үү.', '⚠️ The game and server versions differ. Reload the page and update the server if needed.')), 2500);
         break;
@@ -426,21 +418,23 @@
         if (pending) { clearTimeout(pending.timer); net.pendingPurchase.delete(m.op); pending.resolve(m); }
         break;
       }
-      case 'quest-claim-result': {
-        const pending = net.pendingQuestClaims.get(m.quest);
-        applyWallet(m.wallet);
-        if (pending) {
-          clearTimeout(pending.timer); net.pendingQuestClaims.delete(m.quest); pending.resolve(m);
-        }
-        break;
-      }
-      case 'daily-activity-result': {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(m.day || '')) live.serverDay = m.day;
-        applyWallet(m.wallet);
-        const pending = net.pendingDailyActivityClaims.get(m.activity);
-        if (pending) {
-          clearTimeout(pending.timer); net.pendingDailyActivityClaims.delete(m.activity); pending.resolve(m);
-        }
+      case 'sync-result': {
+        const sent = v.syncOp;
+        if (!sent || m.op !== sent.op) { applyWallet(m.wallet); applyInventory(m.inventory); break; }
+        if (m.accepted) {
+          const applied = m.applied && Number.isSafeInteger(m.applied.coins) && Number.isSafeInteger(m.applied.xp) ? m.applied : { coins: 0, xp: 0 };
+          v.syncOp = null;
+          applyWallet(m.wallet, applied);
+          applyInventory(m.inventory);
+          if (sent.coins > applied.coins || sent.xp > applied.xp) {
+            if (live.capDay !== live.serverDay) TG.toast(L('Өнөөдрийн шагналын дээд хэмжээнд хүрлээ. Үлдсэн нь энэ төхөөрөмж дээр хадгалагдаж, маргааш серверт орно.', 'Today’s reward limit is reached. The rest is kept on this device and uploaded tomorrow.'));
+            live.capDay = live.serverDay;
+          } else {
+            const u = unsynced(v);
+            if (u.coins || u.xp) net.queueSync(); // earned while the upload was on its way
+          }
+        } else if (m.reason === 'invalid') { v.syncOp = null; S.save(); }
+        if (net.syncing && net.syncing.op === m.op && net.syncDone) net.syncDone(m);
         break;
       }
       case 'wr-invite': case 'wr-declined': case 'wr-start': case 'wr-wait': case 'wr-result': case 'wr-end': onWrestleMsg(m); break;
@@ -1444,6 +1438,7 @@
             : locked ? h('span', { class: 'v-lock' }, '🔒 ', L('Түвшин', 'Lv'), ' ', it.lvl)
               : h('button', { class: 'btn sm primary', 'data-buy': it.id, onclick: async () => {
                 if (live && live.online) {
+                  await net.sync();
                   const result = await net.purchaseItem(it.id);
                   if (!result) {
                     TG.toast(L('Худалдан авалтыг сервер баталгаажуулж чадсангүй.', 'The server could not confirm this purchase.'));
@@ -1529,11 +1524,10 @@
     const draw = () => rc(body, h('h2', null, L('Өнөөдрийн даалгавар', "Today's quests")),
       h('p', { class: 'muted' }, L('Даалгавар өдөр бүр шинэчлэгдэнэ.', 'Quests refresh every day.')),
       h('div', { class: 'v-list' }, quests().map((q) => {
-        const d = QUESTS[q.k], ready = q.p >= d.n && !q.done, online = live && live.status !== 'solo';
+        const d = QUESTS[q.k], ready = q.p >= d.n && !q.done;
         return h('div', { class: 'v-row' + (q.done ? ' done' : '') }, icon(q.done ? 'ui:star' : 'ui:scroll'),
           h('div', { class: 'v-row-b' }, h('b', null, q.season ? `${TG.seasons.byId(q.season).icon} ` : '', tx(d.t), q.season ? h('small', { class: 'v-season-tag' }, ` ${tx(TG.seasons.byId(q.season).name)} ×1.5`) : null), h('div', { class: 'meter' }, h('span', { style: { width: (q.p / d.n) * 100 + '%' } })), h('small', null, `${q.p}/${d.n} · +${d.c} ${L('зоос', 'coins')} · +${d.x} XP`)),
-          ready && online ? h('span', { class: 'muted' }, L('Онлайн шагнал хаалттай', 'Reward unavailable online'))
-            : ready ? h('button', { class: 'btn sm primary', onclick: () => {
+          ready ? h('button', { class: 'btn sm primary', onclick: () => {
             reward(Math.round(d.c * (q.season ? 1.5 : 1)), Math.round(d.x * (q.season ? 1.5 : 1)));
             q.done = true;
             if (q.season) { v.seasonDone = v.seasonDone || {}; v.seasonDone[q.season] = Date.now(); }
@@ -2305,54 +2299,27 @@
   function claimDailyHomeActivity(activity) {
     const v = V(), payout = R.DAILY_ACTIVITY_REWARDS[activity];
     if (!v || !payout) return Promise.resolve(null);
-    if (live && live.status !== 'solo') {
-      notifyUnverifiedOnlineReward();
-      return Promise.resolve(null);
-    }
     v.homeDay = v.homeDay || {};
     const day = questDay();
     if (v.homeDay[activity] === day) return Promise.resolve(null);
-    if (!live || !live.online) {
-      v.homeDay[activity] = day; S.save();
-      return Promise.resolve(reward(payout.coins, payout.xp));
-    }
-    live.homeActivityClaims = live.homeActivityClaims || new Set();
-    if (live.homeActivityClaims.has(activity)) return Promise.resolve(null);
-    live.homeActivityClaims.add(activity);
-    return net.claimDailyActivity(activity).then((result) => {
-      if (!result) {
-        TG.toast(L('Шагналын хүсэлтийг серверт хүргэж чадсангүй.', 'Could not send the reward request to the server.'));
-        return null;
-      }
-      if (!result.accepted) {
-        TG.toast(L('Сервер энэ өдрийн шагналыг олгож чадсангүй.', 'The server could not grant this daily reward.'));
-        return result;
-      }
-      const serverDay = /^\d{4}-\d{2}-\d{2}$/.test(result.day || '') ? result.day : questDay();
-      v.homeDay[activity] = serverDay; S.save();
-      TG.toast(result.duplicate
-        ? L('Энэ үйл ажиллагааны өнөөдрийн шагналыг авсан байна.', 'You already claimed today’s reward for this activity.')
-        : `+${payout.coins} ${L('зоос', 'coins')} · +${payout.xp} XP`);
-      return result;
-    }).finally(() => live && live.homeActivityClaims.delete(activity));
+    v.homeDay[activity] = day; S.save();
+    return Promise.resolve(reward(payout.coins, payout.xp));
   }
   function homeModal(i) {
     const v = V(), l = lotsArr()[i], body = h('div'), cv = h('canvas', { class: 'v-interior', width: 240, height: 170 });
     const draw = () => {
       PX.interior(cv, R.ROOF[l.roof] || R.ROOF.blue, l.furn || []);
       const today = questDay(), rested = v.rest === today, restRewardClaimed = v.homeDay && v.homeDay.rest === today;
-      const onlineRewardsDisabled = live && live.status !== 'solo';
       rc(body, h('h2', null, L('Гэрээ тохижуулах', 'Decorate my ger')), cv,
         h('div', { class: 'row-btns' },
           h('button', { class: 'btn', onclick: () => { close(); wardrobe(); } }, L('Хувцас', 'Wardrobe')),
-          h('button', { class: 'btn primary', disabled: onlineRewardsDisabled || (rested && restRewardClaimed), onclick: () => {
+          h('button', { class: 'btn primary', disabled: rested && restRewardClaimed, onclick: () => {
             if (!rested) { v.rest = today; v.energy = 100; S.save(); TG.sfx.chime(); }
             if (!restRewardClaimed) {
               claimDailyHomeActivity('rest').then(draw);
             }
             draw();
-          } }, onlineRewardsDisabled ? L('Онлайн шагнал хаалттай', 'Reward unavailable online')
-            : rested ? (restRewardClaimed ? L('Өнөөдөр амарсан', 'Rested today') : L('Шагналаа авах', 'Claim reward')) : L('Амрах', 'Rest'))),
+          } }, rested ? (restRewardClaimed ? L('Өнөөдөр амарсан', 'Rested today') : L('Шагналаа авах', 'Claim reward')) : L('Амрах', 'Rest'))),
         h('div', { class: 'label', style: { marginTop: '12px' } }, L('Тавилга', 'Furniture')),
         h('div', { class: 'v-list' }, R.FURNITURE.map((f) => {
           const owned = (l.furn || []).includes(f.id), locked = lvl() < f.lvl;

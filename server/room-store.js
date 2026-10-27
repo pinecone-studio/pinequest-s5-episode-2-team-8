@@ -104,6 +104,13 @@ function initialInventory(inventory) {
   return cleanInventory({ owned, rod });
 }
 
+/** How much this player's devices have added to the account today ({ d: Mongolia day, coins, xp }), for the daily earn cap. */
+function cleanEarned(earned) {
+  const count = (value) => Number.isSafeInteger(value) && value > 0 ? Math.min(WALLET_MAX, value) : 0;
+  if (!earned || typeof earned !== 'object' || Array.isArray(earned) || !/^\d{4}-\d{2}-\d{2}$/.test(earned.d || '')) return { d: '', coins: 0, xp: 0 };
+  return { d: earned.d, coins: count(earned.coins), xp: count(earned.xp) };
+}
+
 function isRecord(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -174,13 +181,15 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         if (Object.hasOwn(stored.operations, operation)) {
           return { wallet: cleanWallet(stored), inventory, result: stored.operations[operation], duplicate: true };
         }
-        const outcome = mutate(cleanWallet(stored), inventory);
+        const earned = cleanEarned(stored.earned);
+        const outcome = mutate(cleanWallet(stored), inventory, earned);
         const current = cleanWallet(stored);
         const wallet = {
           ...cleanWallet(outcome && outcome.changed ? { ...outcome.wallet, revision: current.revision + 1 } : stored),
           operations: stored.operations,
         };
         wallet.inventory = outcome && outcome.changed && outcome.inventory ? cleanInventory(outcome.inventory) : inventory;
+        wallet.earned = outcome && outcome.changed && outcome.earned ? cleanEarned(outcome.earned) : earned;
         const result = outcome && outcome.result ? outcome.result : { accepted: false };
         wallet.operations[operation] = result;
         const oldOperations = Object.keys(wallet.operations).filter((key) => !key.startsWith('quest:') && !key.startsWith('activity:') && !key.startsWith('wrestle:'));
@@ -281,6 +290,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         `);
         await client.query(`ALTER TABLE naadamy_wallets ADD COLUMN IF NOT EXISTS inventory jsonb NOT NULL DEFAULT '{"owned":["deel-blue"],"rod":1}'::jsonb`);
         await client.query('ALTER TABLE naadamy_wallets ADD COLUMN IF NOT EXISTS inventory_migrated boolean NOT NULL DEFAULT false');
+        await client.query(`ALTER TABLE naadamy_wallets ADD COLUMN IF NOT EXISTS earned jsonb NOT NULL DEFAULT '{}'::jsonb`);
         await client.query(`
           CREATE TABLE IF NOT EXISTS naadamy_wallet_ops (
             player_id text NOT NULL,
@@ -398,7 +408,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const selected = await client.query('SELECT coins, xp, revision, inventory FROM naadamy_wallets WHERE id = $1 FOR UPDATE', [id]);
+        const selected = await client.query('SELECT coins, xp, revision, inventory, earned FROM naadamy_wallets WHERE id = $1 FOR UPDATE', [id]);
         if (!selected.rows[0]) throw new Error('wallet record does not exist');
         const previous = cleanWallet(selected.rows[0]);
         const inventory = cleanInventory(selected.rows[0].inventory);
@@ -410,9 +420,10 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           await client.query('COMMIT');
           return { wallet: previous, inventory, result: priorOperation.rows[0].result, duplicate: true };
         }
-        const outcome = mutate(previous, inventory);
+        const earned = cleanEarned(selected.rows[0].earned);
+        const outcome = mutate(previous, inventory, earned);
         if (!outcome || !outcome.changed) {
-          const result = outcome || { accepted: false };
+          const result = outcome && outcome.result ? outcome.result : { accepted: false };
           await client.query(
             'INSERT INTO naadamy_wallet_ops (player_id, operation_id, result) VALUES ($1, $2, $3::jsonb)',
             [id, operation, JSON.stringify(result)],
@@ -422,9 +433,10 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         }
         const wallet = cleanWallet({ ...outcome.wallet, revision: previous.revision + 1 });
         const nextInventory = outcome.inventory ? cleanInventory(outcome.inventory) : inventory;
+        const nextEarned = outcome.earned ? cleanEarned(outcome.earned) : earned;
         await client.query(
-          'UPDATE naadamy_wallets SET coins = $2, xp = $3, revision = $4, inventory = $5::jsonb, updated_at = now() WHERE id = $1',
-          [id, wallet.coins, wallet.xp, wallet.revision, JSON.stringify(nextInventory)],
+          'UPDATE naadamy_wallets SET coins = $2, xp = $3, revision = $4, inventory = $5::jsonb, earned = $6::jsonb, updated_at = now() WHERE id = $1',
+          [id, wallet.coins, wallet.xp, wallet.revision, JSON.stringify(nextInventory), JSON.stringify(nextEarned)],
         );
         await client.query(
           'INSERT INTO naadamy_wallet_ops (player_id, operation_id, result) VALUES ($1, $2, $3::jsonb)',
