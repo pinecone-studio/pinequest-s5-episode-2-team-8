@@ -17,6 +17,11 @@ class FakePool {
     this.wallets = new Map();
     this.walletOperations = new Map();
     this.progress = new Map();
+    this.deviceTickets = new Map();
+    this.families = new Map();
+  }
+  async query(sql, values) {
+    return (await this.connect()).query(sql, values);
   }
   async connect() {
     return {
@@ -51,6 +56,32 @@ class FakePool {
           const ticketHash = this.identities.get(values[0]);
           return { rows: ticketHash ? [{ ticket_hash: ticketHash }] : [] };
         }
+        if (/^INSERT INTO naadamy_player_tickets/.test(statement)) {
+          const hashes = this.deviceTickets.get(values[0]) || [];
+          if (!hashes.includes(values[1])) hashes.push(values[1]);
+          this.deviceTickets.set(values[0], hashes);
+          return { rows: [] };
+        }
+        if (/^DELETE FROM naadamy_player_tickets WHERE player_id = \$1 AND ticket_hash NOT IN/.test(statement)) {
+          this.deviceTickets.set(values[0], (this.deviceTickets.get(values[0]) || []).slice(-values[1]));
+          return { rows: [] };
+        }
+        if (/^SELECT 1 FROM naadamy_player_tickets/.test(statement)) {
+          return { rows: (this.deviceTickets.get(values[0]) || []).includes(values[1]) ? [{ '?column?': 1 }] : [] };
+        }
+        if (/^INSERT INTO naadamy_families/.test(statement)) {
+          if (this.families.has(values[0])) return { rows: [] };
+          this.families.set(values[0], JSON.parse(values[1]));
+          return { rows: [{ code: values[0] }] };
+        }
+        if (/^SELECT members FROM naadamy_families WHERE code = \$1( FOR UPDATE)?$/.test(statement)) {
+          const members = this.families.get(values[0]);
+          return { rows: members ? [{ members: structuredClone(members) }] : [] };
+        }
+        if (/^UPDATE naadamy_families SET members =/.test(statement)) {
+          this.families.set(values[0], JSON.parse(values[1]));
+          return { rows: [] };
+        }
         if (/^INSERT INTO naadamy_wallets/.test(statement)) {
           if (!this.wallets.has(values[0])) this.wallets.set(values[0], {
             coins: values[1], xp: values[2], revision: 0, inventory: JSON.parse(values[3]), inventoryMigrated: true,
@@ -66,7 +97,7 @@ class FakePool {
           }
           return { rows: [] };
         }
-        if (/^SELECT coins, xp, revision, inventory FROM naadamy_wallets/.test(statement)) {
+        if (/^SELECT coins, xp, revision, inventory(, earned)? FROM naadamy_wallets/.test(statement)) {
           const wallet = this.wallets.get(values[0]);
           return { rows: wallet ? [{ ...wallet }] : [] };
         }
@@ -90,7 +121,7 @@ class FakePool {
         if (/^UPDATE naadamy_wallets SET coins =/.test(statement)) {
           this.wallets.set(values[0], {
             coins: values[1], xp: values[2], revision: values[3],
-            inventory: JSON.parse(values[4]), inventoryMigrated: true,
+            inventory: JSON.parse(values[4]), earned: JSON.parse(values[5]), inventoryMigrated: true,
           });
           return { rows: [] };
         }
@@ -136,6 +167,18 @@ try {
   assert.equal(await store.authenticatePlayer('other-player', 'invalid'), false, 'malformed tickets are rejected');
   assert.equal(await store.authenticatePlayer('__proto__', ticket), true, 'special object-property names can register safely');
   assert.equal(await store.authenticatePlayer('__proto__', 'b'.repeat(64)), false, 'special object-property names remain protected');
+  await store.addDeviceTicket('identity-player', 'c'.repeat(64));
+  assert.equal(await store.authenticatePlayer('identity-player', 'c'.repeat(64)), true, 'a ticket from a family login works on its device');
+  assert.equal(await store.authenticatePlayer('identity-player', ticket), true, 'the first device keeps working');
+  assert.equal(await store.authenticatePlayer('__proto__', 'c'.repeat(64)), false, 'a device ticket only works for its own player');
+  const familyMember = { id: 'identity-player', name: 'Сараа', age: 8, avatar: 1, salt: '00', hash: '11', fails: 0, until: 0 };
+  assert.equal(await store.createFamily('ABCD2345', familyMember), true, 'PostgreSQL stores a new family');
+  assert.equal(await store.createFamily('ABCD2345', familyMember), false, 'a family code is never given twice');
+  const familyResult = await store.mutateFamily('ABCD2345', (family) => { family.members[0].fails = 2; return { changed: true, result: 'saved' }; });
+  assert.equal(familyResult, 'saved');
+  assert.equal((await store.getFamily('ABCD2345')).members[0].fails, 2, 'a family change is saved');
+  assert.equal(await store.getFamily('bad'), null, 'malformed family codes are not looked up');
+  assert.equal(await store.mutateFamily('ZZZZ2222', (family) => ({ changed: false, result: family })), null, 'an unknown family reaches mutate as null');
   const pgWallet = await store.getWallet('identity-player', { coins: 500, xp: 250 });
   assert.deepEqual(pgWallet, { coins: 500, xp: 250, revision: 0 }, 'PostgreSQL creates the wallet from the one-time profile migration');
   const pgAccount = await store.getAccount('inventory-player', { coins: 500, xp: 250 }, { owned: ['deel-blue', 'hat-cap', 'not-a-real-item'], rod: 2 });
@@ -169,6 +212,15 @@ try {
   assert.deepEqual(pgReplay.inventory, pgSpend.inventory, 'a replay returns the current canonical inventory');
   const pgRejected = await store.mutateWallet('identity-player', '2'.repeat(32), () => ({ changed: false, result: { accepted: false, reason: 'insufficient' } }));
   assert.equal(pgRejected.wallet.coins, 400, 'rejected PostgreSQL spends leave the wallet unchanged');
+  assert.deepEqual(pgRejected.result, { accepted: false, reason: 'insufficient' }, 'a rejected PostgreSQL operation reports its own result');
+  await store.mutateWallet('legacy-inventory', '6'.repeat(32), (wallet, inventory, earned) => {
+    assert.deepEqual(earned, { d: '', coins: 0, xp: 0 }, 'a PostgreSQL wallet starts with nothing earned today');
+    return { changed: true, wallet: { ...wallet, xp: wallet.xp + 5 }, earned: { d: '2026-10-27', coins: 0, xp: 5 }, result: { accepted: true } };
+  });
+  await store.mutateWallet('legacy-inventory', '7'.repeat(32), (wallet, inventory, earned) => {
+    assert.deepEqual(earned, { d: '2026-10-27', coins: 0, xp: 5 }, 'PostgreSQL keeps the daily earned tally');
+    return { changed: false, result: { accepted: true } };
+  });
   assert.equal((await store.mutateWallet('identity-player', '2'.repeat(32), () => { throw new Error('rejected operation was retried'); })).duplicate, true,
     'rejected PostgreSQL operations are also idempotent');
   const pgMatchReward = await store.mutateWallet('identity-player', 'wrestle:w-match-0001', (wallet) => ({
@@ -292,6 +344,13 @@ try {
     throw new Error('daily activity reward was applied twice');
   });
   assert.equal(jsonActivityReplay.duplicate, true, 'JSON daily activity rewards remain idempotent after restart');
+  await jsonStore.mutateWallet('json-player', '6'.repeat(32), (wallet) => ({
+    changed: true, wallet: { ...wallet, coins: wallet.coins + 7 }, earned: { d: '2026-10-27', coins: 7, xp: 0 }, result: { accepted: true },
+  }));
+  await restartedJsonStore.mutateWallet('json-player', '7'.repeat(32), (wallet, inventory, earned) => {
+    assert.deepEqual(earned, { d: '2026-10-27', coins: 7, xp: 0 }, 'JSON mode keeps the daily earned tally across a restart');
+    return { changed: false, result: { accepted: true } };
+  });
   await jsonStore.save({ NUTAG: { lots: [], chat: [] } });
   assert.deepEqual(await jsonStore.load(), { NUTAG: { lots: [], chat: [] } }, 'JSON storage still saves snapshots');
   const jsonMutation = await jsonStore.mutateRoom('NUTAG', { lots: [], chat: [] }, (state) => {

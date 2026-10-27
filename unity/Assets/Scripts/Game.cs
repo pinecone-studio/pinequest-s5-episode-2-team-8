@@ -80,7 +80,7 @@ public sealed partial class Game : MonoBehaviour
     public (int coins, int xp, int level) Reward(int coins, int xp)
     {
         int before = Rules.Level(V.xp).l;
-        V.coins += coins; V.xp += xp; V.Save();
+        V.coins += coins; V.xp += xp; V.Save(); net.QueueSync(); // uploaded to the server account when online
         int after = Rules.Level(V.xp).l;
         if (after > before) { Sfx.Win(); Confetti(80); Toast(Loc.L($"Түвшин ахилаа! Түвшин {after}", $"Level up! Level {after}")); }
         return (coins, xp, after > before ? after : 0);

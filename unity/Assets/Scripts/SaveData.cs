@@ -83,6 +83,12 @@ public sealed class SaveData
     public int histStep, histFound;                   // the historian's task chain: current step, and whether its item was found
     public List<string> campWon = new List<string>(); // defend-the-homeland chapters won
     public string ticket = "";                      // multiplayer identity ticket (64 hex)
+    // the server account this device last saw (Net.Sync): what the device has on top of it is progress still to upload
+    public bool hasSrv;
+    public int srvCoins, srvXp, srvRod = 1;
+    public List<string> srvOwned = new List<string>();
+    public string syncOp = "";                      // an upload on its way: sent again with the same id until the server answers
+    public int syncCoins, syncXp;
 
     static long Find(List<KV> l, string k) { foreach (var e in l) if (e.k == k) return e.v; return 0; }
     static void Put(List<KV> l, string k, long v) { foreach (var e in l) if (e.k == k) { e.v = v; return; } l.Add(new KV { k = k, v = v }); }

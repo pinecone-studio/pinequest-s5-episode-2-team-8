@@ -11,6 +11,8 @@ const PLAYER_TICKET = /^[a-f0-9]{64}$/i;
 const WALLET_OPERATION = /^(?:[a-f0-9]{32}|(?:quest|activity):\d{4}-\d{2}-\d{2}:[a-z]{1,16}|wrestle:[\w-]{1,64})$/i;
 const WALLET_MAX = 2_000_000_000;
 const REALTIME_CHANNEL = 'naadamy_realtime';
+const FAMILY_CODE = /^[A-HJ-NP-Z2-9]{8}$/;
+const DEVICE_TICKETS_MAX = 8;
 
 function ticketHash(ticket) {
   return crypto.createHash('sha256').update(ticket).digest('hex');
@@ -71,6 +73,12 @@ function writeIdentityFile(file, identities) {
   fs.renameSync(temporaryFile, file);
 }
 
+/** A family as stored: its children, each with a hashed picture password and the count of wrong tries. */
+function cleanFamily(family) {
+  if (!isRecord(family) || !Array.isArray(family.members)) throw new Error('Invalid stored family');
+  return { members: family.members.filter((member) => isRecord(member) && PLAYER_ID.test(member.id || '')) };
+}
+
 function cleanWallet(wallet) {
   if (!wallet || typeof wallet !== 'object' || Array.isArray(wallet)) throw new Error('Invalid stored player wallet');
   const coins = Number(wallet && wallet.coins), xp = Number(wallet && wallet.xp);
@@ -104,6 +112,13 @@ function initialInventory(inventory) {
   return cleanInventory({ owned, rod });
 }
 
+/** How much this player's devices have added to the account today ({ d: Mongolia day, coins, xp }), for the daily earn cap. */
+function cleanEarned(earned) {
+  const count = (value) => Number.isSafeInteger(value) && value > 0 ? Math.min(WALLET_MAX, value) : 0;
+  if (!earned || typeof earned !== 'object' || Array.isArray(earned) || !/^\d{4}-\d{2}-\d{2}$/.test(earned.d || '')) return { d: '', coins: 0, xp: 0 };
+  return { d: earned.d, coins: count(earned.coins), xp: count(earned.xp) };
+}
+
 function isRecord(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -120,6 +135,8 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
   const identityFile = path.join(dataDir, 'identities.json');
   const walletFile = path.join(dataDir, 'wallets.json');
   const progressFile = path.join(dataDir, 'progress.json');
+  const familyFile = path.join(dataDir, 'families.json');
+  const deviceTicketFile = path.join(dataDir, 'device-tickets.json');
 
   if (!databaseUrl) {
     return {
@@ -139,10 +156,47 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) return false;
         const identities = readIdentityFile(identityFile);
         const digest = ticketHash(ticket);
-        if (Object.hasOwn(identities, id)) return sameTicketHash(identities[id], ticket);
+        if (Object.hasOwn(identities, id)) {
+          if (sameTicketHash(identities[id], ticket)) return true;
+          const devices = readLegacyFile(deviceTicketFile, 'device tickets');
+          return Object.hasOwn(devices, id) && Array.isArray(devices[id]) && devices[id].some((hash) => sameTicketHash(hash, ticket));
+        }
         Object.defineProperty(identities, id, { value: digest, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(identityFile, identities);
         return true;
+      },
+      async addDeviceTicket(id, ticket) {
+        if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) throw new Error('Invalid device ticket');
+        const devices = readLegacyFile(deviceTicketFile, 'device tickets');
+        const hashes = Object.hasOwn(devices, id) && Array.isArray(devices[id]) ? devices[id] : [];
+        hashes.push(ticketHash(ticket));
+        Object.defineProperty(devices, id, { value: hashes.slice(-DEVICE_TICKETS_MAX), writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(deviceTicketFile, devices);
+      },
+      async createFamily(code, member) {
+        if (!FAMILY_CODE.test(code || '')) throw new Error('Invalid family code');
+        const families = readLegacyFile(familyFile, 'families');
+        if (Object.hasOwn(families, code)) return false;
+        Object.defineProperty(families, code, { value: { members: [member] }, writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(familyFile, families);
+        return true;
+      },
+      async getFamily(code) {
+        if (!FAMILY_CODE.test(code || '')) return null;
+        const families = readLegacyFile(familyFile, 'families');
+        return Object.hasOwn(families, code) ? cleanFamily(families[code]) : null;
+      },
+      /** mutate(family or null) returns { changed, result }; a changed family is saved. */
+      async mutateFamily(code, mutate) {
+        if (!FAMILY_CODE.test(code || '')) return mutate(null).result;
+        const families = readLegacyFile(familyFile, 'families');
+        const family = Object.hasOwn(families, code) ? cleanFamily(families[code]) : null;
+        const outcome = mutate(family);
+        if (family && outcome.changed) {
+          Object.defineProperty(families, code, { value: family, writable: true, configurable: true, enumerable: true });
+          writeIdentityFile(familyFile, families);
+        }
+        return outcome.result;
       },
       async getAccount(id, initial = {}, inventorySeed = {}) {
         if (!PLAYER_ID.test(id || '')) throw new Error('Invalid player id for wallet');
@@ -174,13 +228,15 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         if (Object.hasOwn(stored.operations, operation)) {
           return { wallet: cleanWallet(stored), inventory, result: stored.operations[operation], duplicate: true };
         }
-        const outcome = mutate(cleanWallet(stored), inventory);
+        const earned = cleanEarned(stored.earned);
+        const outcome = mutate(cleanWallet(stored), inventory, earned);
         const current = cleanWallet(stored);
         const wallet = {
           ...cleanWallet(outcome && outcome.changed ? { ...outcome.wallet, revision: current.revision + 1 } : stored),
           operations: stored.operations,
         };
         wallet.inventory = outcome && outcome.changed && outcome.inventory ? cleanInventory(outcome.inventory) : inventory;
+        wallet.earned = outcome && outcome.changed && outcome.earned ? cleanEarned(outcome.earned) : earned;
         const result = outcome && outcome.result ? outcome.result : { accepted: false };
         wallet.operations[operation] = result;
         const oldOperations = Object.keys(wallet.operations).filter((key) => !key.startsWith('quest:') && !key.startsWith('activity:') && !key.startsWith('wrestle:'));
@@ -281,6 +337,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         `);
         await client.query(`ALTER TABLE naadamy_wallets ADD COLUMN IF NOT EXISTS inventory jsonb NOT NULL DEFAULT '{"owned":["deel-blue"],"rod":1}'::jsonb`);
         await client.query('ALTER TABLE naadamy_wallets ADD COLUMN IF NOT EXISTS inventory_migrated boolean NOT NULL DEFAULT false');
+        await client.query(`ALTER TABLE naadamy_wallets ADD COLUMN IF NOT EXISTS earned jsonb NOT NULL DEFAULT '{}'::jsonb`);
         await client.query(`
           CREATE TABLE IF NOT EXISTS naadamy_wallet_ops (
             player_id text NOT NULL,
@@ -298,10 +355,27 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             updated_at timestamptz NOT NULL DEFAULT now()
           )
         `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_player_tickets (
+            player_id text NOT NULL,
+            ticket_hash text NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (player_id, ticket_hash)
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_families (
+            code text PRIMARY KEY,
+            members jsonb NOT NULL DEFAULT '[]'::jsonb,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now()
+          )
+        `);
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_players_room_idx ON naadamy_players (room_code)');
         // Supabase serves every public table over its REST API to anyone with the project's anon key. Row level security with
         // no policies closes that door; the server connects as the tables' owner, which RLS does not apply to.
-        for (const table of ['naadamy_rooms', 'naadamy_players', 'naadamy_identities', 'naadamy_wallets', 'naadamy_wallet_ops', 'naadamy_player_progress']) {
+        for (const table of ['naadamy_rooms', 'naadamy_players', 'naadamy_identities', 'naadamy_wallets', 'naadamy_wallet_ops', 'naadamy_player_progress',
+          'naadamy_player_tickets', 'naadamy_families']) {
           await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
         }
         for (const [code, state] of Object.entries(legacy)) {
@@ -359,9 +433,65 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         );
         if (inserted.rows.length) return true;
         const existing = await client.query('SELECT ticket_hash FROM naadamy_identities WHERE id = $1', [id]);
-        return Boolean(existing.rows[0] && sameTicketHash(existing.rows[0].ticket_hash, ticket));
+        if (!existing.rows[0]) return false;
+        if (sameTicketHash(existing.rows[0].ticket_hash, ticket)) return true;
+        // another device this player logged in on with the family code
+        const device = await client.query('SELECT 1 FROM naadamy_player_tickets WHERE player_id = $1 AND ticket_hash = $2', [id, digest]);
+        return device.rows.length > 0;
       } catch (error) {
         throw new Error(`Could not authenticate player identity: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    async addDeviceTicket(id, ticket) {
+      if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) throw new Error('Invalid device ticket');
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('INSERT INTO naadamy_player_tickets (player_id, ticket_hash) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, ticketHash(ticket)]);
+        await client.query(
+          `DELETE FROM naadamy_player_tickets WHERE player_id = $1 AND ticket_hash NOT IN (
+             SELECT ticket_hash FROM naadamy_player_tickets WHERE player_id = $1 ORDER BY created_at DESC LIMIT $2)`,
+          [id, DEVICE_TICKETS_MAX],
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back device ticket:', rollbackError.message); }
+        throw new Error(`Could not save device ticket: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    async createFamily(code, member) {
+      if (!FAMILY_CODE.test(code || '')) throw new Error('Invalid family code');
+      const result = await pool.query(
+        'INSERT INTO naadamy_families (code, members) VALUES ($1, $2::jsonb) ON CONFLICT (code) DO NOTHING RETURNING code',
+        [code, JSON.stringify([member])],
+      );
+      return result.rows.length > 0;
+    },
+    async getFamily(code) {
+      if (!FAMILY_CODE.test(code || '')) return null;
+      const result = await pool.query('SELECT members FROM naadamy_families WHERE code = $1', [code]);
+      return result.rows[0] ? cleanFamily(result.rows[0]) : null;
+    },
+    async mutateFamily(code, mutate) {
+      if (!FAMILY_CODE.test(code || '')) return mutate(null).result;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const row = await client.query('SELECT members FROM naadamy_families WHERE code = $1 FOR UPDATE', [code]);
+        const family = row.rows[0] ? cleanFamily(row.rows[0]) : null;
+        const outcome = mutate(family);
+        if (family && outcome.changed) {
+          await client.query('UPDATE naadamy_families SET members = $2::jsonb, updated_at = now() WHERE code = $1', [code, JSON.stringify(family.members)]);
+        }
+        await client.query('COMMIT');
+        return outcome.result;
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back family change:', rollbackError.message); }
+        throw new Error(`Could not save family: ${error.message}`, { cause: error });
       } finally {
         client.release();
       }
@@ -398,7 +528,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const selected = await client.query('SELECT coins, xp, revision, inventory FROM naadamy_wallets WHERE id = $1 FOR UPDATE', [id]);
+        const selected = await client.query('SELECT coins, xp, revision, inventory, earned FROM naadamy_wallets WHERE id = $1 FOR UPDATE', [id]);
         if (!selected.rows[0]) throw new Error('wallet record does not exist');
         const previous = cleanWallet(selected.rows[0]);
         const inventory = cleanInventory(selected.rows[0].inventory);
@@ -410,9 +540,10 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           await client.query('COMMIT');
           return { wallet: previous, inventory, result: priorOperation.rows[0].result, duplicate: true };
         }
-        const outcome = mutate(previous, inventory);
+        const earned = cleanEarned(selected.rows[0].earned);
+        const outcome = mutate(previous, inventory, earned);
         if (!outcome || !outcome.changed) {
-          const result = outcome || { accepted: false };
+          const result = outcome && outcome.result ? outcome.result : { accepted: false };
           await client.query(
             'INSERT INTO naadamy_wallet_ops (player_id, operation_id, result) VALUES ($1, $2, $3::jsonb)',
             [id, operation, JSON.stringify(result)],
@@ -422,9 +553,10 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         }
         const wallet = cleanWallet({ ...outcome.wallet, revision: previous.revision + 1 });
         const nextInventory = outcome.inventory ? cleanInventory(outcome.inventory) : inventory;
+        const nextEarned = outcome.earned ? cleanEarned(outcome.earned) : earned;
         await client.query(
-          'UPDATE naadamy_wallets SET coins = $2, xp = $3, revision = $4, inventory = $5::jsonb, updated_at = now() WHERE id = $1',
-          [id, wallet.coins, wallet.xp, wallet.revision, JSON.stringify(nextInventory)],
+          'UPDATE naadamy_wallets SET coins = $2, xp = $3, revision = $4, inventory = $5::jsonb, earned = $6::jsonb, updated_at = now() WHERE id = $1',
+          [id, wallet.coins, wallet.xp, wallet.revision, JSON.stringify(nextInventory), JSON.stringify(nextEarned)],
         );
         await client.query(
           'INSERT INTO naadamy_wallet_ops (player_id, operation_id, result) VALUES ($1, $2, $3::jsonb)',

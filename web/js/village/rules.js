@@ -6,7 +6,7 @@
   else { root.TG = root.TG || {}; root.TG.vrules = api; }
 })(typeof self !== 'undefined' ? self : this, function () {
   const W = 56, H = 40, LOTS = 8;
-  const VERSION = 12; // bump when the game and server must change together (moves, messages), so an old running server is noticed
+  const VERSION = 13; // bump when the game and server must change together (moves, messages), so an old running server is noticed
   const T = (mn, en) => ({ mn, en });
 
   // The herding and dairy yard (хот айл): animals you milk, and the white foods (цагаан идээ) you make from the milk.
@@ -46,6 +46,9 @@
   const DAILY_ACTIVITY_REWARDS = {
     rest: { coins: 5, xp: 10 }, snack: { coins: 0, xp: 5 }, churn: { coins: 0, xp: 5 },
   };
+  // The most coins and XP one player's device can add to the server account in one Mongolia day (offline play and online play together).
+  // What goes over stays on the device and is uploaded on a later day, so offline progress is never thrown away.
+  const DAILY_EARN_CAP = { coins: 1500, xp: 2000 };
   const DAILY_QUEST_POOL = ['milk', 'dairy', 'milk', 'fish', 'basar', 'quiz', 'pet', 'sell', 'basar', 'quiz', 'eat'];
   const SEASON_TASKS = {
     spring: ['pet', 'milk'], summer: ['race', 'archery', 'fish'],
@@ -260,5 +263,5 @@
   }
 
   return { GER_STEPS, GER_DONE, GER_NEEDS, gerTry, gerUse, TRADES, COVER_PRICE, tradeCost, SHEAR_WOOL, SHEAR_REGROW_MS, FELT_WOOL, lotStage, unisTilt, HANDS_ON, handsOn,
-    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, DAILY_QUEST_REWARDS, DAILY_ACTIVITY_REWARDS, dailyQuests, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
+    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, DAILY_QUEST_REWARDS, DAILY_ACTIVITY_REWARDS, DAILY_EARN_CAP, dailyQuests, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
 });

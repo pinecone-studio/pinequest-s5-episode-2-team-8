@@ -1,7 +1,7 @@
 # Naadamy multiplayer protocol
 
 This is how a game client (the web game today, maybe a Unity client later) talks to `server/server.js`.
-It describes protocol **version 12** (`VERSION` in `web/js/village/rules.js`). Unity speaks the same protocol from `unity/Assets/Scripts/Net.cs`.
+It describes protocol **version 13** (`VERSION` in `web/js/village/rules.js`). Unity speaks the same protocol from `unity/Assets/Scripts/Net.cs`.
 
 - Transport: WebSocket at `ws://<host>/ws` (`wss://` on HTTPS).
 - Every message is one JSON text frame: an object with a `t` (type) field.
@@ -21,6 +21,28 @@ Shared lists (phrases, emotes, looks, roofs, moves…) live in `js/village/rules
 ```
 
 `nutag` = players in the main room `NUTAG`. `urls` = LAN addresses that other devices can open.
+
+## Family login
+
+`POST /api/family` (JSON, at most 4 KB) lets a child play as the same player on another device. A grown-up makes a **family code** from the parent dashboard. Each child is added to the family with their 3 secret pictures. On another device, the child enters the family code, picks their name and taps the same pictures. The server then gives that device its own ticket for the child's player `id`, so it has the same coins, XP and clothes. Nothing else from the first device comes along yet: lessons, character and other local progress stay on the device they were made on.
+
+| `act` | Fields | Answer when `ok` |
+|---|---|---|
+| `create` | `id, ticket, name, age, avatar, pics` | `{ ok, code }`: a new family with this child in it |
+| `join` | `code, id, ticket, name, age, avatar, pics` | `{ ok, code }`: adds the child, or replaces their name, age, avatar and pictures (this also lifts a lock) |
+| `members` | `code` | `{ ok, members: [{ id, name, age, avatar, locked }] }` |
+| `login` | `code, id, pics` | `{ ok, id, ticket, name, age, avatar, code }`: `ticket` is new and belongs to this device |
+
+- `code`: 8 letters and digits from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown as `ABCD-2345`. Lower case, spaces and dashes are allowed when sending it.
+- `pics`: 3 picture indexes 0–8, in order (`TG.PIC_KEYS` on the web; Unity's `PicKey(i)` uses the same order). `avatar`: a mascot index 0–11. `name`: up to 20 characters.
+- `create` and `join` need the child's own `id` and `ticket`, so only a device that already plays as that child can add or change it.
+- A family has at most 8 children.
+- After 5 wrong `login` tries, that child is locked for 15 minutes (`reason: 'locked'`, `wait` in seconds). A wrong try answers `reason: 'wrong'` with `left` tries.
+- Each address gets at most 30 requests a minute (`429`, `reason: 'busy'`). Behind Render's proxy, the last `X-Forwarded-For` entry is used.
+- Other `reason` values: `invalid`, `identity`, `no-family`, `full`, `storage`.
+- Pictures are stored as a salted scrypt hash. With only 729 combinations, the lock is what protects them, not the hash.
+
+The web client keeps `familyCode` in its stored state, and `fam` (the family code) on each profile that is in the family.
 
 ## Connection flow
 
@@ -56,6 +78,7 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 | `jump` | (none) | Shows a jump to others. At most once every 300 ms; extra ones are dropped. |
 | `look` | `look, lvl` | Changed outfit; the server derives the shared level from canonical XP and ignores the submitted `lvl`. |
 | `wallet-op` | `op, action, coins, xp` | Authenticated wallet transaction. `op` is a 32-character hex idempotency key. Only `action: 'spend'` is accepted; it requires 1–10,000 coins and zero XP, and is rejected if the server balance is too low. Client-submitted rewards are denied with `reason: 'server-only'`. |
+| `sync` | `op, coins, xp, owned, rod?` | Upload progress the device made since it last saw its server wallet (see **Uploading progress**). `op` is a 32-character hex idempotency key; `coins` is the net change (negative when the device spent more than it earned), `xp` the XP gained, `owned` the device's shop item ids, `rod` its fishing-rod level. |
 | `shop-buy` | `op, item` | Buy a catalog shop item. The server looks up its price and level requirement in `rules.js`, checks canonical ownership and wallet balance, then atomically records ownership and deducts the price. |
 | `progress-save` | legacy `revision, state` | Rejected with `reason: 'server-only'`. Gameplay progress remains local until each activity is validated by the server. Legacy progress snapshots are neither imported on join nor returned as canonical data. |
 | `quest-claim` | `quest` | Legacy claim message. Known quests are rejected with `reason: 'server-only'` until the server can verify quest progress; unknown quests are rejected as `invalid`. |
@@ -69,12 +92,22 @@ Public player object (`pub`): `{ id, name, look, lvl, x, y, dir }`.
 ### Chat log
 Each room keeps its last **30** lines: phrases, emotes, joins and leaves. The log is sent in `welcome.chat`, so a player who joins late sees what was said. The server saves this bounded log alongside room lots every 5 seconds when changed and on shutdown. Without `DATABASE_URL`, the store is `DATA_DIR/rooms.json`; with `DATABASE_URL`, it is the `naadamy_rooms` PostgreSQL table. PostgreSQL startup imports room codes missing from the database from the legacy JSON file without overwriting existing database rows. Older room records without a `chat` field start with an empty log. On load, entries are validated against the preset phrase/emote lists and cleaned before being sent to players.
 
-When PostgreSQL is configured, each server records active players in `naadamy_players` and device-local identity ticket hashes in `naadamy_identities`; PostgreSQL `LISTEN`/`NOTIFY` shares room joins, leaves, moves, looks, jumps, preset chat, ger updates and wrestling messages across instances. Names, ages and raw tickets are not stored in the identity table. Wallet balances and the limited shop inventory are stored in `naadamy_wallets`; successful and rejected operation ids are recorded in `naadamy_wallet_ops` for idempotent retries. New accounts use server-defined starter wallet/inventory values; existing server-side accounts keep their saved state. Client-local wallet and shop ownership are not migrated. Legacy progress records may remain in `naadamy_player_progress` or `DATA_DIR/progress.json`, but the multiplayer protocol no longer imports, returns, or updates client-reported progress. In single-server JSON mode, ticket hashes and wallet/inventory are stored separately in `DATA_DIR/identities.json` and `DATA_DIR/wallets.json`. Ger claims and edits, wrestling invitations, match starts, moves, timeouts and forfeits are applied while holding a row lock on the room snapshot, so concurrent servers cannot claim one lot twice or resolve a wrestling round twice. Notifications are enqueued inside the same transaction as each wrestling update. Snapshot saves update chat without overwriting the transactionally updated ger or wrestling state. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, room realtime behavior remains single-server and in-process.
+When PostgreSQL is configured, each server records active players in `naadamy_players` and device-local identity ticket hashes in `naadamy_identities`; PostgreSQL `LISTEN`/`NOTIFY` shares room joins, leaves, moves, looks, jumps, preset chat, ger updates and wrestling messages across instances. Names, ages and raw tickets are not stored in the identity table. Wallet balances and the limited shop inventory are stored in `naadamy_wallets`; successful and rejected operation ids are recorded in `naadamy_wallet_ops` for idempotent retries. New accounts use server-defined starter wallet/inventory values; existing server-side accounts keep their saved state. Progress made on a device reaches these tables through capped `sync` uploads; `naadamy_wallets.earned` keeps today's uploaded total for the daily cap. Legacy progress records may remain in `naadamy_player_progress` or `DATA_DIR/progress.json`, but the multiplayer protocol no longer imports, returns, or updates client-reported progress. Families are in `naadamy_families` (the children as `members` jsonb, with each child's salted picture hash and wrong-try count). Tickets from family logins are in `naadamy_player_tickets`, up to 8 per player. In single-server JSON mode, ticket hashes and wallet/inventory are stored separately in `DATA_DIR/identities.json` and `DATA_DIR/wallets.json`, and families and family-login tickets in `DATA_DIR/families.json` and `DATA_DIR/device-tickets.json`. Ger claims and edits, wrestling invitations, match starts, moves, timeouts and forfeits are applied while holding a row lock on the room snapshot, so concurrent servers cannot claim one lot twice or resolve a wrestling round twice. Notifications are enqueued inside the same transaction as each wrestling update. Snapshot saves update chat without overwriting the transactionally updated ger or wrestling state. Presence expires after 60 seconds without a server heartbeat. Without PostgreSQL, room realtime behavior remains single-server and in-process.
 
 ### Wallet (coins and XP)
-The server returns canonical `{ coins, xp, revision }` in `welcome.wallet` and after every `wallet-op` as `wallet-result { op, accepted, reason?, wallet }`. A successful `shop-buy` returns `inventory-result { op, accepted, wallet, inventory }`. Shop inventory is limited to owned wardrobe/pet item ids plus the fishing-rod level; official item cost and level requirements are read from `rules.js`. A successful shop purchase checks canonical balance and ownership and changes both atomically. Wallet and shop records persist across server restarts and, with PostgreSQL, across server instances. New server accounts start with the server-defined starter wallet and inventory; existing server-side accounts keep their persisted balances and ownership. Client-reported local wallet and shop ownership are not imported. Balances initially imported by earlier server versions remain stored and cannot be retroactively verified.
+The server returns canonical `{ coins, xp, revision }` in `welcome.wallet` and after every `wallet-op` as `wallet-result { op, accepted, reason?, wallet }`. A successful `shop-buy` returns `inventory-result { op, accepted, wallet, inventory }`. Shop inventory is limited to owned wardrobe/pet item ids plus the fishing-rod level; official item cost and level requirements are read from `rules.js`. A successful shop purchase checks canonical balance and ownership and changes both atomically. Wallet and shop records persist across server restarts and, with PostgreSQL, across server instances. New server accounts start with the server-defined starter wallet and inventory; existing server-side accounts keep their persisted balances and ownership. Wallet and shop progress made on the device is added through `sync` (see **Uploading progress**), not taken from `join`. Balances initially imported by earlier server versions remain stored and cannot be retroactively verified.
 
-The server enforces non-negative balances, operation size limits, shop catalog prices/levels, duplicate ownership checks and idempotency. Daily quest and ger-activity claims are rejected until their underlying gameplay can be verified by the server. Live player-versus-player wrestling rewards are determined from the server-resolved match result and granted once per match. Arbitrary client-submitted wallet rewards are denied; lesson and minigame rewards that do not yet have server-verified outcomes are unavailable while connected. Client-reported progress is not persisted online. Energy and most other gameplay outcomes remain local.
+The server enforces non-negative balances, operation size limits, shop catalog prices/levels, duplicate ownership checks and idempotency. Daily quest and ger-activity claims are rejected until their underlying gameplay can be verified by the server. Live player-versus-player wrestling rewards are determined from the server-resolved match result and granted once per match. `wallet-op` rewards are denied; other rewards reach the account through capped `sync` uploads. Client-reported progress snapshots are not persisted online. Energy and most other gameplay outcomes remain local.
+
+### Uploading progress
+Rewards (lessons, minigames, quests, home activities…) and spending happen on the device, online or not. The device remembers the server wallet and shop list it last saw; what it has on top of them is progress not uploaded yet. After `welcome`, and shortly after each reward while connected, it sends one `sync` with that difference:
+
+- Coins and XP count against the player's daily earn cap `DAILY_EARN_CAP` (`rules.js`, per `Asia/Ulaanbaatar` day, offline and online play together). What goes over is not applied; the device keeps it and uploads it on a later day, so offline progress is never thrown away.
+- Negative coins (spent on the device) come off the balance, down to zero.
+- Shop items are combined with the account's: known catalog items whose level the player has reached. The fishing rod only goes up.
+- The device saves the `op` with its profile and sends the same one again until it gets the answer, so a dropped connection or a reload never counts an upload twice. On the answer the device takes the server wallet and keeps anything it earned since on top.
+
+A profile from before uploads existed (no identity ticket yet) starts from the server's starter wallet, so everything it earned is uploaded on its first join. Each server keeps its own accounts.
 
 A log line is `{ k, id, n, i? }`:
 - `k`: `'p'` phrase, `'e'` emote, `'join'`, `'leave'`.
@@ -114,6 +147,7 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 | `look` | `id, look, lvl` | Someone changed outfit or level. |
 | `say` | `id, k, i` | Someone said a phrase or emote (your own included). |
 | `wallet-result` | `op, accepted, reason?, wallet` | Reply to `wallet-op`. Returns the canonical wallet after the operation. `reason` may be `insufficient`, `server-only`, `invalid` or `storage`. |
+| `sync-result` | `op, accepted, applied?, reason?, wallet, inventory` | Reply to `sync`. `applied` = `{ coins, xp }` actually added (less than sent when the daily cap is reached; coins spent stop at a zero balance). A repeated `op` returns the first answer without counting again. `reason` may be `invalid` or `storage`. |
 | `inventory-result` | `op, accepted, reason?, wallet, inventory` | Reply to `shop-buy`. Returns canonical wallet and limited shop inventory. `reason` may be `owned`, `level`, `insufficient`, `invalid` or `storage`. |
 | `progress-result` | `accepted, revision, reason?` | Reply to legacy `progress-save`. Current servers always return `accepted: false`, `reason: 'server-only'`, and revision `0`; no client progress is returned. |
 | `census` | `total, nutag` | Player counts across the whole server; sent whenever anyone joins or leaves. |
@@ -139,10 +173,10 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 ## What the server trusts the client with
 
 Good to know before building on this:
-- **Identity:** the server verifies a random ticket bound to each profile id. Tickets remain on the device and cannot be recovered or used to sync a profile to another device; anyone who obtains a ticket can act as that profile. Use HTTPS/WSS outside a trusted local network.
+- **Identity:** the server verifies a random ticket bound to each profile id. A ticket stays on its device and cannot be recovered. A child in a family can get a new ticket on another device with the family code and their 3 pictures (see [Family login](#family-login)); without a family, a lost ticket means that profile cannot reclaim its online identity. Anyone who obtains a ticket, or the family code and a child's pictures, can act as that child. Use HTTPS/WSS outside a trusted local network.
 - **Position:** the server owns spawn/active position, movement speed, and static map collision. Position enforcement is not a complete proof of every local game interaction.
-- **Progress:** coins and XP balances persist server-side. The server denies generic client reward requests, client-reported quest/ger-activity claims, and client progress snapshots. New accounts receive a fixed starter wallet and inventory; existing server-side balances and ownership remain canonical. Purchases are checked against canonical balance, ownership, catalog prices and level. Dairy/fish counts, daily quest progress, energy and other unverified gameplay outcomes stay local until the server can validate them.
-- The server is the source of truth for **authenticated player ids, shared room state, wallet balances, limited shop ownership, live PvP wrestling payouts and levels derived from canonical XP**. With PostgreSQL, shared room state and account changes work across instances. Progress snapshots synchronize storage, not achievement verification. Server-verified rewards are limited to outcomes the server resolves itself; lesson, minigame, quest and ger-activity wallet rewards are unavailable online until their outcomes are verified.
+- **Progress:** coins and XP balances persist server-side. Rewards are earned on the device and uploaded with `sync`; the server cannot verify them, so it limits what a device can add per day (`DAILY_EARN_CAP`) and checks shop items against the catalog and the player's level. The server denies `wallet-op` rewards, the legacy quest/ger-activity claims, and client progress snapshots. New accounts receive a fixed starter wallet and inventory; existing server-side balances and ownership remain canonical. Purchases are checked against canonical balance, ownership, catalog prices and level. Dairy/fish counts, daily quest progress, energy and other unverified gameplay outcomes stay local until the server can validate them.
+- The server is the source of truth for **authenticated player ids, shared room state, wallet balances, limited shop ownership, live PvP wrestling payouts and levels derived from canonical XP**. With PostgreSQL, shared room state and account changes work across instances. Progress snapshots synchronize storage, not achievement verification. Server-verified rewards are limited to outcomes the server resolves itself (live wrestling); everything else the device earned is uploaded with `sync` and held to the daily earn cap.
 
 ## Changing the protocol
 

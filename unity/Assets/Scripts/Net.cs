@@ -16,7 +16,7 @@ using System.Runtime.InteropServices;
 
 public sealed class Net
 {
-    public const int VERSION = 12;
+    public const int VERSION = 13;
     public static readonly Tx[] PHRASES =
     {
         new Tx("Сайн уу!", "Hi!"), new Tx("Хамт тоглоё!", "Let's play!"), new Tx("Баярлалаа!", "Thank you!"), new Tx("Энд ир!", "Come here!"),
@@ -42,6 +42,7 @@ public sealed class Net
     ClientWebSocket ws; CancellationTokenSource cts; readonly ConcurrentQueue<string> inbox = new ConcurrentQueue<string>(), outbox = new ConcurrentQueue<string>();
     readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0); int retry; float retryAt = -1; bool closed = true;
     float moveT, lookT; Vector2 sent = new Vector2(-99, -99); string sentLook;
+    long walletRev = -1; bool syncing; float syncAt = -1, syncSentAt; string serverDay = "", capDay = "";
 #if UNITY_WEBGL && !UNITY_EDITOR
     // in a browser there are no threads: the socket is the browser's own (Plugins/WebGL/NaadamyWs.jslib), read every frame in Tick
     [DllImport("__Internal")] static extern void NaadamyWsOpen(string url);
@@ -172,6 +173,8 @@ public sealed class Net
             if (d > 6) { o.px = o.x; o.py = o.y; } else { float a = Mathf.Min(1, dt * 10); o.px += dx * a; o.py += dy * a; }
         }
         if (!Online || g.V == null) return;
+        if (syncing && Time.realtimeSinceStartup - syncSentAt > 8) syncing = false; // no answer: the same upload goes again later
+        if (syncAt > 0 && Time.realtimeSinceStartup > syncAt) { syncAt = -1; Sync(g); }
         moveT += dt; lookT += dt;
         var me = new Vector2(g.MyX, g.MyY); float moved = (me - sent).magnitude;
         if ((moveT > 0.1f && moved > 0.03f) || (moved > 0.001f && moveT > 0.4f)) { moveT = 0; sent = me; Send("{" + Obj("t", "move") + "," + Raw("x", F2(me.x)) + "," + Raw("y", F2(me.y)) + "," + Raw("dir", g.MyDir.ToString()) + "}"); }
@@ -184,7 +187,7 @@ public sealed class Net
         switch (t)
         {
             case "_closed":
-                ws = null; bool was = Online; others.Clear(); lots = null; g.EndRemoteMatch();
+                ws = null; bool was = Online; others.Clear(); lots = null; g.EndRemoteMatch(); syncing = false;
                 if (closed) { status = "solo"; return; }
                 if (replaced) { status = "solo"; closed = true; return; }
                 status = "reconnecting"; retryAt = Time.realtimeSinceStartup + Mathf.Min(10, 1.5f * ++retry);
@@ -211,35 +214,10 @@ public sealed class Net
                 g.Toast(Loc.L("Нутагт холбогдлоо", "Connected to the village") + " · " + room + (others.Count > 0 ? " · " + others.Count + Loc.L(" найз байна", " friends here") : ""));
                 if (m["v"].I != VERSION) g.Toast(Loc.L("Сервер хуучин хувилбартай байна. Серверийг дахин асаагаарай.", "The server runs an old version. Please restart it."));
                 chat.Clear(); foreach (var c in m["chat"]) chat.Add(ChatOf(c)); if (chat.Count > CHAT_KEEP) chat.RemoveRange(0, chat.Count - CHAT_KEEP);
-                // Apply server wallet/inventory/look/position if present (with merge handled elsewhere where possible)
-                if (m["wallet"] != null && !m["wallet"].IsNull)
-                {
-                    try
-                    {
-                        int c = m["wallet"]["coins"].I; int x = m["wallet"]["xp"].I;
-                        if (g.V != null)
-                        {
-                            // For new accounts only - do not clobber offline gains blindly; merge handled by caller when needed
-                            if (g.V.coins == 40 && g.V.xp == 0 && c != 40) { g.V.coins = c; g.V.xp = x; }
-                            else if (g.V.coins == 40 && g.V.xp == 0) { g.V.coins = c; g.V.xp = x; }
-                        }
-                    }
-                    catch (Exception) { }
-                }
-                if (m["inventory"] != null && !m["inventory"].IsNull && g.V != null)
-                {
-                    try
-                    {
-                        if (g.V.owned == null || g.V.owned.Count == 0 || (g.V.owned.Count == 1 && g.V.owned[0] == "deel-blue" && g.V.coins == 40 && g.V.xp == 0))
-                        {
-                            g.V.owned = new List<string>();
-                            foreach (var o in m["inventory"]["owned"]) if (!o.IsNull) g.V.owned.Add(o.S);
-                            if (!g.V.owned.Contains("deel-blue")) g.V.owned.Insert(0, "deel-blue");
-                            g.V.rod = m["inventory"]["rod"].I == 2 ? 2 : 1;
-                        }
-                    }
-                    catch (Exception) { }
-                }
+                // the server wallet, with this device's not-yet-uploaded progress kept on top; an upload still on its way settles it instead
+                walletRev = -1; syncing = false; serverDay = m["day"].S ?? SaveData.DayKey();
+                if (g.V != null && string.IsNullOrEmpty(g.V.syncOp)) ApplyWallet(g, m["wallet"]);
+                ApplyInventory(g, m["inventory"]);
                 if (m["look"] != null && !m["look"].IsNull && g.V != null)
                 {
                     try { var l = LookOf(m["look"]); if (!string.IsNullOrEmpty(l.deel)) g.V.look = l; } catch (Exception) { }
@@ -249,6 +227,7 @@ public sealed class Net
                     try { float pxv = m["position"]["x"].F; float pyv = m["position"]["y"].F; if (pxv >= 0.5f && pxv <= Rules.W - 2 && pyv >= 0.5f && pyv <= Rules.H - 2) { g.V.posX = pxv; g.V.posY = pyv; g.V.hasPos = true; } } catch (Exception) { }
                 }
                 g.GerSync(); // my ger, started while playing alone, comes along to a free plot
+                Sync(g);
                 return;
             case "join": AddOther(m["p"]); AddChat(g, new ChatLine { k = "join", id = m["p"]["id"].S, n = m["p"]["name"].S }); g.Toast(m["p"]["name"].S + Loc.L(" нутагт ирлээ", " joined the village")); return;
             case "leave": if (others.TryGetValue(m["id"].S, out var gone)) AddChat(g, new ChatLine { k = "leave", id = gone.id, n = gone.name }); others.Remove(m["id"].S); return;
@@ -282,7 +261,27 @@ public sealed class Net
                 return;
             case "wallet-result":
             case "inventory-result":
+                ApplyWallet(g, m["wallet"]); ApplyInventory(g, m["inventory"]); // e.g. a live wrestling prize
                 return;
+            case "sync-result":
+            {
+                var V = g.V; if (V == null) return;
+                if (string.IsNullOrEmpty(V.syncOp) || m["op"].S != V.syncOp) { ApplyWallet(g, m["wallet"]); ApplyInventory(g, m["inventory"]); return; }
+                syncing = false;
+                if (m["accepted"].B)
+                {
+                    int ac = m["applied"]["coins"].I, ax = m["applied"]["xp"].I, sc = V.syncCoins, sx = V.syncXp;
+                    V.syncOp = ""; ApplyWallet(g, m["wallet"], ac, ax); ApplyInventory(g, m["inventory"]);
+                    if (sc > ac || sx > ax)
+                    {
+                        if (capDay != serverDay) g.Toast(Loc.L("Өнөөдрийн шагналын дээд хэмжээнд хүрлээ. Үлдсэн нь энэ төхөөрөмж дээр хадгалагдаж, маргааш серверт орно.", "Today’s reward limit is reached. The rest is kept on this device and uploaded tomorrow."));
+                        capDay = serverDay;
+                    }
+                    else if (V.coins != V.srvCoins || V.xp > V.srvXp) QueueSync(); // earned while the upload was on its way
+                }
+                else if (m["reason"].S == "invalid") { V.syncOp = ""; V.Save(); }
+                return;
+            }
             case "wr-invite": case "wr-declined": case "wr-start": case "wr-wait": case "wr-result": case "wr-end": g.OnWrestleMsg(m); return;
         }
     }
@@ -296,6 +295,63 @@ public sealed class Net
     public void WrMove(string move, float p) => Send("{" + Obj("t", "wr-move", "m", move) + "," + Raw("p", F2(p)) + "}");
     public void WalletOp(string op, string action, int coins, int xp) => Send("{" + Obj("t", "wallet-op", "op", op, "action", action) + "," + Raw("coins", coins.ToString()) + "," + Raw("xp", xp.ToString()) + "}");
     public void ShopBuy(string op, string item) => Send("{" + Obj("t", "shop-buy", "op", op, "item", item) + "}");
+
+    // ---------------------------------------------------------------- uploading progress (like village.js's net.sync)
+    // Rewards and spending happen on the device. What it has on top of the server wallet it last saw is uploaded; the server adds
+    // it within a daily cap, and what goes over stays here and goes up on a later day.
+    static string NewOp()
+    {
+        var bytes = new byte[16];
+        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create()) rng.GetBytes(bytes);
+        var sb = new StringBuilder(32); foreach (var b in bytes) sb.Append(b.ToString("x2"));
+        return sb.ToString();
+    }
+    /** A save from before uploads existed starts from the server's starter account, so everything it earned goes up. */
+    static void Base(SaveData V)
+    {
+        if (V.hasSrv) return;
+        V.hasSrv = true; V.srvCoins = 40; V.srvXp = 0; V.srvRod = 1; V.srvOwned = new List<string> { "deel-blue" };
+    }
+    public void QueueSync() => syncAt = Time.realtimeSinceStartup + 0.8f;
+    void Sync(Game g)
+    {
+        var V = g.V; if (!Online || V == null || syncing) return;
+        Base(V);
+        if (string.IsNullOrEmpty(V.syncOp))
+        {
+            bool capped = capDay == serverDay; // over today's cap: coins and XP wait for tomorrow
+            int coins = V.coins - V.srvCoins, xp = Math.Max(0, V.xp - V.srvXp);
+            if (capped) { coins = Math.Min(0, coins); xp = 0; }
+            bool items = V.owned.Exists(o => !V.srvOwned.Contains(o)) || V.rod > V.srvRod;
+            if (coins == 0 && xp == 0 && !items) return;
+            V.syncOp = NewOp(); V.syncCoins = coins; V.syncXp = xp; V.Save();
+        }
+        syncing = true; syncSentAt = Time.realtimeSinceStartup;
+        Send("{" + Obj("t", "sync", "op", V.syncOp) + "," + Raw("coins", V.syncCoins.ToString()) + "," + Raw("xp", V.syncXp.ToString())
+            + "," + Raw("owned", "[" + string.Join(",", V.owned.Select(Q)) + "]") + "," + Raw("rod", V.rod.ToString()) + "}");
+    }
+    /** Take a server wallet while keeping what this device has not uploaded yet. `ac`/`ax`: what an upload just added. An older wallet than one
+     *  already seen only takes that off. */
+    void ApplyWallet(Game g, J w, int ac = 0, int ax = 0)
+    {
+        var V = g.V; if (V == null || w.IsNull || !w.Has("coins") || !w.Has("xp") || !w.Has("revision")) return;
+        int c = w["coins"].I, x = w["xp"].I, rev = w["revision"].I; if (c < 0 || x < 0 || rev < 0) return;
+        Base(V);
+        if (walletRev >= 0 && rev < walletRev) { V.coins = Math.Max(0, V.coins - ac); V.xp = Math.Max(0, V.xp - ax); }
+        else { V.coins = Math.Max(0, c + V.coins - V.srvCoins - ac); V.xp = Math.Max(0, x + V.xp - V.srvXp - ax); V.srvCoins = c; V.srvXp = x; walletRev = rev; }
+        V.Save();
+    }
+    /** Things bought on this device stay; the server's list is what it already has. */
+    void ApplyInventory(Game g, J inv)
+    {
+        var V = g.V; if (V == null || inv.IsNull || !inv["owned"].IsList) return;
+        Base(V);
+        V.srvOwned = inv["owned"].Strings().Where(o => !string.IsNullOrEmpty(o)).ToList(); V.srvRod = inv["rod"].I == 2 ? 2 : 1;
+        foreach (var o in V.srvOwned) if (!V.owned.Contains(o)) V.owned.Add(o);
+        if (!V.owned.Contains("deel-blue")) V.owned.Insert(0, "deel-blue");
+        V.rod = Math.Max(V.rod, V.srvRod);
+        V.Save();
+    }
 }
 
 public sealed partial class Game
