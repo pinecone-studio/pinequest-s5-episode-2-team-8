@@ -152,6 +152,7 @@ public sealed partial class Game : MonoBehaviour
     {
         float dt = Mathf.Min(Time.deltaTime, 0.05f);
         if (later.Count > 0) { var run = later.ToArray(); later.Clear(); foreach (var f in run) f(); }
+        ReadWheel();
         if (V == null && modal == null) Open(new AuthPage());
         Pointer();
         if (V != null) net.Tick(this, dt);
