@@ -1,5 +1,11 @@
 /* Нутаг world: map layout, collision and path finding. Drawing is in pixel.js. */
-(function (TG) {
+(function (root, factory) {
+  const TG = root.TG || {};
+  if (!TG.vrules && typeof module === 'object' && module.exports) TG.vrules = require('./rules.js');
+  const api = factory(TG);
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else { root.TG = root.TG || {}; root.TG.vworld = api; }
+})(typeof window !== 'undefined' ? window : globalThis, function (TG) {
   const R = TG.vrules, W = R.W, H = R.H, T = 16;
   let seed = 20261021;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
@@ -138,5 +144,5 @@
   // drawing lives in pixel.js (16-pixel tiles, pure pixel art)
   const api = { W, H, T, g, objects, occ, trees, DOCK, ARENA, RACE, LAP, lots, blocked, findPath, nearestOpen, hash };
   api.renderStatic = () => TG.pixel.renderStatic(api);
-  TG.vworld = api;
-})(window.TG);
+  return api;
+});

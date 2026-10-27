@@ -4,6 +4,7 @@
   const OLD_KEY = 'togloom.v1'; // name before the app was renamed to Naadamy
   const pad = (n) => String(n).padStart(2, '0');
   const dkey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const saveListeners = new Set();
 
   const defaults = () => ({
     lang: 'mn',
@@ -41,7 +42,15 @@
     KEY,
     state: load(),
     dkey,
-    save() { try { localStorage.setItem(KEY, JSON.stringify(this.state)); } catch (e) { /* storage full/blocked */ } },
+    save() {
+      try { localStorage.setItem(KEY, JSON.stringify(this.state)); } catch (e) { /* storage full/blocked */ }
+      for (const listener of saveListeners) listener();
+    },
+    onSave(listener) {
+      if (typeof listener !== 'function') throw new TypeError('Save listener must be a function');
+      saveListeners.add(listener);
+      return () => saveListeners.delete(listener);
+    },
     active() { return this.state.profiles.find((p) => p.id === this.state.activeId) || this.state.profiles[0] || null; },
     ageGroupOf(age) { return age <= 6 ? '3-6' : age <= 10 ? '7-10' : age <= 14 ? '11-14' : '15-18'; },
     addProfile({ name, age, avatar, code, aimag }) {

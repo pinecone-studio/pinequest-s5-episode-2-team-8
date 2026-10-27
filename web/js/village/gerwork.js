@@ -88,11 +88,18 @@
       const i = !v.lots[G.lot] && G.lot >= 0 ? G.lot : v.lots.findIndex((l) => !l); if (i >= 0) putLot(i, G.stage); return;
     }
     const lots = live.lots || [], at = lots.findIndex((l) => l && l.by === v.id);
-    if (at >= 0) { G.lot = at; if (R.lotStage(lots[at]) < G.stage) api.net.send({ t: 'ger-stage', stage: G.stage }); return; }
+    if (at >= 0) {
+      G.lot = at;
+      G.stage = R.lotStage(lots[at]);
+      G.gerBuilt = G.stage >= R.GER_DONE;
+      api.save();
+      return;
+    }
     const i = !lots[G.lot] ? G.lot : lots.findIndex((l) => !l);
     if (i < 0) return TG.toast(L('Энэ өрөөнд сул газар алга. Гэр чинь зөвхөн чамд харагдана.', 'No free plot in this room. Your ger shows only for you.'));
-    G.lot = i; const l = v.lots[i] || {};
-    api.net.send({ t: 'ger-claim', i, roof: l.roof || 'blue', door: l.door || 'red', stage: G.stage }); api.save();
+    G.lot = i;
+    const l = v.lots[i] || {};
+    api.net.send({ t: 'ger-claim', i, roof: l.roof || 'blue', door: l.door || 'red' }); api.save();
   }
 
   // ---------------------------------------------------------------- building
@@ -202,14 +209,14 @@
   const MADE = { khana: T('Бургасаар хийсэн эвхэгддэг тор', 'Folding lattice made of willow'), khaalga: T('Урагш харах будагтай хаалга', 'A painted door that faces south'),
     toono: T('Тооно, хоёр багана, гурван бүслүүр', 'The crown, two posts and three ropes'), uni: T('Шинэс модоор хийсэн 9 унь', 'Nine roof poles of larch wood') };
   const canPay = (cost) => Object.entries(cost).every(([k, n]) => HAVE[k]() >= n);
-  function pay(cost) { const v = api.V(), G = g(); for (const [k, n] of Object.entries(cost)) { if (k === 'wool') G.wool -= n; else if (k === 'coins') v.coins -= n; else v.produce[k] -= n; } }
+  function pay(cost) { const v = api.V(), G = g(); for (const [k, n] of Object.entries(cost)) { if (k === 'coins') continue; if (k === 'wool') G.wool -= n; else v.produce[k] -= n; } }
   /** The trade list in Grandpa Craftsman's talk. */
   function tradeList(redraw) {
     const { h } = TG, G = g(), costTxt = (c) => Object.entries(c).map(([k, n]) => `${n} ${tx(GOOD[k])}`).join(' + ');
     return h('div', { class: 'v-trade v-list' }, R.TRADES.map((t) => {
       const goods = R.tradeCost(t.id, 'goods'), coins = R.tradeCost(t.id, 'coins'), have = Object.entries(t.gives).every(([k, n]) => (G.parts[k] || 0) >= n);
       const btn = (kind, cost) => h('button', { class: 'btn sm' + (kind === 'coins' ? '' : ' primary'), 'data-trade': t.id, 'data-pay': kind, disabled: !canPay(cost), title: canPay(cost) ? '' : L('Хүрэлцэхгүй байна', 'Not enough'),
-        onclick: () => { if (!canPay(cost)) return; pay(cost); for (const [k, n] of Object.entries(t.gives)) G.parts[k] = (G.parts[k] || 0) + n; TG.sfx.chime && TG.sfx.chime(); TG.toast('🪵 ' + Object.keys(t.gives).map((k) => tx(PART[k])).join(', ') + L(' авлаа!', ' — got it!')); api.save(); api.refresh(); redraw(); } }, costTxt(cost));
+        onclick: async () => { if (!canPay(cost)) return; if (cost.coins && !(await api.spendCoins(cost.coins))) return; pay(cost); for (const [k, n] of Object.entries(t.gives)) G.parts[k] = (G.parts[k] || 0) + n; TG.sfx.chime && TG.sfx.chime(); TG.toast('🪵 ' + Object.keys(t.gives).map((k) => tx(PART[k])).join(', ') + L(' авлаа!', ' — got it!')); api.save(); api.refresh(); redraw(); } }, costTxt(cost));
       return h('div', { class: 'v-row' }, TG.pixel.icon('part:' + t.id, 32), h('div', { class: 'v-row-b' }, h('b', null, Object.keys(t.gives).map((k) => `${tx(PART[k])} ×${t.gives[k]}`).join(', ')), h('small', null, have ? L('✓ Танд байгаа', '✓ You have these') : tx(MADE[t.id]))),
         h('div', { class: 'row-btns' }, btn('goods', goods), btn('coins', coins)));
     }));

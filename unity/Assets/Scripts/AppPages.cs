@@ -60,7 +60,7 @@ public sealed partial class Game
             if (GUILayout.Button(Music.On ? Loc.L("Асаалттай", "On") : Loc.L("Унтраалттай", "Off"), Music.On ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) Music.Toggle();
             GUILayout.EndHorizontal();
             GUILayout.Label("<b>" + Loc.L("Басар AI (Claude)", "Basar AI (Claude)") + "</b>", g.sLabel);
-            g.Small(Loc.L("Компьютер дээр “node server.js” ажиллуулж, түүний хаягийг энд бичвэл Басар AI ухаантай болно (ж: 192.168.1.10:8000). Хоосон бол офлайн мэдлэгээр ажиллана.", "Run “node server.js” on a computer and write its address here to give Basar AI smarts (e.g. 192.168.1.10:8000). Empty: offline knowledge."));
+            g.Small(Loc.L("Компьютер дээр “node server/server.js” ажиллуулж, түүний хаягийг энд бичвэл Басар AI ухаантай болно (ж: 192.168.1.10:8000). Хоосон бол офлайн мэдлэгээр ажиллана.", "Run “node server/server.js” on a computer and write its address here to give Basar AI smarts (e.g. 192.168.1.10:8000). Empty: offline knowledge."));
             GUILayout.BeginHorizontal();
             server = GUILayout.TextField(server, 80, new GUIStyle(g.sBtn) { alignment = TextAnchor.MiddleLeft }, GUILayout.MinHeight(g.U(38)));
             if (GUILayout.Button(Loc.L("Хадгалах", "Save"), g.sPrimary, GUILayout.Width(g.U(100)), GUILayout.MinHeight(g.U(38)))) g.Later(() => { g.V.server = server.Trim(); g.V.Save(); Basar.Recheck(); g.net.Connect(g); g.StartCoroutine(Basar.Check(g)); g.Toast(Loc.L("Хадгаллаа", "Saved")); });

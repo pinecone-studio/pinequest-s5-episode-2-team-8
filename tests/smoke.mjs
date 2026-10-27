@@ -13,9 +13,11 @@ const chrome = process.env.CHROME_PATH || (process.platform === 'darwin'
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.txt': 'text/plain' };
 
 const server = createServer(async (req, res) => {
-  const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
+  const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname))
+    .replace(/^(\.\.[/\\])+/, '').replace(/^[\\/]+/, '');
+  const file = join(root, !path || /[\\/]$/.test(path) ? join(path, 'index.html') : path);
   try {
-    const body = await readFile(join(root, path.endsWith('/') ? path + 'index.html' : path));
+    const body = await readFile(file);
     res.writeHead(200, { 'content-type': TYPES[extname(path)] || 'application/octet-stream' }); res.end(body);
   } catch { res.writeHead(404); res.end(); }
 });
