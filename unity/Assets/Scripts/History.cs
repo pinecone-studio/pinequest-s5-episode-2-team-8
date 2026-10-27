@@ -21,10 +21,11 @@ public sealed partial class Game
     sealed class HistorianModal : Modal
     {
         HistStep handed;
+        public override (string who, string face)? Speaker => ("historian", handed != null ? "excited" : "curious");
         public override void Draw(Game g)
         {
             var V = g.V;
-            GUILayout.BeginHorizontal(); g.IconAt(Px.Portrait(Rules.HISTORIAN), 48); GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal(); GUILayout.BeginVertical();
             g.Title(Loc.L("Түүхч Нарангэрэл", "Narangerel the historian")); g.Small(Loc.L($"Даалгавар {Mathf.Min(V.histStep + 1, HSTEPS.Count)}/{HSTEPS.Count}", $"Task {Mathf.Min(V.histStep + 1, HSTEPS.Count)}/{HSTEPS.Count}"));
             GUILayout.EndVertical(); GUILayout.EndHorizontal();
             if (handed != null)
@@ -75,10 +76,11 @@ public sealed partial class Game
     }
     sealed class GeneralModal : Modal
     {
+        public override (string who, string face)? Speaker => ("general", "stern");
         public override void Draw(Game g)
         {
             var chs = Chapters.ALL;
-            GUILayout.BeginHorizontal(); g.IconAt(Px.Portrait(Rules.GENERAL), 48); GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal(); GUILayout.BeginVertical();
             g.Title(Loc.L("Жанжин Батмөнх", "General Batmönkh")); g.Small(Loc.L("Эх орноо хамгаалсан түүхүүд", "Stories of defending the homeland")); GUILayout.EndVertical(); GUILayout.EndHorizontal();
             g.Text(Loc.L("Анхаар! Монголчууд олон зуун жилийн турш нутаг усаа хамгаалж ирсэн. Түүх бүрийг сонсоод, нутгаа хамгаал! Дуут сум, уурга хоёр зөвхөн дайсны зоригийг мохоодог: хэн ч гэмтэхгүй.", "Attention! For centuries Mongolians have protected their land. Hear each story, then defend the land! Whistling arrows and the lasso only break the raiders’ courage: nobody gets hurt."));
             for (int i = 0; i < chs.Count; i++)
@@ -95,6 +97,7 @@ public sealed partial class Game
     sealed class BattleIntroModal : Modal
     {
         readonly Chapters.Chapter ch; public BattleIntroModal(Chapters.Chapter ch) { this.ch = ch; }
+        public override (string who, string face)? Speaker => ("general", "proud");
         public override void Draw(Game g)
         {
             g.Small(ch.year.ToString()); g.Title(ch.name.ToString());
@@ -209,6 +212,7 @@ public sealed partial class Game
     sealed class BattleEndModal : Modal
     {
         readonly bool won; readonly Battle bt; public BattleEndModal(bool won, Battle bt) { this.won = won; this.bt = bt; }
+        public override (string who, string face)? Speaker => ("general", won ? "laugh" : "worried");
         public override void Draw(Game g)
         {
             g.Picture(Emo.Icon(won ? "🏆" : "🐑"), 56);

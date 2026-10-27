@@ -16,6 +16,7 @@ public sealed partial class Game
     {
         string coat; int cls;
         public UyaModal(Game g) { coat = g.V.horse.coat; cls = Mathf.Min(g.V.horse.cls, Rules.CLASSES.Length - 1); }
+        public override (string who, string face)? Speaker => ("trainer", "happy");
         readonly Tx fact = Rules.Pick(Rules.HORSE_FACTS);
         public override float Width => 560;
         public override void Draw(Game g)

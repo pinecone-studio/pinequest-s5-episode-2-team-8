@@ -8,6 +8,7 @@ public sealed partial class Game
         readonly string key; readonly Rules.Fish f; readonly float zoneH, speed;
         float zone, vel, fish = 0.5f, target = 0.5f, retarget = 1, prog = 0.4f, grace = 1.2f; int holdFrame = -9;
         string state = "play"; // play | won | lost
+        public override (string who, string face)? Speaker => ("fisher", state == "won" ? "laugh" : state == "lost" ? "worried" : "curious");
         public FishingModal(Game g)
         {
             var keys = new System.Collections.Generic.List<string>(Rules.FISH.Keys);
