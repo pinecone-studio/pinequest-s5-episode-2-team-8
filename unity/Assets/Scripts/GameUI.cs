@@ -578,14 +578,38 @@ public sealed partial class Game
         GUILayout.BeginVertical();
         return pos;
     }
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [System.Runtime.InteropServices.DllImport("__Internal")] static extern float NaadamyWheel(); // Plugins/WebGL/NaadamyPointer.jslib
+    /** The browser counts the distance before Unity sees the event (its listener runs first), and Unity may hand the event over a
+     *  frame later: keep the distance until an event takes it, and drop it when nothing did (the wheel turned over something that
+     *  doesn't scroll). Read every frame, and again when an event comes. */
+    void ReadWheel()
+    {
+        float v = NaadamyWheel() * Dpr;
+        if (v != 0) { wheelNow += v; wheelT = Time.unscaledTime; } else if (Time.unscaledTime - wheelT > 0.25f) wheelNow = 0;
+    }
+#else
+    void ReadWheel() { }
+#endif
+    float wheelNow, wheelT; // screen pixels the browser would have scrolled, not yet used
+    /** In a browser Unity gives every wheel event the same size, a mouse notch and a trackpad's tiny nudge alike, so a trackpad
+     *  raced down the page: scroll half as far as the browser itself would (a mouse notch is about 50 CSS pixels). */
+    float WheelStep(Event e)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        ReadWheel(); float w = wheelNow; wheelNow = 0; return w * 0.5f;
+#else
+        return e.delta.y * U(16);
+#endif
+    }
     public void EndScroll()
     {
         int k = scrollOpen.Count > 0 ? scrollOpen.Pop() : 0;
         GUILayout.EndVertical();
         if (Event.current.type == EventType.Repaint) scrollContent[k] = GUILayoutUtility.GetLastRect().height;
-        // a browser's wheel moves Unity's scroll views only a few pixels: a notch scrolls about three lines, in the innermost view under the mouse
+        // the wheel scrolls the innermost view under the mouse, by how far it really moved (WheelStep)
         var e = Event.current;
-        if (e.type == EventType.ScrollWheel && scrollViews[k].Contains(e.mousePosition + scrollViews[k].position - scrollAt[k])) { scrollWheel[k] += Mathf.Sign(e.delta.y) * Mathf.Max(Mathf.Abs(e.delta.y) * U(20), U(60)); e.Use(); }
+        if (e.type == EventType.ScrollWheel && scrollViews[k].Contains(e.mousePosition + scrollViews[k].position - scrollAt[k])) { scrollWheel[k] += WheelStep(e); e.Use(); }
         GUILayout.EndScrollView();
         if (Event.current.type == EventType.Repaint) scrollViews[k] = GUILayoutUtility.GetLastRect();
     }
