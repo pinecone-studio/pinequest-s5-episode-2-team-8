@@ -141,6 +141,7 @@ public sealed partial class Game
     }
     sealed class AchievementsPage : Page
     {
+        protected override string Tab => "achievements";
         protected override string Title => Loc.L("Миний амжилтууд", "My achievements");
         protected override void Body(Game g)
         {

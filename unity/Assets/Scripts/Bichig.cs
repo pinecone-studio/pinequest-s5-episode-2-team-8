@@ -83,6 +83,7 @@ public sealed partial class Game
 
     sealed class BichigPage : Page
     {
+        protected override bool Hero => true; protected override string Tab => "learn";
         int idx; string mode = "trace"; float demoT = -1; string say; readonly List<List<Vector2>> strokes = new List<List<Vector2>>(); List<Vector2> cur;
         Bichig.Score? result; bool resultOk; int resultStars;
         const int CELL = 3; readonly Live live; readonly int lw, lh;
