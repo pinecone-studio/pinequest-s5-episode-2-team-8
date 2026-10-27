@@ -20,6 +20,20 @@ jobs:
   check:
     name: Check app
     runs-on: ubuntu-latest
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -27,9 +41,12 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install backend dependencies
+        run: npm ci
+
       - name: JavaScript syntax
         run: |
-          for f in $(find web/js -name '*.js') web/sw.js server/server.js server/basar-ai.js; do node --check "$f"; done
+          for f in $(find web/js -name '*.js') web/sw.js server/server.js server/basar-ai.js server/room-store.js; do node --check "$f"; done
           echo "All JavaScript files parse."
 
       - name: Every referenced file exists and is cached offline
@@ -51,6 +68,15 @@ jobs:
 
       - name: Multiplayer chat survives server restart
         run: node tests/chat-persistence.mjs
+
+      - name: Room storage migration and compatibility
+        run: node tests/room-store.mjs
+
+      - name: Shared presence and realtime event adapter
+        run: node tests/shared-presence.mjs
+
+      - name: PostgreSQL multi-instance multiplayer
+        run: node tests/multiplayer-shared.mjs
 
       - name: Touch test (phone joystick and buttons)
         run: node tests/touch.mjs

@@ -4,10 +4,12 @@ services:
     runtime: node
     region: singapore
     plan: 0.5c-512mb
-    buildCommand: node --check server/server.js
+    buildCommand: npm ci && node --check server/server.js && node --check server/room-store.js
     startCommand: node server/server.js
     healthCheckPath: /api/hello
     envVars:
+      - key: DATABASE_URL
+        sync: false
       - key: DATA_DIR
         value: /var/data
     disk:

@@ -809,9 +809,12 @@ blockquote { margin: 12px 0; padding: 14px 16px; background: var(--surface-2); b
 .v-pills { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .v-pill { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; font-size: 15px; white-space: nowrap; }
 .v-pill.dark { background: #8a4b1f; color: #fff; box-shadow: none; clip-path: none; height: 30px; font-family: 'Tiny5', monospace; font-size: 15px; }
-.v-net { font-size: 10px; height: 26px; }
-.v-net.online { color: #2e7d32; }
+.v-net { min-width: 74px; height: 30px; font-size: 11px; font-weight: 800; }
+.v-net.online { color: #2e7d32; background: #eaf6d8; }
 .v-net.solo { color: #8a6a4a; }
+.v-friends { display: flex; align-items: center; gap: 3px; max-width: 140px; overflow: hidden; }
+.v-friend { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; background: #fff3d6; box-shadow: inset 0 0 0 2px #c99a5a; flex: none; }
+.v-friend.more { font-family: 'Tiny5', monospace; font-size: 12px; color: #5a2d10; }
 .v-bottom { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; gap: 8px; padding: 0 10px calc(12px + env(safe-area-inset-bottom)); pointer-events: none; }
 .v-bottom > * { pointer-events: auto; }
 .v-tools { display: flex; flex-direction: column; gap: 6px; }
@@ -997,6 +1000,14 @@ html.rm ::view-transition-old(root), html.rm ::view-transition-new(root) { anima
 .v-invite { text-align: center; margin: 6px 0 14px; padding: 12px; background: #fff3d6; box-shadow: inset 0 0 0 2px #e5a157; }
 .v-qr { display: block; width: 180px; height: 180px; margin: 8px auto; image-rendering: pixelated; box-shadow: 0 0 0 3px #8a4b1f; }
 .v-url { font-family: 'Tiny5', monospace; font-size: 15px; color: #5a2d10; word-break: break-all; user-select: all; -webkit-user-select: all; }
+.v-url-actions { display: flex; gap: 6px; margin-top: 8px; }
+.v-url-actions .btn { flex: 1; }
+.v-mp-status { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; padding: 10px 12px; background: #fbe8c2; box-shadow: inset 0 0 0 2px #c99a5a; }
+.v-mp-status i { width: 12px; height: 12px; flex: none; border-radius: 50%; background: #b08a62; box-shadow: 0 0 0 2px #8a4b1f; }
+.v-mp-status.online i { background: #5c9a36; }
+.v-mp-status.connecting i { background: #e9a91f; animation: pulse-net 1.2s ease-in-out infinite; }
+.v-mp-status b { display: block; font-family: var(--font-display); font-weight: 800; font-size: 1rem; color: #5a2d10; }
+.v-mp-status small { display: block; margin-top: 2px; color: #7a5432; font-weight: 700; font-size: .78rem; }
 
 /* =========================================================================
    Heritage pivot: login/register, Basar the AI dog, heritage school

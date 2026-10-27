@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /* Naadamy server: serves the app and links players into a shared village (Нутаг).
-   Zero dependencies: only Node's built-in modules, so nothing to install and no licenses.
+   Default JSON storage uses Node built-ins; PostgreSQL storage is enabled with DATABASE_URL.
 
    Run:  node server/server.js            (port 8000)
          PORT=3000 node server/server.js
-   Everyone on the same Wi-Fi opens http://<this-computer-ip>:8000 and plays together. */
+   Everyone on the same Wi-Fi opens http://<this-computer-ip>:8000 and plays together.
+   For PostgreSQL storage, install dependencies with npm ci and set DATABASE_URL. */
 'use strict';
 const http = require('http');
 const fs = require('fs');
@@ -12,16 +13,20 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const R = require('../web/js/village/rules.js');
+const WD = require('../web/js/village/world.js');
 const QR = require('../web/js/qr.js');
 
 const REPO = path.join(__dirname, '..'); // .env and data/ stay in the repo root
 const ROOT = path.join(REPO, 'web'); // only the app is served
 const basar = require('./basar-ai.js')(REPO);
+const { createRoomStore } = require('./room-store');
+
+const INSTANCE_ID = crypto.randomUUID();
 const PORT = Number(process.env.PORT || process.argv[2] || 8000);
 const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
 let actualPort = PORT;
 const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'rooms.json');
+const roomStore = createRoomStore({ dataDir: DATA_DIR });
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
   '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
@@ -59,30 +64,63 @@ function serveStatic(req, res) {
 // ---------------------------------------------------------------- rooms + saved gers
 const rooms = new Map(); // code -> { code, players: Map(id -> player), lots: [] }
 let saved = {};
-try { saved = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); } catch { saved = {}; }
 let dirty = false;
+let dirtyVersion = 0;
+let persistPromise = null;
+function markDirty() { dirty = true; dirtyVersion++; }
+function normalizeLots(lots) {
+  const normalized = Array.isArray(lots) ? lots.slice(0, R.LOTS) : [];
+  while (normalized.length < R.LOTS) normalized.push(null);
+  return normalized;
+}
 function room(code) {
   if (!rooms.has(code)) {
-    const lots = Array.isArray(saved[code] && saved[code].lots) ? saved[code].lots.slice(0, R.LOTS) : [];
-    while (lots.length < R.LOTS) lots.push(null);
-    rooms.set(code, { code, players: new Map(), lots, matches: new Map(), chat: restoreChat(saved[code] && saved[code].chat) });
+    const lots = normalizeLots(saved[code] && saved[code].lots);
+    rooms.set(code, { code, players: new Map(), remotePlayers: new Map(), lots, matches: new Map(), wrestlingTimers: new Map(), chat: restoreChat(saved[code] && saved[code].chat) });
   }
   return rooms.get(code);
 }
-function persist() {
-  if (!dirty) return;
-  for (const r of rooms.values()) saved[r.code] = { lots: r.lots, chat: r.chat, t: Date.now() };
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(saved));
-    fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
-    dirty = false;
+async function persist() {
+  if (!dirty) return true;
+  if (persistPromise) {
+    const previousSaveSucceeded = await persistPromise;
+    return previousSaveSucceeded && dirty ? persist() : previousSaveSucceeded;
   }
-  catch (e) { console.error('Could not save the rooms:', e.message); }
+  const version = dirtyVersion;
+  const snapshot = { ...saved };
+  for (const r of rooms.values()) snapshot[r.code] = { lots: r.lots, chat: r.chat, t: Date.now() };
+  persistPromise = (async () => {
+    try {
+      await roomStore.save(snapshot);
+      saved = snapshot;
+      if (dirtyVersion === version) dirty = false;
+      return true;
+    } catch (e) {
+      console.error('Could not save the rooms:', e.message);
+      return false;
+    } finally {
+      persistPromise = null;
+    }
+  })();
+  return persistPromise;
 }
-setInterval(persist, 5000).unref();
-process.on('SIGINT', () => { persist(); process.exit(0); });
-process.on('SIGTERM', () => { persist(); process.exit(0); });
+setInterval(() => { void persist(); }, 5000).unref();
+let stopping = false;
+async function shutdown() {
+  if (stopping) return;
+  stopping = true;
+  await Promise.all([...conns].map((connection) => leave(connection)));
+  const savedOnShutdown = await persist();
+  try {
+    await roomStore.close(INSTANCE_ID);
+  } catch (e) {
+    console.error('Could not close room storage:', e.message);
+    process.exit(1);
+  }
+  process.exit(savedOnShutdown ? 0 : 1);
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 // ---------------------------------------------------------------- minimal WebSocket (RFC 6455)
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
@@ -135,6 +173,7 @@ setInterval(() => {
     c.alive = false;
     try { c.socket.write(frame(9, Buffer.alloc(0))); } catch { c.socket.destroy(); }
   }
+  refreshPresence().catch((error) => console.error('Could not refresh multiplayer presence:', error.message));
 }, Number(process.env.HEARTBEAT_MS) || 20000).unref(); // a phone that drops off Wi-Fi without saying goodbye is removed after one or two missed pings
 
 // ---------------------------------------------------------------- game protocol
@@ -142,10 +181,342 @@ const num = (v, lo, hi) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.
 const numf = (v, lo, hi) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v * 100) / 100)) : lo); // positions with 2 decimals for smooth movement
 const cleanName = (s) => String(s || '').replace(/[<>]/g, '').trim().slice(0, 16) || 'Найз';
 const pub = (p) => ({ id: p.id, name: p.name, look: p.look, lvl: p.lvl, x: p.x, y: p.y, dir: p.dir });
+const WALLET_MAX = 2_000_000_000;
+const walletLevel = (wallet) => num(R.level(wallet.xp).l, 1, 99);
+const PLAYER_HW = 0.26, PLAYER_HH = 0.14, MOVE_MAX_SPEED = 12.5, MOVE_SLACK = 0.18, JUMP_MS = 460;
+const safeSpawn = { x: 17, y: 13, dir: 0 };
+function positionOpen(x, y, jumping) {
+  const solid = (tx, ty) => WD.blocked(tx, ty) && !(jumping && (WD.g[ty] || '')[tx] === 'r');
+  const fx = x + 0.5, fy = y + 0.82;
+  return !solid(Math.floor(fx - PLAYER_HW), Math.floor(fy - PLAYER_HH))
+    && !solid(Math.floor(fx + PLAYER_HW), Math.floor(fy - PLAYER_HH))
+    && !solid(Math.floor(fx - PLAYER_HW), Math.floor(fy + PLAYER_HH))
+    && !solid(Math.floor(fx + PLAYER_HW), Math.floor(fy + PLAYER_HH));
+}
+function validPosition(position) {
+  return position && Number.isFinite(position.x) && Number.isFinite(position.y)
+    && position.x >= 0.5 && position.x <= R.W - 2 && position.y >= 0.5 && position.y <= R.H - 2
+    && positionOpen(position.x, position.y, false);
+}
+function clearMovementPath(from, to, jumping) {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  const steps = Math.max(1, Math.ceil(distance / 0.1));
+  for (let i = 1; i <= steps; i++) {
+    const fraction = i / steps;
+    if (!positionOpen(from.x + (to.x - from.x) * fraction, from.y + (to.y - from.y) * fraction, jumping)) return false;
+  }
+  return true;
+}
+function walletSeed() {
+  return { coins: 40, xp: 0 };
+}
+function inventorySeed() {
+  return { owned: ['deel-blue'], rod: 1 };
+}
+function ownedLook(look, inventory) {
+  const clean = R.cleanLook(look);
+  for (const slot of ['deel', 'hat', 'face', 'neck', 'pet']) {
+    const value = clean[slot];
+    if (value === null || value === undefined) continue;
+    const item = R.ITEMS.find((candidate) => candidate.slot === slot && candidate.val === value);
+    if (!item || !inventory.owned.includes(item.id)) clean[slot] = slot === 'deel' ? 'blue' : null;
+  }
+  return clean;
+}
 /** How many people are on the whole server and in the main village, so players in different rooms can find each other. */
-function counts() { let total = 0; for (const r of rooms.values()) total += r.players.size; const main = rooms.get('NUTAG'); return { total, nutag: main ? main.players.size : 0 }; }
+function counts() {
+  let total = 0, nutag = 0;
+  for (const r of rooms.values()) {
+    total += r.players.size + r.remotePlayers.size;
+    if (r.code === 'NUTAG') nutag = r.players.size + r.remotePlayers.size;
+  }
+  return { total, nutag };
+}
 function census() { const c = counts(); for (const r of rooms.values()) if (r.players.size) broadcast(r, { t: 'census', ...c }); }
-function broadcast(r, msg, except) { for (const p of r.players.values()) if (p.conn !== except) p.conn.send(msg); }
+const REALTIME_TYPES = new Set(['join', 'leave', 'move', 'jump', 'look', 'say', 'lot', 'replaced']);
+function broadcastLocal(r, msg, except) {
+  for (const p of r.players.values()) if (p.conn !== except) p.conn.send(msg);
+}
+function broadcast(r, msg, except) {
+  broadcastLocal(r, msg, except);
+  if (roomStore.sharedRealtime && REALTIME_TYPES.has(msg.t)) {
+    roomStore.publishRealtime({ room: r.code, instanceId: INSTANCE_ID, message: msg }).catch((error) => {
+      console.error('Could not publish multiplayer event:', error.message);
+    });
+  }
+}
+function handleRealtime(event) {
+  if (!event || !R.ROOM_RE.test(event.room || '') || !event.message || typeof event.message.t !== 'string') return;
+  const { room: code, message } = event;
+  if (message.t === 'wrestle') {
+    const r = room(code);
+    deliverWrestleEvent(r, message);
+    return;
+  }
+  if (message.t === 'replaced') {
+    for (const r of rooms.values()) {
+      if (r.remotePlayers.delete(message.id)) broadcastLocal(r, { t: 'leave', id: message.id });
+    }
+    for (const connection of conns) {
+      if (connection.player && connection.player.id === message.id) {
+        connection.send({ t: 'replaced' });
+        setTimeout(() => connection.socket.destroy(), 50);
+      }
+    }
+    return;
+  }
+  if (!REALTIME_TYPES.has(message.t)) return;
+  const r = room(code);
+  if (message.t === 'join' && message.p) {
+    r.remotePlayers.set(message.p.id, message.p);
+    if (!message.replace) logChat(r, { k: 'join', id: message.p.id, n: cleanName(message.p.name) });
+  } else if (message.t === 'leave') {
+    const player = r.remotePlayers.get(message.id);
+    r.remotePlayers.delete(message.id);
+    if (player) logChat(r, { k: 'leave', id: player.id, n: cleanName(player.name) });
+  } else if (message.t === 'move') {
+    const player = r.remotePlayers.get(message.id);
+    if (player) Object.assign(player, { x: message.x, y: message.y, dir: message.dir });
+  } else if (message.t === 'look') {
+    const player = r.remotePlayers.get(message.id);
+    if (player) Object.assign(player, { look: message.look, lvl: message.lvl });
+  } else if (message.t === 'say' && Number.isInteger(message.i) && typeof message.id === 'string') {
+    const kind = message.k === 'e' ? 'e' : 'p';
+    const max = kind === 'e' ? R.EMOTES.length : R.PHRASES.length;
+    if (message.i >= 0 && message.i < max) logChat(r, { k: kind, id: message.id, n: cleanName(message.n), i: message.i });
+  } else if (message.t === 'lot' && Number.isInteger(message.i) && message.i >= 0 && message.i < R.LOTS
+    && ['claim', 'stage', 'style'].includes(message.act)) {
+    r.lots[message.i] = message.lot || null;
+    saved[code] = { ...(saved[code] || {}), lots: r.lots };
+  }
+  broadcastLocal(r, message);
+  if (message.t === 'join' || message.t === 'leave') census();
+}
+function wrestlingEvent(to, message) {
+  return { t: 'wrestle', to, message };
+}
+function deliverWrestleEvent(r, event) {
+  const message = event.message;
+  const timerKey = message.id && `${r.code}:${message.id}`;
+  if (message.t === 'wr-end' && timerKey) {
+    clearTimeout(r.wrestlingTimers.get(timerKey));
+    r.wrestlingTimers.delete(timerKey);
+  } else if ((message.t === 'wr-start' || message.t === 'wr-result') && timerKey && message.deadline) {
+    clearTimeout(r.wrestlingTimers.get(timerKey));
+    const delay = Math.max(0, message.deadline - Date.now());
+    const timer = setTimeout(() => {
+      r.wrestlingTimers.delete(timerKey);
+      resolveSharedWrestlingTimeout(r, message.id).catch((error) => {
+        console.error('Could not resolve shared wrestling timeout:', error.message);
+      });
+    }, delay);
+    if (timer.unref) timer.unref();
+    r.wrestlingTimers.set(timerKey, timer);
+  }
+  for (const id of event.to || []) {
+    const player = r.players.get(id);
+    if (player) player.conn.send(message);
+  }
+  if (message.t === 'wr-end') awardWrestlingResult(r, message);
+}
+function awardWrestlingResult(r, message) {
+  if (!message.winner || typeof message.id !== 'string' || !/^w[\w-]{1,64}$/.test(message.id)
+    || !Array.isArray(message.playerIds) || message.playerIds.length !== 2 || !message.playerIds.includes(message.winner)) return;
+  for (const id of message.playerIds) {
+    const player = r.players.get(id);
+    if (player) grantWrestlingReward(player, message.id, id === message.winner);
+  }
+}
+async function grantWrestlingReward(player, matchId, won) {
+  const operation = `wrestle:${matchId}`;
+  const coins = won ? 25 : 0, xp = won ? 30 : 10;
+  try {
+    const outcome = await roomStore.mutateWallet(player.id, operation, (wallet) => {
+      if (wallet.coins > WALLET_MAX - coins || wallet.xp > WALLET_MAX - xp) {
+        return { changed: false, result: { accepted: false, reason: 'limit' } };
+      }
+      return {
+        changed: true,
+        wallet: { coins: wallet.coins + coins, xp: wallet.xp + xp },
+        result: { accepted: true },
+      };
+    });
+    player.conn.wallet = outcome.wallet;
+    player.conn.inventory = outcome.inventory;
+    syncPlayerLevel(player.conn);
+    player.conn.send({ t: 'wallet-result', op: operation, ...outcome.result, wallet: outcome.wallet });
+  } catch (error) {
+    console.error('Could not grant server-validated wrestling reward:', error.message);
+    player.conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'storage', wallet: player.conn.wallet });
+  }
+}
+async function mutateSharedWrestling(r, mutate) {
+  const { result } = await roomStore.mutateRoom(
+    r.code,
+    { lots: r.lots, chat: r.chat, wrestling: { invites: [], matches: [] } },
+    (state) => {
+      if (!state.wrestling || typeof state.wrestling !== 'object') state.wrestling = {};
+      if (!Array.isArray(state.wrestling.invites)) state.wrestling.invites = [];
+      if (!Array.isArray(state.wrestling.matches)) state.wrestling.matches = [];
+      const now = Date.now();
+      const oldInviteCount = state.wrestling.invites.length;
+      state.wrestling.invites = state.wrestling.invites.filter((invite) => invite.expiresAt > now);
+      const changed = state.wrestling.invites.length !== oldInviteCount;
+      const outcome = mutate(state.wrestling);
+      return {
+        changed: changed || Boolean(outcome && outcome.changed),
+        events: outcome && outcome.events || [],
+        value: outcome && outcome.value,
+      };
+    },
+    INSTANCE_ID,
+  );
+  for (const event of result.events) deliverWrestleEvent(r, event);
+  return result.value;
+}
+function resolveSharedRound(wrestling, match, timedOut) {
+  if (timedOut) {
+    for (const side of ['a', 'b']) {
+      if (!match.moves[side]) match.moves[side] = { m: R.MOVES[Math.floor(Math.random() * R.MOVES.length)].id, p: 0.15 };
+    }
+  }
+  const a = match.moves.a, b = match.moves.b;
+  if (!a || !b) return { changed: false, events: [] };
+  const result = R.exchange(a.m, a.p, b.m, b.p);
+  if (result > 0) match.score.a++;
+  else if (result < 0) match.score.b++;
+  match.moves = {};
+  const finished = match.score.a >= 2 || match.score.b >= 2;
+  match.deadline = finished ? null : Date.now() + 25000;
+  const events = [wrestlingEvent([match.a, match.b], {
+    t: 'wr-result', id: match.id, ma: a.m, pa: a.p, mb: b.m, pb: b.p,
+    r: result, score: match.score, ...(finished ? {} : { deadline: match.deadline }),
+  })];
+  if (finished) {
+    wrestling.matches = wrestling.matches.filter((entry) => entry.id !== match.id);
+    events.push(wrestlingEvent([match.a, match.b], {
+      t: 'wr-end', id: match.id, winner: match.score.a > match.score.b ? match.a : match.b,
+      playerIds: [match.a, match.b], reason: '',
+    }));
+  }
+  return { changed: true, events };
+}
+async function resolveSharedWrestlingTimeout(r, matchId) {
+  if (!roomStore.sharedRealtime) return;
+  await mutateSharedWrestling(r, (wrestling) => {
+    const match = wrestling.matches.find((entry) => entry.id === matchId);
+    if (!match || match.deadline > Date.now()) return { changed: false };
+    return resolveSharedRound(wrestling, match, true);
+  });
+}
+async function handleSharedWrestling(conn, type, message) {
+  const p = conn.player, r = conn.room;
+  if (!p || !r) return;
+  try {
+    await mutateSharedWrestling(r, (wrestling) => {
+      const events = [];
+      if (type === 'wr-invite') {
+        const toId = String(message.to || '').slice(0, 24);
+        const target = r.players.get(toId) || r.remotePlayers.get(toId);
+        if (!target || toId === p.id || wrestling.matches.some((match) => match.a === p.id || match.b === p.id || match.a === toId || match.b === toId)) {
+          conn.send({ t: 'deny', act: 'wr', why: 'busy' });
+          return { changed: false };
+        }
+        if (wrestling.invites.some((invite) => invite.from === p.id && invite.to === toId)) return { changed: false };
+        wrestling.invites.push({ from: p.id, to: toId, fromName: p.name, expiresAt: Date.now() + 60000 });
+        events.push(wrestlingEvent([toId], { t: 'wr-invite', from: p.id, name: p.name }));
+        return { changed: true, events };
+      }
+      if (type === 'wr-decline') {
+        const fromId = String(message.from || '').slice(0, 24);
+        const index = wrestling.invites.findIndex((invite) => invite.from === fromId && invite.to === p.id);
+        if (index < 0) return { changed: false };
+        wrestling.invites.splice(index, 1);
+        events.push(wrestlingEvent([fromId], { t: 'wr-declined', by: p.id, name: p.name }));
+        return { changed: true, events };
+      }
+      if (type === 'wr-accept') {
+        const fromId = String(message.from || '').slice(0, 24);
+        const invitationIndex = wrestling.invites.findIndex((invite) => invite.from === fromId && invite.to === p.id);
+        const opponent = r.players.get(fromId) || r.remotePlayers.get(fromId);
+        if (invitationIndex < 0 || !opponent || wrestling.matches.some((match) => match.a === p.id || match.b === p.id || match.a === fromId || match.b === fromId)) {
+          conn.send({ t: 'deny', act: 'wr', why: 'busy' });
+          return { changed: false };
+        }
+        const invitation = wrestling.invites[invitationIndex];
+        wrestling.invites = wrestling.invites.filter((invite) => invite.from !== p.id && invite.to !== p.id && invite.from !== fromId && invite.to !== fromId);
+        const id = `w${crypto.randomUUID()}`;
+        const match = {
+          id, a: fromId, b: p.id, score: { a: 0, b: 0 }, moves: {}, deadline: Date.now() + 25000,
+          aInfo: { id: fromId, name: invitation.fromName, look: opponent.look },
+          bInfo: { id: p.id, name: p.name, look: p.look },
+        };
+        wrestling.matches.push(match);
+        events.push(wrestlingEvent([match.a, match.b], {
+          t: 'wr-start', id, a: match.aInfo, b: match.bInfo, deadline: match.deadline,
+        }));
+        return { changed: true, events };
+      }
+      if (type === 'wr-move') {
+        const match = wrestling.matches.find((entry) => entry.a === p.id || entry.b === p.id);
+        const side = match && (match.a === p.id ? 'a' : 'b');
+        if (!match || !side || match.deadline <= Date.now() || match.moves[side] || !R.MOVES.some((move) => move.id === message.m)) {
+          if (match && match.deadline <= Date.now()) return resolveSharedRound(wrestling, match, true);
+          return { changed: false };
+        }
+        const power = Number(message.p);
+        match.moves[side] = { m: message.m, p: Math.max(0, Math.min(1, Number.isFinite(power) ? power : 0)) };
+        const opponentId = side === 'a' ? match.b : match.a;
+        if (!match.moves[side === 'a' ? 'b' : 'a']) {
+          events.push(wrestlingEvent([opponentId], { t: 'wr-wait', id: match.id }));
+          return { changed: true, events };
+        }
+        return resolveSharedRound(wrestling, match, false);
+      }
+      if (type === 'wr-quit') {
+        const index = wrestling.matches.findIndex((match) => match.a === p.id || match.b === p.id);
+        if (index < 0) return { changed: false };
+        const [match] = wrestling.matches.splice(index, 1);
+        const winner = match.a === p.id ? match.b : match.a;
+        events.push(wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason: 'left' }));
+        return { changed: true, events };
+      }
+      return { changed: false };
+    });
+  } catch (error) {
+    console.error(`Could not process ${type} in shared wrestling:`, error.message);
+    conn.send({ t: 'error', why: 'storage' });
+  }
+}
+async function endSharedWrestlingOnLeave(r, playerId) {
+  if (!roomStore.sharedRealtime) return;
+  try {
+    await mutateSharedWrestling(r, (wrestling) => {
+      const before = wrestling.invites.length;
+      wrestling.invites = wrestling.invites.filter((invite) => invite.from !== playerId && invite.to !== playerId);
+      const index = wrestling.matches.findIndex((match) => match.a === playerId || match.b === playerId);
+      if (index < 0) return { changed: wrestling.invites.length !== before };
+      const [match] = wrestling.matches.splice(index, 1);
+      const winner = match.a === playerId ? match.b : match.a;
+      return {
+        changed: true,
+        events: [wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason: 'left' })],
+      };
+    });
+  } catch (error) {
+    console.error('Could not finish shared wrestling after player left:', error.message);
+  }
+}
+async function refreshPresence() {
+  if (!roomStore.sharedRealtime) return;
+  const stale = await roomStore.refreshPresence(INSTANCE_ID);
+  for (const player of stale) {
+    const r = rooms.get(player.room_code) || room(player.room_code);
+    const wasOnline = r.remotePlayers.delete(player.id);
+    await endSharedWrestlingOnLeave(r, player.id);
+    if (wasOnline) broadcast(r, { t: 'leave', id: player.id });
+  }
+}
 /** The room's bounded history of phrases, emotes, joins and leaves. */
 const CHAT_KEEP = 30, SAY_GAP = 1000;
 function cleanChatLine(line) {
@@ -168,7 +539,239 @@ function restoreChat(lines) {
 function logChat(r, line) {
   r.chat.push(line);
   if (r.chat.length > CHAT_KEEP) r.chat.splice(0, r.chat.length - CHAT_KEEP);
-  dirty = true;
+  markDirty();
+}
+function updatePresence(p) {
+  const now = Date.now();
+  if (now - (p.presenceUpdatedAt || 0) < 500) return;
+  p.presenceUpdatedAt = now;
+  roomStore.updatePresence(INSTANCE_ID, pub(p)).catch((error) => console.error('Could not update player presence:', error.message));
+}
+function syncPlayerLevel(conn) {
+  const p = conn.player;
+  if (!p || !conn.room || !conn.wallet) return;
+  const level = walletLevel(conn.wallet);
+  if (p.lvl === level) return;
+  p.lvl = level;
+  updatePresence(p);
+  broadcast(conn.room, { t: 'look', id: p.id, look: p.look, lvl: level }, conn);
+}
+
+async function joinPlayer(conn, message, code, id, now) {
+  const account = await roomStore.getAccount(id, walletSeed(), inventorySeed());
+  await leave(conn);
+  const r = room(code);
+  const latestState = await roomStore.getRoomState(code);
+  if (latestState) {
+    r.lots = normalizeLots(latestState.lots);
+    r.chat = restoreChat(latestState.chat);
+    saved[code] = latestState;
+  }
+  const old = r.players.get(id);
+  const replacingRemote = r.remotePlayers.has(id);
+  const activePlayers = roomStore.sharedRealtime && !old && !replacingRemote ? await roomStore.listPresence(code) : [];
+  const previousPosition = old || r.remotePlayers.get(id) || activePlayers.find((player) => player.id === id);
+  const position = validPosition(previousPosition) ? previousPosition : safeSpawn;
+  if (old) {
+    old.conn.player = null; old.conn.room = null;
+    old.conn.send({ t: 'replaced' });
+    setTimeout(() => old.conn.socket.destroy(), 50);
+  }
+  const p = {
+    id, conn, name: cleanName(message.name), look: ownedLook(message.look, account.inventory), lvl: walletLevel(account.wallet),
+    x: position.x, y: position.y, dir: num(position.dir, 0, 3), moveAt: Date.now(), jt: 0,
+  };
+  const previousInstance = await roomStore.registerPresence(INSTANCE_ID, code, pub(p));
+  if (conn.socket.destroyed) {
+    await roomStore.removePresence(INSTANCE_ID, p.id);
+    return;
+  }
+  if (roomStore.sharedRealtime && (old || replacingRemote || previousInstance)) {
+    await endSharedWrestlingOnLeave(r, p.id);
+  }
+  if (previousInstance && previousInstance !== INSTANCE_ID) {
+    await roomStore.publishRealtime({ room: code, instanceId: INSTANCE_ID, message: { t: 'replaced', id } });
+  }
+  const online = await roomStore.listPresence(code);
+  if (conn.socket.destroyed) {
+    await roomStore.removePresence(INSTANCE_ID, p.id);
+    return;
+  }
+  r.remotePlayers.clear();
+  for (const player of online) if (player.id !== id && !r.players.has(player.id)) r.remotePlayers.set(player.id, player);
+  r.players.set(id, p); conn.player = p; conn.room = r;
+  if (!old && !replacingRemote && !previousInstance) logChat(r, { k: 'join', id, n: p.name });
+  const players = [
+    ...[...r.players.values()].filter((player) => player !== p).map(pub),
+    ...r.remotePlayers.values(),
+  ];
+  conn.wallet = account.wallet;
+  conn.inventory = account.inventory;
+  conn.send({
+    t: 'welcome', v: R.VERSION, now, day: villageDay(), room: code, players, lots: r.lots, chat: r.chat,
+    look: p.look, wallet: account.wallet, inventory: account.inventory, position: { x: p.x, y: p.y, dir: p.dir },
+  });
+  const replacing = Boolean(old || replacingRemote || previousInstance);
+  broadcast(r, { t: 'join', p: pub(p), ...(replacing ? { replace: true } : {}) }, conn);
+  census();
+}
+
+async function handleWalletOperation(conn, message) {
+  const p = conn.player;
+  if (!p) return;
+  const operation = String(message.op || '');
+  const action = message.action;
+  const coins = message.coins, xp = message.xp;
+  if (!/^[a-f0-9]{32}$/i.test(operation)) return conn.send({ t: 'wallet-result', op: operation.slice(0, 40), accepted: false, reason: 'invalid', wallet: conn.wallet });
+  if (action === 'reward') {
+    return conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'server-only', wallet: conn.wallet });
+  }
+  const valid = action === 'spend' && Number.isInteger(coins) && coins > 0 && coins <= 10_000 && xp === 0;
+  if (!valid) return conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'invalid', wallet: conn.wallet });
+
+  try {
+    const outcome = await roomStore.mutateWallet(p.id, operation, (wallet) => {
+      if (wallet.coins < coins) {
+        return { changed: false, result: { accepted: false, reason: 'insufficient' } };
+      }
+      return {
+        changed: true,
+        wallet: { coins: wallet.coins - coins, xp: wallet.xp },
+        result: { accepted: true },
+      };
+    });
+    conn.wallet = outcome.wallet;
+    conn.inventory = outcome.inventory;
+    syncPlayerLevel(conn);
+    conn.send({ t: 'wallet-result', op: operation, ...outcome.result, wallet: outcome.wallet });
+  } catch (error) {
+    console.error('Could not update player wallet:', error.message);
+    conn.send({ t: 'wallet-result', op: operation, accepted: false, reason: 'storage', wallet: conn.wallet });
+  }
+}
+
+function villageDay(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en', {
+    timeZone: 'Asia/Ulaanbaatar', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date).map(({ type, value }) => [type, value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+async function handleDailyActivityClaim(conn, message) {
+  const p = conn.player;
+  if (!p || !conn.room) return;
+  const activity = typeof message.activity === 'string' && message.activity.length <= 16 ? message.activity : '';
+  const valid = Object.hasOwn(R.DAILY_ACTIVITY_REWARDS, activity);
+  const day = villageDay();
+  conn.send({
+    t: 'daily-activity-result', activity, day, accepted: false,
+    reason: valid ? 'server-only' : 'invalid', wallet: conn.wallet,
+  });
+}
+async function handleQuestClaim(conn, message) {
+  const p = conn.player;
+  if (!p) return;
+  const quest = typeof message.quest === 'string' && message.quest.length <= 16 ? message.quest : '';
+  const valid = Object.hasOwn(R.DAILY_QUEST_REWARDS, quest);
+  conn.send({
+    t: 'quest-claim-result', quest, accepted: false,
+    reason: valid ? 'server-only' : 'invalid', wallet: conn.wallet,
+  });
+}
+
+async function handleShopPurchase(conn, message) {
+  const p = conn.player;
+  if (!p) return;
+  const operation = String(message.op || '');
+  const itemId = message.item;
+  if (!/^[a-f0-9]{32}$/i.test(operation)) {
+    return conn.send({ t: 'inventory-result', op: operation.slice(0, 40), accepted: false, reason: 'invalid', wallet: conn.wallet, inventory: conn.inventory });
+  }
+  const item = typeof itemId === 'string' && itemId.length <= 32 ? R.ITEMS.find((entry) => entry.id === itemId) : null;
+  if (!item) return conn.send({ t: 'inventory-result', op: operation, accepted: false, reason: 'invalid', wallet: conn.wallet, inventory: conn.inventory });
+  try {
+    const outcome = await roomStore.mutateWallet(p.id, operation, (wallet, inventory) => {
+      const alreadyOwned = item.cat === 'tool' ? inventory.rod >= item.val : inventory.owned.includes(item.id);
+      if (alreadyOwned) return { changed: false, result: { accepted: false, reason: 'owned' } };
+      if (R.level(wallet.xp).l < item.lvl) return { changed: false, result: { accepted: false, reason: 'level' } };
+      if (wallet.coins < item.price) return { changed: false, result: { accepted: false, reason: 'insufficient' } };
+      const nextInventory = item.cat === 'tool'
+        ? { ...inventory, rod: item.val }
+        : { ...inventory, owned: [...inventory.owned, item.id] };
+      return {
+        changed: true,
+        wallet: { ...wallet, coins: wallet.coins - item.price },
+        inventory: nextInventory,
+        result: { accepted: true },
+      };
+    });
+    conn.wallet = outcome.wallet;
+    conn.inventory = outcome.inventory;
+    conn.send({ t: 'inventory-result', op: operation, ...outcome.result, wallet: outcome.wallet, inventory: outcome.inventory });
+  } catch (error) {
+    console.error('Could not purchase player shop item:', error.message);
+    conn.send({ t: 'inventory-result', op: operation, accepted: false, reason: 'storage', wallet: conn.wallet, inventory: conn.inventory });
+  }
+}
+
+async function handleProgressSave(conn) {
+  if (!conn.player) return;
+  conn.send({ t: 'progress-result', accepted: false, reason: 'server-only', revision: 0 });
+}
+
+async function persistLotAction(conn, action, message) {
+  const p = conn.player, r = conn.room;
+  if (!p || !r) return;
+  const i = message.i;
+  if (action === 'claim' && (!Number.isInteger(i) || i < 0 || i >= R.LOTS)) return;
+  if (action !== 'claim' && (!Number.isInteger(i) || i < 0 || i >= R.LOTS)) return;
+
+  try {
+    const { state, result } = await roomStore.mutateRoom(
+      r.code,
+      { lots: r.lots, chat: r.chat },
+      (current) => {
+        const lots = normalizeLots(current.lots);
+        let lot = lots[i];
+        if (action === 'claim') {
+          if (lot) return { changed: false, deny: 'taken' };
+          if (lots.some((owned) => owned && owned.by === p.id)) return { changed: false, deny: 'own' };
+          lot = {
+            by: p.id,
+            n: p.name,
+            roof: Object.hasOwn(R.ROOF, message.roof) ? message.roof : 'blue',
+            door: Object.hasOwn(R.DOOR, message.door) ? message.door : 'red',
+            furn: [],
+            stage: 1,
+          };
+          lots[i] = lot;
+        } else {
+          if (!lot || lot.by !== p.id) return { changed: false };
+          if (action === 'stage') {
+            if (!Number.isInteger(message.stage) || R.lotStage(lot) >= R.GER_DONE || message.stage !== R.lotStage(lot) + 1) {
+              return { changed: false, deny: 'stage' };
+            }
+            lot.stage = message.stage;
+          } else {
+            if (Object.hasOwn(R.ROOF, message.roof)) lot.roof = message.roof;
+            if (Object.hasOwn(R.DOOR, message.door)) lot.door = message.door;
+            if (Array.isArray(message.furn)) {
+              lot.furn = [...new Set(message.furn.filter((furniture) => R.FURNITURE.some((item) => item.id === furniture)))].slice(0, 12);
+            }
+            lot.n = p.name;
+          }
+        }
+        current.lots = lots;
+        return { changed: true, event: { t: 'lot', act: action, i, lot, by: p.id } };
+      },
+    );
+    r.lots = normalizeLots(state.lots);
+    saved[r.code] = { ...(saved[r.code] || {}), lots: r.lots };
+    if (result.deny) conn.send({ t: 'deny', act: 'ger', why: result.deny });
+    if (result.event) broadcast(r, result.event);
+  } catch (error) {
+    console.error('Could not save shared ger state:', error.message);
+    conn.send({ t: 'error', why: 'storage' });
+  }
 }
 
 function onMessage(conn, text) {
@@ -182,32 +785,46 @@ function onMessage(conn, text) {
     const code = String(m.room || '').toUpperCase();
     const id = String(m.id || '').slice(0, 24);
     if (!R.ROOM_RE.test(code) || !/^[\w-]{4,24}$/.test(id)) return conn.send({ t: 'error', why: 'bad-join' });
-    leave(conn);
-    const r = room(code);
-    const old = r.players.get(id);
-    if (old) { old.conn.player = null; old.conn.room = null; old.conn.send({ t: 'replaced' }); setTimeout(() => old.conn.socket.destroy(), 50); } // same player in another tab: keep the newest, and tell the old one why
-    const p = { id, conn, name: cleanName(m.name), look: R.cleanLook(m.look), lvl: num(m.lvl, 1, 99), x: numf(m.x, 0.5, R.W - 2), y: numf(m.y, 0.5, R.H - 2), dir: num(m.dir, 0, 3) };
-    r.players.set(id, p); conn.player = p; conn.room = r;
-    if (!old) logChat(r, { k: 'join', id, n: p.name }); // a second tab of the same player is not a new arrival
-    conn.send({ t: 'welcome', v: R.VERSION, now: t, room: code, players: [...r.players.values()].filter((x) => x !== p).map(pub), lots: r.lots, chat: r.chat });
-    broadcast(r, { t: 'join', p: pub(p) }, conn);
-    census();
+    roomStore.authenticatePlayer(id, m.ticket).then((authenticated) => {
+      if (!authenticated) {
+        conn.send({ t: 'error', why: 'identity' });
+        setTimeout(() => conn.socket.destroy(), 50);
+        return;
+      }
+      return joinPlayer(conn, m, code, id, t);
+    }).catch((error) => {
+      console.error('Could not join multiplayer room:', error.message);
+      conn.send({ t: 'error', why: 'storage' });
+    });
     return;
   }
   const p = conn.player, r = conn.room;
   if (!p || !r) return;
   switch (m.t) {
-    case 'move':
-      p.x = numf(m.x, 0.5, R.W - 2); p.y = numf(m.y, 0.5, R.H - 2); p.dir = num(m.dir, 0, 3);
+    case 'move': {
+      const t = Date.now(), next = { x: numf(m.x, 0.5, R.W - 2), y: numf(m.y, 0.5, R.H - 2) };
+      const elapsed = Math.min(0.5, Math.max(0, (t - p.moveAt) / 1000));
+      const maxDistance = MOVE_MAX_SPEED * elapsed + MOVE_SLACK;
+      const distance = Math.hypot(next.x - p.x, next.y - p.y);
+      const jumping = t - p.jt < JUMP_MS;
+      if (distance > maxDistance || !clearMovementPath(p, next, jumping)) {
+        p.moveAt = t;
+        conn.send({ t: 'move-correct', x: p.x, y: p.y, dir: p.dir });
+        return;
+      }
+      p.x = next.x; p.y = next.y; p.dir = num(m.dir, 0, 3); p.moveAt = t;
+      updatePresence(p);
       broadcast(r, { t: 'move', id: p.id, x: p.x, y: p.y, dir: p.dir }, conn);
       break;
+    }
     case 'jump': { // show other players your jump, at most a few times a second
       const t = Date.now(); if (t - (p.jt || 0) < 300) return; p.jt = t;
       broadcast(r, { t: 'jump', id: p.id }, conn);
       break;
     }
     case 'look':
-      p.look = R.cleanLook(m.look); p.lvl = num(m.lvl, 1, 99);
+      p.look = ownedLook(m.look, conn.inventory); p.lvl = walletLevel(conn.wallet);
+      updatePresence(p);
       broadcast(r, { t: 'look', id: p.id, look: p.look, lvl: p.lvl }, conn);
       break;
     case 'say': {
@@ -215,38 +832,44 @@ function onMessage(conn, text) {
       if (!Number.isInteger(m.i) || m.i < 0 || m.i >= max) return;
       const t = Date.now(); if (t - (p.st || 0) < SAY_GAP) return; p.st = t; // one phrase a second, so nobody floods the room
       logChat(r, { k: kind, id: p.id, n: p.name, i: m.i });
-      broadcast(r, { t: 'say', id: p.id, k: kind, i: m.i });   // to everyone, including the sender
+      broadcast(r, { t: 'say', id: p.id, n: p.name, k: kind, i: m.i });   // to everyone, including the sender
       break;
     }
+    case 'wallet-op':
+      handleWalletOperation(conn, m);
+      break;
+    case 'quest-claim':
+      handleQuestClaim(conn, m);
+      break;
+    case 'daily-activity-claim':
+      handleDailyActivityClaim(conn, m);
+      break;
+    case 'shop-buy':
+      handleShopPurchase(conn, m);
+      break;
+    case 'progress-save':
+      handleProgressSave(conn, m);
+      break;
     // ---- own ger
-    case 'ger-claim': { // laying the floor claims a plot; a ger already part-way up (from solo play or another room) brings its stage along
-      const i = m.i, stage = Number.isInteger(m.stage) ? Math.max(1, Math.min(R.GER_DONE, m.stage)) : 1;
-      if (!Number.isInteger(i) || i < 0 || i >= R.LOTS) return;
-      if (r.lots[i]) return conn.send({ t: 'deny', act: 'ger', why: 'taken' });
-      if (r.lots.some((l) => l && l.by === p.id)) return conn.send({ t: 'deny', act: 'ger', why: 'own' });
-      r.lots[i] = { by: p.id, n: p.name, roof: R.ROOF[m.roof] ? m.roof : 'blue', door: R.DOOR[m.door] ? m.door : 'red', furn: [], stage };
-      dirty = true;
-      broadcast(r, { t: 'lot', act: 'claim', i, lot: r.lots[i], by: p.id });
+    case 'ger-claim':
+      persistLotAction(conn, 'claim', m);
       break;
-    }
-    case 'ger-stage': { // one more building step done on your own plot
-      const i = r.lots.findIndex((l) => l && l.by === p.id); if (i < 0 || !Number.isInteger(m.stage)) return;
-      r.lots[i].stage = Math.max(1, Math.min(R.GER_DONE, m.stage)); dirty = true;
-      broadcast(r, { t: 'lot', act: 'stage', i, lot: r.lots[i], by: p.id });
+    case 'ger-stage': {
+      const i = r.lots.findIndex((lot) => lot && lot.by === p.id);
+      if (i >= 0) persistLotAction(conn, 'stage', { ...m, i });
       break;
     }
     case 'ger-style': {
       const i = r.lots.findIndex((l) => l && l.by === p.id); if (i < 0) return;
-      const l = r.lots[i];
-      if (R.ROOF[m.roof]) l.roof = m.roof;
-      if (R.DOOR[m.door]) l.door = m.door;
-      if (Array.isArray(m.furn)) l.furn = [...new Set(m.furn.filter((f) => R.FURNITURE.some((x) => x.id === f)))].slice(0, 12);
-      l.n = p.name; dirty = true;
-      broadcast(r, { t: 'lot', act: 'style', i, lot: l, by: p.id });
+      persistLotAction(conn, 'style', { ...m, i });
       break;
     }
     // ---- live wrestling
     case 'wr-invite': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-invite', m);
+        break;
+      }
       const to = r.players.get(String(m.to));
       if (!to || to === p || to.match || p.match) return conn.send({ t: 'deny', act: 'wr', why: 'busy' });
       (to.invites = to.invites || new Set()).add(p.id);
@@ -254,11 +877,19 @@ function onMessage(conn, text) {
       break;
     }
     case 'wr-decline': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-decline', m);
+        break;
+      }
       const from = r.players.get(String(m.from)); if (p.invites) p.invites.delete(String(m.from));
       if (from) from.conn.send({ t: 'wr-declined', by: p.id, name: p.name });
       break;
     }
     case 'wr-accept': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-accept', m);
+        break;
+      }
       const from = r.players.get(String(m.from));
       if (!from || !p.invites || !p.invites.has(from.id) || from.match || p.match) return conn.send({ t: 'deny', act: 'wr', why: 'busy' });
       p.invites.delete(from.id);
@@ -271,6 +902,10 @@ function onMessage(conn, text) {
       break;
     }
     case 'wr-move': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-move', m);
+        break;
+      }
       const match = p.match && r.matches.get(p.match); if (!match) return;
       const side = match.a === p.id ? 'a' : 'b';
       if (match.moves[side] || !R.MOVES.some((x) => x.id === m.m)) return;
@@ -280,6 +915,10 @@ function onMessage(conn, text) {
       break;
     }
     case 'wr-quit': {
+      if (roomStore.sharedRealtime) {
+        handleSharedWrestling(conn, 'wr-quit', m);
+        break;
+      }
       const match = p.match && r.matches.get(p.match); if (!match) return;
       endMatch(r, match, match.a === p.id ? match.b : match.a, 'left');
       break;
@@ -304,17 +943,25 @@ function resolveMatch(r, match) {
 }
 function endMatch(r, match, winner, reason) {
   clearTimeout(match.timer); r.matches.delete(match.id);
-  for (const id of [match.a, match.b]) { const q = r.players.get(id); if (q) { q.match = null; q.conn.send({ t: 'wr-end', winner, reason }); } }
+  const message = { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason };
+  for (const id of [match.a, match.b]) { const q = r.players.get(id); if (q) { q.match = null; q.conn.send(message); } }
+  awardWrestlingResult(r, message);
 }
 function leave(conn) {
   const p = conn.player, r = conn.room;
   conn.player = null; conn.room = null;
-  if (!p || !r || r.players.get(p.id) !== p) return;
-  if (p.match && r.matches.get(p.match)) { const match = r.matches.get(p.match); endMatch(r, match, match.a === p.id ? match.b : match.a, 'left'); }
+  if (!p || !r || r.players.get(p.id) !== p) return Promise.resolve();
+  if (!roomStore.sharedRealtime && p.match && r.matches.get(p.match)) {
+    const match = r.matches.get(p.match);
+    endMatch(r, match, match.a === p.id ? match.b : match.a, 'left');
+  }
   r.players.delete(p.id);
+  const removed = roomStore.removePresence(INSTANCE_ID, p.id).catch((error) => console.error('Could not remove player presence:', error.message));
+  const endedWrestling = endSharedWrestlingOnLeave(r, p.id);
   logChat(r, { k: 'leave', id: p.id, n: p.name });
   broadcast(r, { t: 'leave', id: p.id });
   census();
+  return Promise.all([removed, endedWrestling]);
 }
 
 // ---------------------------------------------------------------- start
@@ -344,4 +991,12 @@ server.on('listening', () => {
   console.log('\n  Press Ctrl+C to stop.\n');
   if (process.send) process.send({ port });
 });
-server.listen(PORT, '0.0.0.0');
+roomStore.load().then(async (state) => {
+  saved = state;
+  await roomStore.startRealtime(INSTANCE_ID, handleRealtime);
+  server.listen(PORT, '0.0.0.0');
+}).catch(async (error) => {
+  console.error('Could not initialize room storage:', error.message);
+  try { await roomStore.close(); } catch (closeError) { console.error('Could not close room storage:', closeError.message); }
+  process.exit(1);
+});

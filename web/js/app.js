@@ -74,10 +74,12 @@
   TG.openMenu = () => {
     const p = S.active(); if (!p) return;
     const m = TG.MASCOTS.find((x) => x.e === p.avatar);
-    const item = (icon, label, fn) => h('button', { class: 'menu-item', onclick: () => { close(); fn(); } }, h('span', { class: 'mi-i' }, icon), h('span', null, label), TG.icon('chevronRight'));
+    const item = (icon, label, fn, cls) => h('button', { class: 'menu-item' + (cls ? ' ' + cls : ''), onclick: () => { close(); fn(); } }, h('span', { class: 'mi-i' }, icon), h('span', null, label), TG.icon('chevronRight'));
+    const mp = TG._village && TG._village.live && TG._village.live();
     const close = TG.modal(h('div', null,
       h('div', { class: 'menu-me' }, h('span', { class: 'av big' }, p.avatar), h('div', null, h('b', null, p.name), h('small', null, `${p.age} ${L('настай', 'years old')}${TG.ethnic.byId(p.eth) ? ' · ' + tx(TG.ethnic.byId(p.eth).name) : m ? ' · ' + tx(m.name) : ''}${TG.aimags.byId(p.aimag) ? ' · 📍 ' + tx(TG.aimags.byId(p.aimag).name) : ''}`))),
       h('div', { class: 'menu-list' },
+        item('🌐', mp && mp.online ? `${L('Хамт тоглох', 'Play together')} · ${mp.others.size + 1}` : L('Хамт тоглох', 'Play together'), () => TG._village.multiplayer(), 'menu-multiplayer'),
         TG._village && TG._village.live() && item('👕', L('Хувцас', 'Wardrobe'), () => TG._village.wardrobe()),
         item('⛺', L('Нутаг', 'Nutag'), () => TG.go('village')),
         item('📚', L('Өв соёлын сургууль', 'Heritage school'), () => TG.go('learn')),

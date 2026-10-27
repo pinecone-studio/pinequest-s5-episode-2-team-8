@@ -1,0 +1,196 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import puppeteer from 'puppeteer-core';
+
+const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const databaseUrl = process.env.TEST_DATABASE_URL;
+if (!databaseUrl) {
+  console.log('Shared multiplayer integration test skipped (TEST_DATABASE_URL is not set).');
+  process.exit(0);
+}
+
+const chrome = process.env.CHROME_PATH || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  : '/usr/bin/google-chrome');
+const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+const dataDirs = [], servers = [];
+let browser;
+
+async function startServer() {
+  const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-multi-instance-'));
+  dataDirs.push(dataDir);
+  const child = spawn(process.execPath, [join(root, 'server', 'server.js')], {
+    env: { ...process.env, PORT: '0', DATA_DIR: dataDir, DATABASE_URL: databaseUrl, HEARTBEAT_MS: '1000' },
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+  });
+  servers.push(child);
+  let output = '';
+  child.stdout.on('data', (chunk) => { output += chunk; });
+  child.stderr.on('data', (chunk) => { output += chunk; });
+  return new Promise((resolveServer, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`server did not start: ${output}`)), 15000);
+    child.once('message', (message) => {
+      clearTimeout(timeout);
+      resolveServer({ child, port: message.port });
+    });
+    child.once('exit', (code) => {
+      clearTimeout(timeout);
+      reject(new Error(`server exited before readiness (${code}): ${output}`));
+    });
+  });
+}
+
+async function openSocket(page, port, id, ticket, name, room) {
+  await page.goto(`http://127.0.0.1:${port}/api/hello`);
+  await page.evaluate((url) => {
+    window.wsEvents = [];
+    window.gameSocket = new WebSocket(url);
+    window.gameSocket.addEventListener('message', (event) => window.wsEvents.push(JSON.parse(event.data)));
+  }, `ws://127.0.0.1:${port}/ws`);
+  await page.waitForFunction(() => window.gameSocket.readyState === WebSocket.OPEN, { timeout: 8000 });
+  await page.evaluate((join) => window.gameSocket.send(JSON.stringify(join)), {
+    t: 'join', room, id, ticket, name, look: {}, x: 20, y: 13, dir: 0,
+  });
+}
+
+async function waitForMessage(page, predicate, description, timeout = 8000) {
+  const test = predicate.toString();
+  try {
+    await page.waitForFunction(`() => window.wsEvents.some(${test})`, { timeout });
+  } catch (error) {
+    throw new Error(`timed out waiting for ${description}: ${error.message}`, { cause: error });
+  }
+  return page.evaluate(`() => window.wsEvents.find(${test})`);
+}
+
+try {
+  const [serverA, serverB] = await Promise.all([startServer(), startServer()]);
+  browser = await puppeteer.launch({ executablePath: chrome, headless: 'new', args: ['--no-sandbox'] });
+  const pageA = await browser.newPage(), pageB = await browser.newPage();
+  const room = Math.random().toString(36).slice(2, 8).toUpperCase().padEnd(6, 'A');
+  const idA = `player-${Math.random().toString(36).slice(2, 10)}`;
+  const idB = `player-${Math.random().toString(36).slice(2, 10)}`;
+  const ticketA = randomBytes(32).toString('hex');
+  const ticketB = randomBytes(32).toString('hex');
+
+  await openSocket(pageA, serverA.port, idA, ticketA, 'Бат', room);
+  const welcomeA = await waitForMessage(pageA, (message) => message.t === 'welcome', 'first player welcome');
+  assert.deepEqual(welcomeA.players, [], 'first player starts alone');
+  assert.equal(welcomeA.ticket, undefined, 'the server never returns or exposes a player credential');
+
+  await openSocket(pageB, serverB.port, idB, ticketB, 'Найз', room);
+  await Promise.all([pageA, pageB].map((page) => page.evaluate((ids) => { window.sharedTest = ids; }, { idA, idB })));
+  const welcomeB = await waitForMessage(pageB, (message) => message.t === 'welcome', 'second player welcome');
+  assert.ok(welcomeB.players.some((player) => player.id === idA), 'joining another server discovers the first player');
+  await waitForMessage(pageA, (message) => message.t === 'join' && message.p.id === window.sharedTest.idB, 'cross-instance join');
+
+  const impostorPage = await browser.newPage();
+  await openSocket(impostorPage, serverB.port, idA, randomBytes(32).toString('hex'), 'Дуурайгч', room);
+  const deniedIdentity = await waitForMessage(impostorPage, (message) => message.t === 'error' && message.why === 'identity', 'rejecting an invalid player credential');
+  assert.equal(deniedIdentity.why, 'identity', 'a different device credential cannot claim an existing player id');
+  await sleep(100);
+  assert.equal(await pageA.evaluate(() => window.gameSocket.readyState), WebSocket.OPEN, 'an invalid identity claim cannot replace the real player connection');
+  await impostorPage.close();
+
+  for (let x = 17.8; x < 31; x += 0.8) {
+    await pageB.evaluate((nextX) => window.gameSocket.send(JSON.stringify({ t: 'move', x: nextX, y: 13, dir: 2 })), x);
+    await sleep(100);
+  }
+  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'move', x: 31, y: 13, dir: 2 })));
+  await waitForMessage(pageA, (message) => message.t === 'move' && message.id === window.sharedTest.idB && message.x === 31, 'cross-instance movement');
+  await pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'say', k: 'p', i: 0 })));
+  await waitForMessage(pageB, (message) => message.t === 'say' && message.id === window.sharedTest.idA && message.i === 0, 'cross-instance chat');
+
+  await Promise.all([
+    pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-claim', i: 0, roof: 'blue', door: 'red', stage: 1 }))),
+    pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-claim', i: 0, roof: 'red', door: 'blue', stage: 1 }))),
+  ]);
+  const [lotA, lotB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'lot' && message.i === 0, 'shared ger claim on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'lot' && message.i === 0, 'shared ger claim on second instance'),
+  ]);
+  assert.equal(lotA.lot.by, lotB.lot.by, 'both instances converge on the same winning lot claim');
+  await Promise.any([
+    waitForMessage(pageA, (message) => message.t === 'deny' && message.act === 'ger' && message.why === 'taken', 'rejected competing ger claim'),
+    waitForMessage(pageB, (message) => message.t === 'deny' && message.act === 'ger' && message.why === 'taken', 'rejected competing ger claim'),
+  ]);
+  const ownerPage = lotA.lot.by === idA ? pageA : pageB;
+  await ownerPage.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-style', roof: 'teal', door: 'gold', furn: ['tulga'] })));
+  const styled = await waitForMessage(ownerPage, (message) => message.t === 'lot' && message.act === 'style', 'persisted ger style');
+  assert.equal(styled.lot.roof, 'teal', 'the room stores the updated ger style');
+  await ownerPage.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'ger-stage', stage: 2 })));
+  const staged = await waitForMessage(ownerPage, (message) => message.t === 'lot' && message.act === 'stage', 'persisted ger building stage');
+  assert.equal(staged.lot.stage, 2, 'the room stores the updated building stage');
+
+  await pageA.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-invite', to: id })), idB);
+  await waitForMessage(pageB, (message) => message.t === 'wr-invite' && message.from === window.sharedTest.idA, 'cross-instance wrestling invite');
+  await pageB.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-accept', from: id })), idA);
+  const [matchA, matchB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-start', 'wrestling match start on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'wr-start', 'wrestling match start on second instance'),
+  ]);
+  assert.equal(matchA.id, matchB.id, 'both players enter the same distributed match');
+  await Promise.all([pageA, pageB].map((page) => page.evaluate((id) => { window.sharedTest.matchId = id; }, matchA.id)));
+  await pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-move', m: 'push', p: 0.8 })));
+  await waitForMessage(pageB, (message) => message.t === 'wr-wait' && message.id === window.sharedTest.matchId, 'opponent move notification across instances');
+  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-move', m: 'pull', p: 0.65 })));
+  const [roundA, roundB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-result' && message.id === window.sharedTest.matchId, 'wrestling round result on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'wr-result' && message.id === window.sharedTest.matchId, 'wrestling round result on second instance'),
+  ]);
+  assert.deepEqual(roundA.score, roundB.score, 'both servers deliver the same authoritative round score');
+  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-quit' })));
+  const [endA, endB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-end' && message.id === window.sharedTest.matchId, 'forfeit result on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'wr-end' && message.id === window.sharedTest.matchId, 'forfeit result on second instance'),
+  ]);
+  assert.equal(endA.winner, idA, 'forfeiting player awards the match to the opponent');
+  assert.equal(endB.winner, idA, 'both servers agree on the winner');
+
+  await pageA.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-invite', to: id })), idB);
+  await waitForMessage(pageB, (message) => message.t === 'wr-invite' && message.from === window.sharedTest.idA, 'second cross-instance wrestling invite');
+  await pageB.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-accept', from: id })), idA);
+  const timedMatch = await waitForMessage(pageA, (message) => message.t === 'wr-start' && message.id !== window.sharedTest.matchId, 'timeout test match start');
+  await Promise.all([pageA, pageB].map((page) => page.evaluate((id) => { window.sharedTest.timeoutMatchId = id; }, timedMatch.id)));
+  await waitForMessage(pageB, (message) => message.t === 'wr-start' && message.id === window.sharedTest.timeoutMatchId, 'timeout test match start on second instance');
+  await pageA.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-move', m: 'push', p: 0.8 })));
+  const [timeoutRoundA, timeoutRoundB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-result' && message.id === window.sharedTest.timeoutMatchId, 'distributed wrestling move timeout on first instance', 35000),
+    waitForMessage(pageB, (message) => message.t === 'wr-result' && message.id === window.sharedTest.timeoutMatchId, 'distributed wrestling move timeout on second instance', 35000),
+  ]);
+  assert.deepEqual(timeoutRoundA.score, timeoutRoundB.score, 'the distributed timeout resolves once with the same score everywhere');
+  await pageB.evaluate(() => window.gameSocket.send(JSON.stringify({ t: 'wr-quit' })));
+  const [timeoutEndA, timeoutEndB] = await Promise.all([
+    waitForMessage(pageA, (message) => message.t === 'wr-end' && message.id === window.sharedTest.timeoutMatchId, 'forfeit result on first instance'),
+    waitForMessage(pageB, (message) => message.t === 'wr-end' && message.id === window.sharedTest.timeoutMatchId, 'forfeit result on second instance'),
+  ]);
+  assert.equal(timeoutEndA.winner, idA, 'forfeiting player awards the match to the opponent');
+  assert.equal(timeoutEndB.winner, idA, 'both servers agree on the winner after timeout');
+
+  await pageB.evaluate(() => window.gameSocket.close());
+  await waitForMessage(pageA, (message) => message.t === 'leave' && message.id === window.sharedTest.idB, 'cross-instance disconnect');
+  await pageA.close();
+  const returningPage = await browser.newPage();
+  await openSocket(returningPage, serverB.port, idA, ticketA, 'Бат', room);
+  const returningWelcome = await waitForMessage(returningPage, (message) => message.t === 'welcome', 'authenticated identity reconnecting through another instance');
+  assert.equal(returningWelcome.room, room, 'the original ticket authenticates the same identity on another server');
+  await returningPage.close();
+  console.log('Shared multiplayer: two PostgreSQL-backed servers synchronize presence, movement, chat, ger claims, wrestling and leave.');
+} finally {
+  if (browser) await browser.close();
+  for (const server of servers) {
+    if (server.exitCode === null) {
+      await new Promise((resolveExit) => {
+        const timeout = setTimeout(() => { server.kill(); resolveExit(); }, 5000);
+        server.once('exit', () => { clearTimeout(timeout); resolveExit(); });
+        server.kill('SIGTERM');
+      });
+    }
+  }
+  for (const dataDir of dataDirs) rmSync(dataDir, { recursive: true, force: true });
+}
