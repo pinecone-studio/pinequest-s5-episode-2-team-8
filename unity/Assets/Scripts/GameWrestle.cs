@@ -321,17 +321,14 @@ public sealed partial class Game
                     break;
                 case "choose":
                     {
-                        var moves = Rules.MOVES; int perRow = 3;
-                        for (int i = 0; i < moves.Length; i += perRow)
-                        {
-                            GUILayout.BeginHorizontal();
-                            for (int j = i; j < Mathf.Min(moves.Length, i + perRow); j++)
-                            {
-                                var m = moves[j];
-                                if (GUILayout.Button($"<b>{SkillIcon(m.id)} {m.name}</b>\n<size={g.Ts(9)}>> {string.Join(", ", m.beats.Take(3).Select(x => Rules.MoveById(x).name.ToString()))}…</size>", m.id == lastPlayer ? new GUIStyle(g.sBtn) { normal = g.sBtn.active } : g.sBtn, GUILayout.MinHeight(g.U(44)))) { var id = m.id; g.Later(() => StartSkill(id)); }
-                            }
-                            GUILayout.EndHorizontal();
-                        }
+                        // the moves in equal tiles, each as tall as its words: the name, then the moves it beats in small letters
+                        var moves = Rules.MOVES;
+                        var st = new GUIStyle(g.sBtn) { fontSize = g.Ts(13), padding = new RectOffset(Mathf.RoundToInt(g.U(8)), Mathf.RoundToInt(g.U(8)), Mathf.RoundToInt(g.U(6)), Mathf.RoundToInt(g.U(8))) };
+                        var stOn = new GUIStyle(st) { normal = g.sBtn.active };
+                        GUIContent Tile(Rules.Move m) => new GUIContent($"<b>{SkillIcon(m.id)} {m.name}</b>\n<size={g.Ts(10)}>> {string.Join(", ", m.beats.Take(3).Select(x => Rules.MoveById(x).name.ToString()))}…</size>");
+                        int picked = -1;
+                        g.Grid("wr-moves", moves.Length, 168, (i, w) => Mathf.Max(g.U(46), st.CalcHeight(Tile(moves[i]), w) + g.U(4)), (i, r) => { if (GUI.Button(r, Tile(moves[i]), moves[i].id == lastPlayer ? stOn : st)) picked = i; });
+                        if (picked >= 0) { var id = moves[picked].id; g.Later(() => StartSkill(id)); }
                         break;
                     }
                 case "timing":
