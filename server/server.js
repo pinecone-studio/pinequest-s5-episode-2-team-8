@@ -173,7 +173,7 @@ setInterval(() => {
     c.alive = false;
     try { c.socket.write(frame(9, Buffer.alloc(0))); } catch { c.socket.destroy(); }
   }
-  refreshPresence().catch((error) => console.error('Could not refresh multiplayer presence:', error.message));
+  if (!stopping) refreshPresence().catch((error) => console.error('Could not refresh multiplayer presence:', error.message));
 }, Number(process.env.HEARTBEAT_MS) || 20000).unref(); // a phone that drops off Wi-Fi without saying goodbye is removed after one or two missed pings
 
 // ---------------------------------------------------------------- game protocol

@@ -273,20 +273,6 @@ public sealed class Net
             }
             case "deny": g.Toast(m["why"].S == "own" ? Loc.L("Танд аль хэдийн гэр байна!", "You already have a ger!") : m["why"].S == "taken" ? Loc.L("Энэ газрыг өөр хүн авчихсан байна.", "Someone else already took this lot.") : m["why"].S == "busy" ? Loc.L("Тэр одоо завгүй байна.", "They are busy right now.") : Loc.L("Болохгүй байна.", "Not possible.")); return;
             case "replaced": replaced = true; closed = true; status = "solo"; others.Clear(); g.Toast(Loc.L("Энэ профайл өөр төхөөрөмж дээр нээгдлээ. Тэнд үргэлжлүүлэн тоглоорой.", "This profile was opened on another device. Keep playing there.")); return;
-            case "error":
-                if (m["why"].S == "identity")
-                {
-                    replaced = true; closed = true; status = "solo"; others.Clear();
-                    g.Toast(Loc.L("Токен хүчингүй байна. Дахин нэвтэрнэ үү.", "Invalid ticket. Please sign in again."));
-                    return;
-                }
-                if (m["why"].S == "storage")
-                {
-                    g.Toast(Loc.L("Серверийн хадгалалт алдаа гарлаа.", "Server storage error."));
-                    return;
-                }
-                g.Toast(Loc.L("Өрөөнд нэвтэрч чадсангүй.", "Could not join the room.")); 
-                return;
             case "move-correct":
                 if (g.V != null)
                 {
