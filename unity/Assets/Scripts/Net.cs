@@ -71,7 +71,7 @@ public sealed class Net
     public void Connect(Game g)
     {
         Close(); replaced = false;
-        serverUrl = WsUrl(g.V.server); room = string.IsNullOrEmpty(g.V.room) ? "NUTAG" : g.V.room;
+        serverUrl = WsUrl(Family.ServerOf(g, g.V)); room = string.IsNullOrEmpty(g.V.room) ? "NUTAG" : g.V.room;
         if (serverUrl == null) { status = "solo"; return; }
         closed = false; status = "connecting"; Open(g);
     }
@@ -129,6 +129,16 @@ public sealed class Net
         }
         catch (Exception) { }
     }
+    /** The cloud save goes up when it changed since the server last had it (checked every few seconds). */
+    string cloudSent = ""; float cloudT;
+    void SaveCloud(Game g)
+    {
+        if (!Online || g.V == null) return;
+        string cloud = Cloud.Of(g.V);
+        if (cloud == cloudSent) return;
+        cloudSent = cloud;
+        Send("{\"t\":\"cloud-save\",\"cloud\":" + cloud + "}");
+    }
     public void Send(string json)
     {
         if (!Online) return;
@@ -175,6 +185,7 @@ public sealed class Net
         if (!Online || g.V == null) return;
         if (syncing && Time.realtimeSinceStartup - syncSentAt > 8) syncing = false; // no answer: the same upload goes again later
         if (syncAt > 0 && Time.realtimeSinceStartup > syncAt) { syncAt = -1; Sync(g); }
+        if ((cloudT += dt) > 5) { cloudT = 0; SaveCloud(g); }
         moveT += dt; lookT += dt;
         var me = new Vector2(g.MyX, g.MyY); float moved = (me - sent).magnitude;
         if ((moveT > 0.1f && moved > 0.03f) || (moved > 0.001f && moveT > 0.4f)) { moveT = 0; sent = me; Send("{" + Obj("t", "move") + "," + Raw("x", F2(me.x)) + "," + Raw("y", F2(me.y)) + "," + Raw("dir", g.MyDir.ToString()) + "}"); }
@@ -228,6 +239,11 @@ public sealed class Net
                 }
                 g.GerSync(); // my ger, started while playing alone, comes along to a free plot
                 Sync(g);
+                cloudSent = ""; SaveCloud(g); // the server merges this device's lessons, badges… and sends back the whole copy
+                return;
+            case "cloud":
+                if (g.V == null) return;
+                if (Cloud.Apply(g.V, m["cloud"])) g.V.Save(); // cloudSent stays what was sent: anything newer goes up next time
                 return;
             case "join": AddOther(m["p"]); AddChat(g, new ChatLine { k = "join", id = m["p"]["id"].S, n = m["p"]["name"].S }); g.Toast(m["p"]["name"].S + Loc.L(" нутагт ирлээ", " joined the village")); return;
             case "leave": if (others.TryGetValue(m["id"].S, out var gone)) AddChat(g, new ChatLine { k = "leave", id = gone.id, n = gone.name }); others.Remove(m["id"].S); return;
@@ -401,8 +417,8 @@ public sealed partial class Game
         {
             var n = g.net; code ??= n.room;
             g.Title(Loc.L("Хамт тоглох өрөө", "Play-together room"));
-            if (string.IsNullOrEmpty(g.V.server)) { g.Text(Loc.L("Найзуудтайгаа хамт тоглохын тулд том хүнээс ☰ → Тохиргоо хэсэгт серверийн хаягийг бичүүлээрэй.", "To play with friends, ask a grown-up to add the server address in ☰ → Settings.")); if (g.Btn(Loc.L("Тохиргоо", "Settings"), true, 40)) g.Later(() => g.Swap(new SettingsModal())); }
-            if (!string.IsNullOrEmpty(g.V.server))
+            if (string.IsNullOrEmpty(Family.ServerOf(g, g.V))) { g.Text(Loc.L("Найзуудтайгаа хамт тоглохын тулд том хүнээс ☰ → Тохиргоо хэсэгт серверийн хаягийг бичүүлээрэй.", "To play with friends, ask a grown-up to add the server address in ☰ → Settings.")); if (g.Btn(Loc.L("Тохиргоо", "Settings"), true, 40)) g.Later(() => g.Swap(new SettingsModal())); }
+            if (!string.IsNullOrEmpty(Family.ServerOf(g, g.V)))
             {
                 g.Small(n.Online ? Loc.L($"“{n.room}” өрөөнд {n.others.Count + 1} хүн байна. Ижил кодтой хүмүүс нэг нутагт хамт тоглоно.", $"{n.others.Count + 1} people in room “{n.room}”. Everyone with the same code plays in one village.")
                     : n.status == "solo" ? Loc.L("Сервертэй холбогдоогүй байна.", "Not connected to the server.") : Loc.L("Холбогдож байна…", "Connecting…"));

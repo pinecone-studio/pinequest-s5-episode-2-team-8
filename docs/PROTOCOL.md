@@ -24,22 +24,25 @@ Shared lists (phrases, emotes, looks, roofs, moves…) live in `js/village/rules
 
 ## Family login
 
-`POST /api/family` (JSON, at most 4 KB) lets a child play as the same player on another device. A grown-up makes a **family code** from the parent dashboard. Each child is added to the family with their 3 secret pictures. On another device, the child enters the family code, picks their name and taps the same pictures. The server then gives that device its own ticket for the child's player `id`, so it has the same coins, XP and clothes. Nothing else from the first device comes along yet: lessons, character and other local progress stay on the device they were made on.
+`POST /api/family` (JSON, at most 4 KB) lets a child play as the same player on another device. A grown-up makes a **family code** from the parent dashboard. Each child is added to the family with their 3 secret pictures. On another device, the child enters the family code, picks their name and taps the same pictures. The server then gives that device its own ticket for the child's player `id`, so it has the same coins, XP and clothes. The `login` answer also carries the child's **cloud save** (see [Cloud save](#cloud-save)): character, lessons, badges, stamps, Mongol script and the historian's quest. Other progress (the ger, dairy, fish, horse races, energy) still stays on the device it was made on.
 
 | `act` | Fields | Answer when `ok` |
 |---|---|---|
 | `create` | `id, ticket, name, age, avatar, pics` | `{ ok, code }`: a new family with this child in it |
 | `join` | `code, id, ticket, name, age, avatar, pics` | `{ ok, code }`: adds the child, or replaces their name, age, avatar and pictures (this also lifts a lock) |
 | `members` | `code` | `{ ok, members: [{ id, name, age, avatar, locked }] }` |
-| `login` | `code, id, pics` | `{ ok, id, ticket, name, age, avatar, code }`: `ticket` is new and belongs to this device |
+| `login` | `code, id, pics` | `{ ok, id, ticket, name, age, avatar, code, cloud }`: `ticket` is new and belongs to this device; `cloud` is the child's cloud save |
+| `pictures` | `code, by, ticket, id, pics` | `{ ok, code, left }`: gives child `id` new pictures and lifts a lock (they forgot theirs) |
+| `remove` | `code, by, ticket, id` | `{ ok, code, left }`: takes child `id` out of the family; with `left: 0` the family is deleted |
 
 - `code`: 8 letters and digits from `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, shown as `ABCD-2345`. Lower case, spaces and dashes are allowed when sending it.
 - `pics`: 3 picture indexes 0–8, in order (`TG.PIC_KEYS` on the web; Unity's `PicKey(i)` uses the same order). `avatar`: a mascot index 0–11. `name`: up to 20 characters.
 - `create` and `join` need the child's own `id` and `ticket`, so only a device that already plays as that child can add or change it.
+- `pictures` and `remove` are for a grown-up on any device of the family: `by` and `ticket` are one of the family's children that this device plays as, and `id` may be any child of the family. Taking a child out doesn't erase their progress or the tickets their devices already have; they just can't log in with the code any more.
 - A family has at most 8 children.
 - After 5 wrong `login` tries, that child is locked for 15 minutes (`reason: 'locked'`, `wait` in seconds). A wrong try answers `reason: 'wrong'` with `left` tries.
 - Each address gets at most 30 requests a minute (`429`, `reason: 'busy'`). Behind Render's proxy, the last `X-Forwarded-For` entry is used.
-- Other `reason` values: `invalid`, `identity`, `no-family`, `full`, `storage`.
+- Other `reason` values: `invalid`, `identity`, `no-family`, `no-member`, `full`, `storage`.
 - Pictures are stored as a salted scrypt hash. With only 729 combinations, the lock is what protects them, not the hash.
 
 The web client keeps `familyCode` in its stored state, and `fam` (the family code) on each profile that is in the family. Unity (`Family.cs`) keeps `familyCode` and `server` (the address it last used) in `AppState`, and `fam` in each `SaveData`; its picture codes are saved as `"0-4-2"` and sent as `[0,4,2]`. Because Unity has no page origin, its family login also asks for the server address.
@@ -116,6 +119,14 @@ A log line is `{ k, id, n, i? }`:
 
 A second tab of the same player (`replaced`) doesn't add a join or leave line.
 
+### Cloud save
+
+| `t` | Fields | Meaning |
+|---|---|---|
+| `cloud-save` | `cloud` | This device's copy of the child's progress outside the wallet, in the shape of `cleanCloud` in `rules.js`. The server merges it into its own copy and answers with `cloud`. A device sends it after `welcome`, then when it changes (the web at most every 3 s, Unity checks every 5 s). |
+
+`cloud` is `{ eth, aimag, charAt, learn: { id: { done, best, family } }, ach: { id: ms }, stamps: { aimag: ms }, bichig: { id: best }, bichigMem: { id: 1 }, hist }`. Merging (`mergeCloud`) only adds: done stays done, best scores and `hist` go up, every badge and stamp is kept with its earliest date. The character is the exception: the most recent choice (`charAt`) wins. So no device can erase what another earned, and sending the same copy twice changes nothing. Ids are `[\w:.-]{1,48}`, at most 200 per list; anything else is dropped. The server keeps it in the player's progress record under `cloud` (`naadamy_player_progress` or `DATA_DIR/progress.json`). The server can't check any of it; none of it is money.
+
 ### Gers (the 8 shared lots per room, `LOTS`)
 | `t` | Fields | What it does |
 |---|---|---|
@@ -147,6 +158,7 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 | `look` | `id, look, lvl` | Someone changed outfit or level. |
 | `say` | `id, k, i` | Someone said a phrase or emote (your own included). |
 | `wallet-result` | `op, accepted, reason?, wallet` | Reply to `wallet-op`. Returns the canonical wallet after the operation. `reason` may be `insufficient`, `server-only`, `invalid` or `storage`. |
+| `cloud` | `cloud` | Reply to `cloud-save`: the server's merged copy. The device merges it in the same way. |
 | `sync-result` | `op, accepted, applied?, reason?, wallet, inventory` | Reply to `sync`. `applied` = `{ coins, xp }` actually added (less than sent when the daily cap is reached; coins spent stop at a zero balance). A repeated `op` returns the first answer without counting again. `reason` may be `invalid` or `storage`. |
 | `inventory-result` | `op, accepted, reason?, wallet, inventory` | Reply to `shop-buy`. Returns canonical wallet and limited shop inventory. `reason` may be `owned`, `level`, `insufficient`, `invalid` or `storage`. |
 | `progress-result` | `accepted, revision, reason?` | Reply to legacy `progress-save`. Current servers always return `accepted: false`, `reason: 'server-only'`, and revision `0`; no client progress is returned. |

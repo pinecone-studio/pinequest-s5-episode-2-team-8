@@ -227,6 +227,48 @@
   function tradeCost(id, pay) { const t = TRADES.find((x) => x.id === id); return !t ? null : pay === 'coins' ? { coins: t.coins } : { ...t.goods }; }
   const SHEAR_WOOL = 2, SHEAR_REGROW_MS = 45000, FELT_WOOL = 4;
   /** How far a lot's ger is built; gers saved before hands-on building have no stage and count as finished. */
+  // ---------------------------------------------------------------- cloud save
+  // A child's progress outside the wallet, in one shape for the web and Unity, kept by the server so it follows the child to
+  // another device: character, lessons, badges, passport stamps, Mongol script and the historian's quest. Merging only ever
+  // adds (done stays done, best scores and steps go up, the earliest date of a badge or stamp stays), so no device can erase
+  // what another one earned. The character is the exception: the most recent choice (charAt) wins.
+  const CLOUD_ID = /^[\w:.-]{1,48}$/, CLOUD_KEYS = 200, CLOUD_TIME = 4102444800000; // ids, keys per list, dates before 2100
+  function cleanCloud(x) {
+    const o = x && typeof x === 'object' && !Array.isArray(x) ? x : {};
+    const int = (v, max) => (Number.isSafeInteger(v) && v > 0 ? Math.min(v, max) : 0);
+    const str = (v) => (typeof v === 'string' && CLOUD_ID.test(v) ? v : '');
+    const map = (m, f) => {
+      const r = {};
+      if (m && typeof m === 'object' && !Array.isArray(m)) for (const k of Object.keys(m).slice(0, CLOUD_KEYS)) { if (!CLOUD_ID.test(k)) continue; const v = f(m[k]); if (v) r[k] = v; }
+      return r;
+    };
+    return {
+      eth: str(o.eth), aimag: str(o.aimag), charAt: int(o.charAt, CLOUD_TIME),
+      learn: map(o.learn, (l) => {
+        if (!l || typeof l !== 'object') return null;
+        const r = { done: l.done === true, best: int(l.best, 1000), family: int(l.family, CLOUD_TIME) };
+        return r.done || r.best || r.family ? r : null;
+      }),
+      ach: map(o.ach, (t) => int(t, CLOUD_TIME)), stamps: map(o.stamps, (t) => int(t, CLOUD_TIME)),
+      bichig: map(o.bichig, (n) => int(n, 1000)), bichigMem: map(o.bichigMem, (v) => (v ? 1 : 0)),
+      hist: int(o.hist, 1000),
+    };
+  }
+  function mergeCloud(a, b) {
+    a = cleanCloud(a); b = cleanCloud(b);
+    const each = (x, y, f) => Object.fromEntries([...new Set([...Object.keys(x), ...Object.keys(y)])].map((k) => [k, f(x[k], y[k])]));
+    const earliest = (x, y) => (x && y ? Math.min(x, y) : x || y);
+    const max = (x, y) => Math.max(x || 0, y || 0);
+    const who = b.charAt > a.charAt || (!a.eth && !a.aimag) ? b : a; // the most recent character, else the one that has one
+    return {
+      eth: who.eth || a.eth, aimag: who.aimag || a.aimag, charAt: max(a.charAt, b.charAt),
+      learn: each(a.learn, b.learn, (x = {}, y = {}) => ({ done: !!(x.done || y.done), best: max(x.best, y.best), family: max(x.family, y.family) })),
+      ach: each(a.ach, b.ach, earliest), stamps: each(a.stamps, b.stamps, earliest),
+      bichig: each(a.bichig, b.bichig, max), bichigMem: each(a.bichigMem, b.bichigMem, () => 1),
+      hist: max(a.hist, b.hist),
+    };
+  }
+
   function lotStage(lot) { if (!lot) return 0; const s = lot.stage; return Number.isInteger(s) && s >= 1 && s <= GER_DONE ? s : GER_DONE; }
   /** Roof poles go in all around the crown to keep it level: three in a row on one side tilts it. sides: 0 east, 1 south, 2 west, 3 north. */
   function unisTilt(sides) { const n = sides.length; return n >= 3 && sides[n - 1] === sides[n - 2] && sides[n - 2] === sides[n - 3]; }
@@ -263,5 +305,5 @@
   }
 
   return { GER_STEPS, GER_DONE, GER_NEEDS, gerTry, gerUse, TRADES, COVER_PRICE, tradeCost, SHEAR_WOOL, SHEAR_REGROW_MS, FELT_WOOL, lotStage, unisTilt, HANDS_ON, handsOn,
-    VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, DAILY_QUEST_REWARDS, DAILY_ACTIVITY_REWARDS, DAILY_EARN_CAP, dailyQuests, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
+    cleanCloud, mergeCloud, VERSION, W, H, LOTS, TITLES, MOVES, beats, exchange, titleFor, ROOF, DOOR, FURNITURE, DAIRY_ANIMALS, DAIRY, FISH, QUEST_TARGETS, DAILY_QUEST_REWARDS, DAILY_ACTIVITY_REWARDS, DAILY_EARN_CAP, dailyQuests, PHRASES, EMOTES, SKINS, DEELS, LOOKS, ITEMS, ROOM_RE, level, cleanLook, now };
 });

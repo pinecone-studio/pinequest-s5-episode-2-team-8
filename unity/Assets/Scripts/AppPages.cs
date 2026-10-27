@@ -143,7 +143,7 @@ public sealed partial class Game
             if (g.Btn(Loc.L("Бүх өгөгдлийг устгах", "Erase all data"), false, 34)) g.Later(() => g.Open(new ConfirmModal(Loc.L("Бүх өгөгдлийг устгах уу?", "Erase all data?"), Loc.L("Профайл, ахиц, тохиргоо устна.", "Profiles, progress and settings will be erased."), () => { PlayerPrefs.DeleteAll(); PlayerPrefs.Save(); g.App = new AppState(); g.V = null; g.CloseAll(); })));
         }
         // the family code: made here, then each child is added with their 3 pictures so they can log in on other devices
-        bool busy; string joinCode = "", famErr = "";
+        bool busy; string joinCode = "", famErr = "", membersCode; List<J> members;
         void FamilyCard(Game g, List<SaveData> kids)
         {
             var app = g.App;
@@ -174,41 +174,65 @@ public sealed partial class Game
             {
                 GUILayout.Label(Family.Show(app.familyCode), new GUIStyle(g.sBig) { alignment = TextAnchor.MiddleCenter });
                 g.Small(Loc.L("Өөр төхөөрөмж дээр: нэвтрэх хуудас → “Гэр бүлийн кодоор нэвтрэх”. Кодыг зөвхөн гэр бүлдээ хэлээрэй.", "On another device: the login page → “Log in with a family code”. Share the code only with your family."));
-                foreach (var k in kids)
+                // every child of the family, also those only on other devices: new pictures (forgotten ones), or out of the family
+                if (membersCode != app.familyCode)
                 {
-                    bool inFamily = k.fam == app.familyCode;
-                    g.Row(Px.Mascot(k.avatar), k.name, inFamily ? "√ " + Loc.L("Гэр бүлд", "In the family") : null);
+                    string c = membersCode = app.familyCode; members = null;
+                    g.StartCoroutine(Family.Post(Family.ServerOf(g, g.V), "{\"act\":\"members\",\"code\":" + J.Quote(c) + "}", r => { if (membersCode == c) members = r["ok"].B ? r["members"].ToList() : new List<J>(); }));
+                }
+                if (members == null) g.Small(Loc.L("Ачаалж байна…", "Loading…"));
+                foreach (var m in members ?? new List<J>())
+                {
+                    string mid = m["id"].S, mname = m["name"].S; int mav = m["avatar"].I; var kid = kids.FirstOrDefault(k => k.id == mid);
+                    g.Row(Px.Mascot(mav), mname, kid == null ? Loc.L("өөр төхөөрөмж", "other device") : m["locked"].B ? Loc.L("түр түгжээтэй", "locked for now") : null);
+                    if (g.SmallBtn(Loc.L("Шинэ зураг", "New pictures"), false, 110, !busy)) g.Later(() =>
+                    {
+                        if (kid != null) { var p = kid.id == g.V.id ? g.V : kid; g.Open(new PicturesModal(p.name, p.avatar, code => { p.code = code; p.Save(); AddChild(g, p); })); } // its own device changes them
+                        else g.Open(new PicturesModal(mname, mav, code => Manage(g, "pictures", mid, code, Loc.L($"{mname}-ийн зураг солигдлоо", $"{mname} has new pictures"))));
+                    });
+                    if (g.SmallBtn(Loc.L("Хасах", "Remove"), false, 80, !busy)) g.Later(() => g.Open(new ConfirmModal(Loc.L($"{mname}-г гэр бүлээс хасах уу?", $"Take {mname} out of the family?"),
+                        Loc.L("Өөр төхөөрөмж дээр гэр бүлийн кодоор нэвтэрч чадахгүй болно. Ахиц нь устахгүй.", "They can no longer log in with the family code on another device. Their progress is not erased."),
+                        () => Manage(g, "remove", mid, null, Loc.L($"{mname} гэр бүлээс гарлаа", $"{mname} left the family")))));
+                    g.EndRow();
+                }
+                foreach (var k in kids.Where(k => members != null && !members.Any(m => m["id"].S == k.id)))
+                {
+                    g.Row(Px.Mascot(k.avatar), k.name, null);
                     var kk = k;
-                    if (inFamily) { if (g.SmallBtn(Loc.L("Зураг солих", "Change pictures"), false, 130, !busy)) g.Later(() => { var p = kk.id == g.V.id ? g.V : kk; g.Open(new PicturesModal(p, () => AddChild(g, p))); }); }
-                    else if (g.SmallBtn(Loc.L("Гэр бүлд нэмэх", "Add to family"), true, 130, !busy)) g.Later(() => AddChild(g, kk));
+                    if (g.SmallBtn(Loc.L("Гэр бүлд нэмэх", "Add to family"), true, 130, !busy)) g.Later(() => AddChild(g, kk));
                     g.EndRow();
                 }
             }
             if (famErr != "") GUILayout.Label($"<color=#e14b3d>{famErr}</color>", g.sLabel);
             GUILayout.EndVertical();
         }
+        void Manage(Game g, string act, string id, string pics, string done)
+        {
+            busy = true; famErr = "";
+            g.StartCoroutine(Family.Manage(g, act, id, pics, r => { busy = false; membersCode = null; if (r["ok"].B) g.Toast(done); else famErr = Family.Why(r); }));
+        }
         void AddChild(Game g, SaveData k)
         {
             var p = k.id == g.V.id ? g.V : k;
-            if (Family.PicsJson(p.code) == null) { g.Open(new PicturesModal(p, () => AddChild(g, p))); return; }
+            if (Family.PicsJson(p.code) == null) { g.Open(new PicturesModal(p.name, p.avatar, code => { p.code = code; p.Save(); AddChild(g, p); })); return; }
             busy = true; famErr = "";
             g.StartCoroutine(Family.Link(g, p, r =>
             {
-                busy = false;
+                busy = false; membersCode = null; // fetch the family again
                 if (r["ok"].B) g.Toast(Loc.L($"{p.name} гэр бүлд нэмэгдлээ", $"{p.name} is in the family")); else famErr = Family.Why(r);
             }));
         }
         /** A child's 3 secret pictures, chosen by a grown-up for the family code. */
         sealed class PicturesModal : Modal
         {
-            readonly SaveData p; readonly Action then; readonly List<int> sel = new List<int>();
-            public PicturesModal(SaveData p, Action then) { this.p = p; this.then = then; }
+            readonly string name; readonly int avatar; readonly Action<string> picked; readonly List<int> sel = new List<int>();
+            public PicturesModal(string name, int avatar, Action<string> picked) { this.name = name; this.avatar = avatar; this.picked = picked; }
             public override void Press(Game g) { }
             public override void Draw(Game g)
             {
-                GUILayout.BeginHorizontal(); g.IconAt(Px.Mascot(p.avatar), 36); GUILayout.Label($"<b>{p.name}</b>", g.sTitle); GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal(); g.IconAt(Px.Mascot(avatar), 36); GUILayout.Label($"<b>{name}</b>", g.sTitle); GUILayout.EndHorizontal();
                 g.Small(Loc.L("3 нууц зураг сонгоорой. Дараалал нь чухал.", "Choose 3 secret pictures. The order matters."));
-                g.PicPad(sel, code => { p.code = code; p.Save(); g.Close(); then(); });
+                g.PicPad(sel, code => { g.Close(); picked(code); });
                 if (g.Btn(Loc.L("Болих", "Cancel"))) g.Later(g.Close);
             }
         }

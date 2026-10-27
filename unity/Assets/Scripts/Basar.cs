@@ -73,7 +73,7 @@ public static class Basar
 #else
     const string SCHEME = "http://";  // node server.js on the local Wi-Fi
 #endif
-    static string Url(Game g) { string s = (g.V.server ?? "").Trim().TrimEnd('/'); if (s == "") return null; if (!s.StartsWith("http")) s = SCHEME + s; return s + "/api/basar"; }
+    static string Url(Game g) { string s = (Family.ServerOf(g, g.V) ?? "").Trim().TrimEnd('/'); if (s == "") return null; if (!s.StartsWith("http")) s = SCHEME + s; return s + "/api/basar"; }
     public static IEnumerator Check(Game g)
     {
         string url = Url(g); if (url == null || checkedAi) yield break;

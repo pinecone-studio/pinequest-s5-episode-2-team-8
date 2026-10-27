@@ -281,7 +281,7 @@ public sealed partial class Game
         void PicPad(Game g, Action<string> onPick) => g.PicPad(sel, onPick);
         void FamilyLogin(Game g)
         {
-            famServer ??= g.App.server ?? "";
+            famServer ??= Family.ServerOf(g, null);
             void Error() { if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel); }
             void Leave() { tab = g.App.profiles.Count > 0 ? "login" : "register"; err = ""; sel.Clear(); }
             if (famStep == 0)
@@ -289,8 +289,12 @@ public sealed partial class Game
                 GUILayout.Label("<b>" + Loc.L("Гэр бүлийн код", "Family code") + "</b>", g.sLabel);
                 g.Small(Loc.L("Кодыг том хүн эцэг эхийн самбараас харна.", "A grown-up can find the code on the parent dashboard."));
                 famCode = g.Field(famCode, 9, "ABCD-2345"); g.Gap(6);
-                g.Small(Loc.L("Серверийн хаяг (ж: 192.168.1.10:8000)", "Server address (e.g. 192.168.1.10:8000)"));
-                famServer = g.Field(famServer, 80, "192.168.1.10:8000"); g.Gap(10);
+                if (Family.HOSTED == "" || famServer != Family.HOSTED) // with a hosted server built in, kids never see this
+                {
+                    g.Small(Loc.L("Серверийн хаяг (ж: 192.168.1.10:8000)", "Server address (e.g. 192.168.1.10:8000)"));
+                    famServer = g.Field(famServer, 80, "192.168.1.10:8000");
+                }
+                g.Gap(10);
                 Error();
                 GUILayout.BeginHorizontal();
                 if (g.Btn("←")) g.Later(Leave);

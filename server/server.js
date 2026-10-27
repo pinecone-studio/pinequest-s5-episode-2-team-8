@@ -28,7 +28,7 @@ const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter((i) => 
 let actualPort = PORT;
 const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
 const roomStore = createRoomStore({ dataDir: DATA_DIR });
-const family = require('./family.js')(roomStore);
+const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id) });
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
   '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.wasm': 'application/wasm', '.data': 'application/octet-stream' };
@@ -780,6 +780,42 @@ async function handleProgressSave(conn) {
   conn.send({ t: 'progress-result', accepted: false, reason: 'server-only', revision: 0 });
 }
 
+/** The child's cloud save (R.cleanCloud) merged with what a device sends. It lives in the player's progress record under
+ *  `cloud`, next to any legacy progress; a write that raced another device is merged again. */
+async function mergeCloudSave(id, incoming) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const current = await roomStore.getProgress(id, {});
+    const stored = R.cleanCloud(current.state.cloud);
+    const merged = R.mergeCloud(stored, incoming);
+    if (JSON.stringify(merged) === JSON.stringify(stored)) return merged;
+    const saved = await roomStore.saveProgress(id, current.revision, { ...current.state, cloud: merged });
+    if (saved.accepted) return merged;
+  }
+  throw new Error('the cloud save kept changing');
+}
+async function getCloudSave(id) {
+  return R.cleanCloud((await roomStore.getProgress(id, {})).state.cloud);
+}
+async function handleCloudSave(conn, message) {
+  const p = conn.player;
+  if (!p || !message.cloud || typeof message.cloud !== 'object') return;
+  // one save at a time per connection; a newer one waiting replaces the older
+  conn.cloudNext = message.cloud;
+  if (conn.cloudBusy) return;
+  conn.cloudBusy = true;
+  try {
+    while (conn.cloudNext) {
+      const next = conn.cloudNext; conn.cloudNext = null;
+      conn.send({ t: 'cloud', cloud: await mergeCloudSave(p.id, next) });
+    }
+  } catch (error) {
+    console.error('Could not save the cloud save:', error.message);
+    conn.send({ t: 'error', why: 'storage' });
+  } finally {
+    conn.cloudBusy = false;
+  }
+}
+
 /** One player's ger actions run one after another: a stage sent right after a claim must find the claimed lot, which only
  *  exists once the claim is saved (with PostgreSQL that takes a few round trips). */
 function queueLotAction(conn, action, message) {
@@ -939,6 +975,9 @@ function onMessage(conn, text) {
       break;
     case 'progress-save':
       handleProgressSave(conn, m);
+      break;
+    case 'cloud-save':
+      handleCloudSave(conn, m);
       break;
     // ---- own ger
     case 'ger-claim':

@@ -42,8 +42,15 @@ public static class Family
         if (parts.Length != 3 || parts.Any(p => !int.TryParse(p, out int i) || i < 0 || i > 8)) return null;
         return "[" + string.Join(",", parts.Select(int.Parse)) + "]";
     }
-    /** Where this profile reaches the server: its own address, or the one this device last used. */
-    public static string ServerOf(Game g, SaveData p) => !string.IsNullOrWhiteSpace(p.server) ? p.server : g.App.server;
+    /** The hosted Naadamy server (Render), built into the app so nobody has to type an address. Empty until it is deployed:
+     *  then set it, e.g. "https://naadamy-team8.onrender.com". An address in Settings still wins (a server on the home Wi-Fi). */
+    public const string HOSTED = "https://pinequest-s5-episode-2-team-8.onrender.com";
+    /** Where this profile reaches the server: its own address, the one this device last used, or the hosted one. "": play alone. */
+    public static string ServerOf(Game g, SaveData p)
+    {
+        if (p != null && !string.IsNullOrWhiteSpace(p.server)) return p.server;
+        return !string.IsNullOrWhiteSpace(g.App.server) ? g.App.server : HOSTED;
+    }
 
     public static string Why(J r)
     {
@@ -56,6 +63,7 @@ public static class Family
             case "wrong": return Loc.L($"Зураг буруу байна. {r["left"].I} оролдлого үлдлээ.", $"Wrong pictures. {r["left"].I} tries left.");
             case "locked": { int min = Math.Max(1, (r["wait"].I + 59) / 60); return Loc.L($"Олон удаа буруу дарлаа. {min} минутын дараа дахин оролдоорой.", $"Too many wrong tries. Try again in {min} minutes."); }
             case "busy": return Loc.L("Хэт олон оролдлого. Түр хүлээгээрэй.", "Too many tries. Wait a moment.");
+            case "no-member": return Loc.L("Энэ хүүхэд гэр бүлд байхгүй байна.", "This child is not in the family.");
             case "identity": return Loc.L("Энэ профайлыг сервер танисангүй.", "The server did not recognise this profile.");
             default: return Loc.L("Алдаа гарлаа. Дахин оролдоорой.", "Something went wrong. Try again.");
         }
@@ -77,6 +85,28 @@ public static class Family
         });
     }
 
+    /** A grown-up's change to any child of the family, from this device (which plays as one of its children): new pictures
+     *  ("pictures", for a child who forgot them) or taking a child out ("remove"). This device leaves the family when none of
+     *  its children are in it any more. */
+    public static IEnumerator Manage(Game g, string act, string id, string picsCode, Action<J> done)
+    {
+        string code = g.App.familyCode ?? "";
+        SaveData Kid(string pid) => g.V != null && pid == g.V.id ? g.V : SaveData.Load(pid);
+        var me = g.App.profiles.Select(Kid).FirstOrDefault(p => p.fam == code && !string.IsNullOrEmpty(p.ticket));
+        if (me == null) { done(Fail("identity")); yield break; }
+        string body = "{\"act\":" + J.Quote(act) + ",\"code\":" + J.Quote(code) + ",\"by\":" + J.Quote(me.id) + ",\"ticket\":" + J.Quote(me.ticket) + ",\"id\":" + J.Quote(id)
+            + (picsCode != null ? ",\"pics\":" + PicsJson(picsCode) : "") + "}";
+        yield return Post(ServerOf(g, me), body, r =>
+        {
+            if (r["ok"].B && act == "remove")
+            {
+                foreach (var pid in g.App.profiles) { var p = Kid(pid); if (p.id == id && p.fam != "") { p.fam = ""; p.Save(); } }
+                if (r["left"].I == 0 || !g.App.profiles.Any(pid => Kid(pid).fam == code)) { g.App.familyCode = ""; g.App.Save(); }
+            }
+            done(r);
+        });
+    }
+
     /** The child picked on the family list logs in: the profile already on this device, or a new one for this child. */
     public static IEnumerator Login(Game g, string server, string code, string id, string picsCode, Action<J, SaveData> done)
     {
@@ -89,6 +119,7 @@ public static class Family
             if (!known) { p.name = r["name"].S; p.age = r["age"].I; p.avatar = r["avatar"].I; p.created = SaveData.DayKey(); }
             p.ticket = r["ticket"].S; // this device's own ticket
             p.code = picsCode; p.fam = r["code"].S;
+            Cloud.Apply(p, r["cloud"]); // character, lessons, badges… from the other device
             if (string.IsNullOrWhiteSpace(p.server)) p.server = server.Trim();
             p.Save();
             if (!known) g.App.profiles.Add(pid);

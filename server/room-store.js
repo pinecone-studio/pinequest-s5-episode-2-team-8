@@ -193,7 +193,8 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         const family = Object.hasOwn(families, code) ? cleanFamily(families[code]) : null;
         const outcome = mutate(family);
         if (family && outcome.changed) {
-          Object.defineProperty(families, code, { value: family, writable: true, configurable: true, enumerable: true });
+          if (family.members.length) Object.defineProperty(families, code, { value: family, writable: true, configurable: true, enumerable: true });
+          else delete families[code]; // the last child left
           writeIdentityFile(familyFile, families);
         }
         return outcome.result;
@@ -484,8 +485,10 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         const row = await client.query('SELECT members FROM naadamy_families WHERE code = $1 FOR UPDATE', [code]);
         const family = row.rows[0] ? cleanFamily(row.rows[0]) : null;
         const outcome = mutate(family);
-        if (family && outcome.changed) {
+        if (family && outcome.changed && family.members.length) {
           await client.query('UPDATE naadamy_families SET members = $2::jsonb, updated_at = now() WHERE code = $1', [code, JSON.stringify(family.members)]);
+        } else if (family && outcome.changed) {
+          await client.query('DELETE FROM naadamy_families WHERE code = $1', [code]); // the last child left
         }
         await client.query('COMMIT');
         return outcome.result;
@@ -730,7 +733,8 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        for (const [code, state] of Object.entries(rooms)) {
+        // always in the same order: two servers saving the same rooms in different orders would wait on each other (deadlock)
+        for (const [code, state] of Object.entries(rooms).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
           if (!ROOM_CODE.test(code)) continue;
           await client.query(
             `INSERT INTO naadamy_rooms (code, state, updated_at)
