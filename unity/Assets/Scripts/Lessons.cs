@@ -72,6 +72,7 @@ public sealed partial class Game
                     GUI.DrawTexture(new Rect(r.x + g.U(6), r.center.y - g.U(12), g.U(24), g.U(24)), g.Tex(p.face));
                     GUI.Label(new Rect(r.x + g.U(34), r.y, r.width - g.U(36), r.height), p.name, new GUIStyle(on ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
                 }
+                g.PadRow(i + cols - Mathf.Min(list.Count, i + cols), 100, 40);
                 GUILayout.EndHorizontal();
             }
             if (mode == "friends")
