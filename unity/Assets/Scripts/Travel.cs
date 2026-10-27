@@ -8,22 +8,30 @@ using UnityEngine;
 
 public sealed partial class Game
 {
-    /** Guide Nomin's full body (76×168), animated, drawn into a picture at (X, Y). pose: wait | bye | yay. */
-    public void Nomin(PxCanvas x, float X, float Y, string pose, float scale = 0.36f)
+    // ================================================================ Guide Bolormaa (drawn by Tools/art/bolormaa.py): a full-body sprite and her faces
+    static readonly Dictionary<string, PxCanvas> bolormaaArt = new Dictionary<string, PxCanvas>();
+    /** Bolormaa from head to toe, 64×112. face: neutral, happy, laugh, wink, surprised, think, sad, proud, tease, excited, worried, shy,
+     *  curious. pose: idle, talk, wave, point, cheer, think, clasp, proud, or null for the one that suits her face. frame 0/1 breathes. */
+    public static PxCanvas Bolormaa(string face, string pose, int frame, bool open, bool blink)
     {
-        var meta = Data.Get("nomin"); int W = meta["W"].I, H = meta["H"].I, N = meta["frames"].I; float period = meta["period"].F;
-        int row = pose == "bye" ? 1 : pose == "yay" ? 2 : 0, f = (int)((Time.time % period) / period * N) % N;
-        float hop = pose == "yay" ? -Mathf.Abs(Mathf.Sin(Time.time * 4.6f)) * 7 * scale : 0;
-        x.BlitScaled(Art.Get("nomin_body"), X, Y + hop, W * scale, H * scale, false, f * W, row * H, W, H);
+        var m = Data.Get("bolormaa"); var faces = m["faces"].Strings(); var poses = m["poses"].Strings();
+        if (!faces.Contains(face)) face = "happy";
+        if (pose == null || !poses.Contains(pose)) pose = m["poseFor"][face].S ?? "idle";
+        frame &= 1; string key = face + "|" + pose + frame + open + blink;
+        if (bolormaaArt.TryGetValue(key, out var c)) return c;
+        int W = m["W"].I, H = m["H"].I, fw = m["faceW"].I, fh = m["faceH"].I, row = poses.IndexOf(pose), fi = faces.IndexOf(face) * 4 + (open ? 1 : 0) + (blink ? 2 : 0);
+        c = new PxCanvas(W, H);
+        c.BlitScaled(Art.Get("bolormaa_body"), 0, 0, W, H, false, frame * W, row * H, W, H);
+        c.BlitScaled(Art.Get("bolormaa_faces"), m["faceX"].I, m["faceY"].I + m["bob"][pose][frame].I, fw, fh, false, fi % 4 * fw, fi / 4 * fh, fw, fh);
+        return bolormaaArt[key] = c;
     }
-    static readonly Dictionary<string, PxCanvas> nominFaces = new Dictionary<string, PxCanvas>();
-    /** Nomin's face for the story box: expr (happy, laugh, wink, surprised, think, sad, proud, tease), mouth open, blinking. */
-    public static PxCanvas NominFace(string expr, bool open, bool blink)
+    /** Bolormaa standing in a scene picture at (X, Y), its top left, 60 pixels tall at scale 1. pose: wait | bye | yay. */
+    public void Nomin(PxCanvas x, float X, float Y, string pose, float scale = 1)
     {
-        string key = expr + open + blink; if (nominFaces.TryGetValue(key, out var c)) return c;
-        var faces = Data.Get("nomin")["faces"].Strings(); int r = Mathf.Max(0, faces.IndexOf(expr)), col = (open ? 1 : 0) + (blink ? 2 : 0);
-        c = new PxCanvas(48, 48); c.BlitScaled(Art.Get("nomin_faces"), 0, 0, 48, 48, false, col * 48, r * 48, 48, 48);
-        return nominFaces[key] = c;
+        string p = pose == "bye" ? "wave" : pose == "yay" ? "cheer" : "idle", f = pose == "yay" ? "laugh" : pose == "bye" ? "wink" : "happy";
+        int fr = (int)(Time.time * (pose == "idle" || pose == "wait" ? 1.6f : 4)) % 2;
+        float h = 60 * scale, w = h * 64 / 112f;
+        x.BlitScaled(Bolormaa(f, p, fr, false, Time.time % 3.7f < 0.12f), X - (w - 27 * scale) / 2, Y, w, h);
     }
 
     public void OpenTrip(string id, string view)

@@ -1,5 +1,5 @@
-// The tutorial level (js/tutorial.js) and the story box (js/dialog.js): Guide Nomin walks a new player through Нутаг.
-// She talks in the story box (portrait with changing faces, her own voice), then hands over control for small goals:
+// The tutorial level (js/tutorial.js) and the story box (js/dialog.js): Guide Bolormaa walks a new player through Нутаг.
+// She talks in the story box (standing beside it, her face and pose changing with what she says, her own voice), then hands over control for small goals:
 // walk, jump, call Basar, drink from the well. It starts by itself on the first visit; the "?" button plays it again.
 // Later she drops by now and then: a quest to claim, new quests, someone with a task, a tip.
 using System;
@@ -55,19 +55,33 @@ public sealed partial class Game
         TargetDraw();
         GoalDraw(vw);
         var d = dialog; if (d == null) return;
-        // the story box, as on the web version: black with a white pixel border, her portrait on the left, white pixel text typing out
-        float w = Mathf.Min(vw - 16, 680), pad = 12, pic = 72, tx = pad * 2 + pic, tw = w - tx - pad;
+        // the story box, as on the web version: black with a white pixel border and white pixel text typing out. Basar sits in a portrait
+        // on the left; Bolormaa stands beside the box from head to toe, her face and pose following what she says
+        bool guide = d.who != "basar";
+        float w = Mathf.Min(vw - 16, 680), pad = 12, pic = guide ? 92 : 72, tx = pad * 2 + pic, tw = w - tx - pad;
         var st = new GUIStyle(sPixel) { wordWrap = true, alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16)), normal = { textColor = Color.white } }; // the story box is pixel text, as on the web
         float th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
-        float h = Mathf.Max(pic + pad * 2, pad + 24 + th + (n > 0 ? 8 + n * 46 : 18) + pad);
-        float x = vw / 2 - w / 2, y = d.top ? 60 : vh - h - 70;
+        float h = Mathf.Max(guide ? 96 : pic + pad * 2, pad + 24 + th + (n > 0 ? 8 + n * 46 : 18) + pad);
+        float x = vw / 2 - w / 2, y = d.top ? (guide ? 120 : 60) : vh - h - 70;
         var r = UR(x, y, w, h); Ui(r);
         Box(r, Color.white); Box(UR(x + 3, y + 3, w - 6, h - 6), Px.Col("#08060e"));
         if (n == 0 && GUI.Button(r, GUIContent.none, GUIStyle.none)) Later(DialogNext); // tapping the box goes on; with answers, only the answers do
-        // the portrait: her mouth moves while the words type out, and she blinks now and then
-        PxCanvas face = d.who == "basar" ? Px.BankharFace(d.Typing && (int)(Time.time * 8) % 2 == 0 ? 1 : 0) : NominFace(d.face, d.Typing && (int)(Time.time * 9) % 2 == 0, Time.time % 3.7f < 0.12f);
-        Box(UR(x + pad - 2, y + pad - 2, pic + 4, pic + 4), Color.white); Box(UR(x + pad, y + pad, pic, pic), Px.Col("#2b2140"));
-        GUI.DrawTexture(UR(x + pad, y + pad, pic, pic), Tex(face));
+        bool talking = d.Typing && (int)(Time.time * 9) % 2 == 0, blink = Time.time % 3.7f < 0.12f;
+        if (guide)
+        {
+            // she stands on the box's bottom edge and leans out over its top, breathing (and waving or cheering a little faster)
+            float bh = Mathf.Min(170, h + 74), bw = bh * 64 / 112f, hop = d.face == "laugh" || d.face == "excited" ? Mathf.Abs(Mathf.Sin((Time.time - d.born) * 7)) * 3 * (d.Typing ? 1 : 0) : 0;
+            var body = Bolormaa(d.face, null, (int)(Time.time * (d.Typing ? 3 : 1.4f)) % 2, talking, blink);
+            var br = UR(x + pad + (pic - bw) / 2, y + h - bh - 4 - hop, bw, bh);
+            GUI.DrawTexture(new Rect(br.x + U(10), br.yMax - U(3), br.width - U(20), U(4)), white, ScaleMode.StretchToFill, true, 0, new Color(0, 0, 0, 0.35f), 0, U(2));
+            GUI.DrawTexture(br, Tex(body));
+        }
+        else
+        {
+            PxCanvas face = Px.BankharFace(d.Typing && (int)(Time.time * 8) % 2 == 0 ? 1 : 0);
+            Box(UR(x + pad - 2, y + pad - 2, pic + 4, pic + 4), Color.white); Box(UR(x + pad, y + pad, pic, pic), Px.Col("#2b2140"));
+            GUI.DrawTexture(UR(x + pad, y + pad, pic, pic), Tex(face));
+        }
         GUI.Label(UR(x + tx, y + pad - 2, tw, 24), d.name.ToUpper(), new GUIStyle(sPixel) { alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16)), normal = { textColor = Px.Col(d.who == "basar" ? "#e9a91f" : "#f7c646") } });
         string vis = d.text.Substring(0, Mathf.Min(d.text.Length, (int)d.shown));
         GUI.Label(UR(x + tx, y + pad + 24, tw, th + 4), vis + "<color=#00000000>" + d.text.Substring(vis.Length) + "</color>", st);
@@ -76,7 +90,7 @@ public sealed partial class Game
             for (int i = 0; i < n; i++)
                 if (Button(UR(x + tx, y + pad + 24 + th + 8 + i * 46, tw, 40), d.choices[i], sOpt)) { int k = i; Later(() => { d.picked = k; d.done = true; if (dialog == d) dialog = null; Sfx.Tap(); }); }
     }
-    /** A pulsing yellow frame round the button Nomin is talking about. */
+    /** A pulsing yellow frame round the button Bolormaa is talking about. */
     void GlowAt(string key, Rect r)
     {
         if (glowKey != key) return;
@@ -97,7 +111,7 @@ public sealed partial class Game
         Outlined(U(q.x), U(q.y + (off ? 0 : bob)), arrow, U(22), Px.Col("#ffd23f"));
     }
 
-    // ================================================================ goals: Nomin hands you control until you've done it
+    // ================================================================ goals: Bolormaa hands you control until you've done it
     string goalText; Func<string> goalProgress; bool goalSkip;
     void GoalDraw(float vw)
     {
@@ -164,8 +178,8 @@ public sealed partial class Game
             if (askAnswer != 0) { yield return Finish(false, false); yield break; }
         }
         // hello
-        yield return Say("happy", $"Сайн уу, {name}! Би Болормаа, энэ Нутгийн хөтөч.", $"Hello, {name}! I’m Bolormaa, the guide of this village.");
-        yield return Say("wink", "Энд мал саах, бөх барилдах, морь уралдуулах, монгол гэр барих бүгдийг тоглож сурна.", "Here you learn by playing: milking, wrestling, horse racing, building a ger and more.");
+        yield return Say("wink", $"Сайн уу, {name}! Би Болормаа, энэ Нутгийн хөтөч.", $"Hello, {name}! I’m Bolormaa, the guide of this village.");
+        yield return Say("happy", "Энд мал саах, бөх барилдах, морь уралдуулах, монгол гэр барих бүгдийг тоглож сурна.", "Here you learn by playing: milking, wrestling, horse racing, building a ger and more.");
         yield return Ask("tease", "Тэгэхээр... надтай хамт Нутгаар нэг тойрох уу?", "So... want to take a little tour with me?", Tx2("Тийм ээ, явцгаая!", "Yes, let’s go!"), Tx2("Нутаг гэж юу вэ?", "What is Nutag?"), Tx2("Би өөрөө мэднэ", "I already know how"));
         if (askAnswer == 1)
         {
@@ -201,10 +215,10 @@ public sealed partial class Game
 
         // the buttons
         yield return Say("proud", "Одоо товчнуудаа танилцъя. Энэ чиний зоос. Даалгавар хийж зоос цуглуулаад дэлгүүрээс дээл, малгай, тэжээвэр ав.", "Now the buttons. These are your coins. Do tasks, earn coins and buy deels, hats and pets at the shop.", "coins");
-        yield return Say("neutral", "Энэ ногоон зурвас бол хүч. Гүйхэд багасна. Ядарвал хоол идэж, ундаа уугаарай.", "This green bar is your energy. Running uses it up. When you’re tired, eat or drink something.", "energy");
+        yield return Say("worried", "Энэ ногоон зурвас бол хүч. Гүйхэд багасна. Ядарвал хоол идэж, ундаа уугаарай.", "This green bar is your energy. Running uses it up. When you’re tired, eat or drink something.", "energy");
         yield return Say("happy", "Ном дээр дарвал Өв соёлын сургууль нээгдэнэ: гэр барих, цагаан идээ хийх, Нууц товчоо...", "The book opens the Heritage School: building a ger, making dairy, the Secret History...", "learn");
         yield return Say("wink", "Энэ товчийг дарвал өдрийн даалгаврууд гарна. Өдөр бүр шинэ!", "This button shows your daily quests. New ones every day!", "quests");
-        yield return Say("surprised", "Энэ нүд товч бол хамгийн гайхалтай нь: бүх Нутгийг 3D-ээр өөрийн нүдээр харна!", "And the eye button is the coolest: see the whole village in 3D, through your own eyes!", "fp");
+        yield return Say("excited", "Энэ нүд товч бол хамгийн гайхалтай нь: бүх Нутгийг 3D-ээр өөрийн нүдээр харна!", "And the eye button is the coolest: see the whole village in 3D, through your own eyes!", "fp");
         yield return Say("tease", "Мартчихвал энэ ? товчийг дар. Би дахиад гүйгээд ирнэ!", "If you forget anything, tap this ?. I’ll come running back!", "help");
         glowKey = null;
         yield return Questions();
@@ -221,7 +235,7 @@ public sealed partial class Game
         float j0 = jumpT;
         yield return Goal(Tx2("Үсэр!", "Jump!"), () => jumpT > j0);
         glowKey = null;
-        yield return Say("surprised", "Вау, ямар өндөр үсрэв! Замд чулуу таарвал үсрээд давчихна.", "Whoa, what a jump! If a rock is in the way, you hop right over it.");
+        yield return Say("excited", "Вау, ямар өндөр үсрэв! Замд чулуу таарвал үсрээд давчихна.", "Whoa, what a jump! If a rock is in the way, you hop right over it.");
         yield return Say("neutral", touch ? "Яарч байвал “Гүйх” товчийг асаавал гүйнэ. Гэхдээ гүйхэд хүч зарцуулдаг шүү." : "Яарч байвал Shift товчийг дарж байгаад гүйнэ. Гэхдээ гүйхэд хүч зарцуулдаг шүү.",
             touch ? "In a hurry? Switch on the “Run” button to run. Running uses up energy, though." : "In a hurry? Hold Shift to run. Running uses up energy, though.", touch ? "run" : null);
         glowKey = null;
@@ -243,7 +257,7 @@ public sealed partial class Game
                 Say("happy", "Эмээгийн гэрт ч зочлоорой. Эмээ ёс заншил зааж, ааруул өгдөг!", "Visit Grandma’s ger too. She teaches good manners and gives you aaruul!"))),
             (Tx2("Чи хэн бэ?", "Who are you?"), () => Seq(
                 Say("proud", "Би Болормаа! Хөдөө өссөн, морь унах, бөх барилдахыг үзэх их дуртай.", "I’m Bolormaa! I grew up in the countryside, and I love riding and watching wrestling."),
-                Say("tease", "Нууцхан хэлэхэд... Басарыг надаас ч илүү ухаантай гэж боддог. Түүнд битгий хэлээрэй!", "Between you and me... I think Basar is even smarter than me. Don’t tell him!"))),
+                Say("shy", "Нууцхан хэлэхэд... Басарыг надаас ч илүү ухаантай гэж боддог. Түүнд битгий хэлээрэй!", "Between you and me... I think Basar is even smarter than me. Don’t tell him!"))),
         };
         bool first = true;
         while (true)
@@ -271,7 +285,7 @@ public sealed partial class Game
         StopTutorial();
     }
 
-    // ================================================================ Nomin drops by
+    // ================================================================ Bolormaa drops by
     static readonly Tx[] TIPS =
     {
         new Tx("Ядарсан уу? Хоолны товч дээр дараад нэг юм идчих. Хүч чинь буцаад дүүрнэ шүү.", "Feeling tired? Tap the food button and grab a snack. Your energy fills right back up."),
@@ -281,6 +295,7 @@ public sealed partial class Game
         new Tx("3D товчийг дарвал Нутгаа 3D-ээр харна. Би анх үзэхдээ их гайхаж билээ.", "Tap the 3D button to see Nutag in 3D. It amazed me the first time I saw it."),
         new Tx("Наадмын талбайд Засуул чамайг хүлээж байна. Бөхийн мэх сурмаар байна уу?", "The herald is waiting at the Naadam field. Want to learn a wrestling move?"),
     };
+    static readonly string[] TIP_FACES = { "worried", "happy", "excited", "shy", "curious", "proud" }; // a face that fits each tip
     const float GAP = 5 * 60, GAP_SHORT = 2 * 60;
     float dropNext = 3 * 60, dropCheck; bool dropBusy;
     void TutorialTick(float dt)
@@ -310,13 +325,13 @@ public sealed partial class Game
         if (npc != null)
         {
             Mark("npc:" + npc.id, GAP); var o = World.objects.FirstOrDefault(x => x.kind == "npcq" && x.id == npc.id);
-            StartCoroutine(DropBy("think", new Tx($"Сонсоо, {npc.name.mn} чамаас тусламж хүсэж байна. Шар сум замыг заана, би энд л байна.", $"Psst, {npc.name.en} could use your help. The yellow arrow shows the way, and I’m right here if you need me."), null, o != null ? (o.x, o.y, npc.name.ToString()) : ((float, float, string)?)null)); return;
+            StartCoroutine(DropBy("curious", new Tx($"Сонсоо, {npc.name.mn} чамаас тусламж хүсэж байна. Шар сум замыг заана, би энд л байна.", $"Psst, {npc.name.en} could use your help. The yellow arrow shows the way, and I’m right here if you need me."), null, o != null ? (o.x, o.y, npc.name.ToString()) : ((float, float, string)?)null)); return;
         }
         if (ms - V.nominLast > (15 * 60 + UnityEngine.Random.value * 10 * 60) * 1000) // a friendly tip, only now and then
         {
             int i = Array.FindIndex(TIPS, t => !Said("tip:" + Array.IndexOf(TIPS, t))); if (i < 0) i = UnityEngine.Random.Range(0, TIPS.Length);
             Mark("tip:" + i, GAP);
-            StartCoroutine(DropBy(new[] { "happy", "wink", "proud" }[UnityEngine.Random.Range(0, 3)], TIPS[i]));
+            StartCoroutine(DropBy(TIP_FACES[i], TIPS[i]));
         }
     }
     IEnumerator DropBy(string face, Tx text, string glow = null, (float, float, string)? target = null)
