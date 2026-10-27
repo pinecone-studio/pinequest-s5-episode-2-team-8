@@ -2,6 +2,7 @@
 // Drawn with IMGUI so the game needs no UI packages; everything is scaled from a 480-unit-tall layout.
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public sealed partial class Game
@@ -108,7 +109,7 @@ public sealed partial class Game
     /** Phones and tablets get on-screen buttons and touch hints; a computer uses the keys Bolormaa teaches. */
     public static bool TouchUI => Application.isMobilePlatform;
     float builtFor = -1;
-    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt, sSel, sPixel, sTeach, sKicker, sNote;
+    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt, sSel, sPixel, sTeach, sKicker, sNote, sSlot, sChipHi;
     Texture2D white;
     readonly Dictionary<PxCanvas, Texture2D> texCache = new Dictionary<PxCanvas, Texture2D>();
     public Texture2D Tex(PxCanvas c) { if (!texCache.TryGetValue(c, out var t)) texCache[c] = t = c.ToTexture(); return t; }
@@ -173,6 +174,8 @@ public sealed partial class Game
         sPixel = new GUIStyle(sCenter) { font = pixelFont, wordWrap = false }; // the village's labels, as the web version draws them in Tiny5
         sTeach = Style(Frame("#fffaf0", Ring("#c99a5a", 2), 0, null, 0, u), null, bodyFont, T(15), ink, TextAnchor.UpperLeft, true); sTeach.padding = new RectOffset(T(12), T(12), T(8), T(8)); // what a person says, in a speech box
         sKicker = new GUIStyle(sLabel) { fontSize = T(12), normal = { textColor = Px.Col("#6b7280") } }; // the small grey line above a heading
+        sChipHi = Style(Frame("#fff3c4", new[] { ("#e5a157", 2), ("#8a4b1f", 2) }, 4, "#5a2d10", 4, u), null, pixelFont, F(11), ink, TextAnchor.MiddleLeft); // Basar's button stands out (.v-basar)
+        sSlot = Style(Frame("#e6c48a", Ring("#c99a5a", 2), 0, null, 0, u), null, pixelFont, F(11), ink, TextAnchor.MiddleCenter);
         sNote = new GUIStyle(sChip) { font = bodyFont, fontSize = T(14), wordWrap = true, alignment = TextAnchor.MiddleCenter }; // a parchment box over a scene: its title, a hint
     }
     public float U(float v) => v * UiScale;
@@ -231,7 +234,7 @@ public sealed partial class Game
             GUI.enabled = was;
             GUI.EndGroup();
         }
-        if (!InScene && modal == null) { GUI.BeginGroup(new Rect(sx, sy, safe.width, safe.height)); DialogDraw(vw, vh); GUI.EndGroup(); }
+        if (!InScene && modal == null) { GUI.BeginGroup(new Rect(sx, sy, safe.width, safe.height)); DialogDraw(vw, vh); BigMap(vw, vh); GUI.EndGroup(); } // the big map sits over everything in the village
         if (modal != null) DrawModal();
         Toasts(sx, sy, vw);
         AchievementPopup();
@@ -329,70 +332,193 @@ public sealed partial class Game
         }
     }
 
+    // ================================================================ the village HUD, laid out like the web version's (village.js hud(), styles.css .v-*)
+    bool moreOpen, miniBig; PxCanvas miniBase;
+    static readonly Dictionary<char, string> MINI = new Dictionary<char, string> { ['g'] = "#76b947", ['T'] = "#3f7a2c", ['p'] = "#d8ab6c", ['s'] = "#d9cdb5", ['w'] = "#4aa6e2", ['d'] = "#a46d3b", ['o'] = "#8c5a33", ['f'] = "#a46d3b", ['r'] = "#a5a5b0", ['a'] = "#e8c994" };
+    static readonly Dictionary<string, string> MINI_OBJ = new Dictionary<string, string> { ["ger"] = "#f4efe3", ["shop"] = "#e14b3d", ["board"] = "#a46d3b", ["well"] = "#77778a", ["lot"] = "#c8a06a", ["bleachers"] = "#a46d3b", ["ovoo"] = "#a5a5b0", ["uya"] = "#8a5a33", ["archery"] = "#e9a91f", ["academy"] = "#2f7d5b", ["felt"] = "#d8c8a8" };
+    /** One pixel per tile: ground, roads, water, buildings. */
+    PxCanvas MiniBase()
+    {
+        if (miniBase != null) return miniBase;
+        miniBase = new PxCanvas(World.W, World.H);
+        for (int y = 0; y < World.H; y++) for (int x = 0; x < World.W; x++)
+        {
+            char c = World.At(x, y); var o = c == 'B' ? World.ObjAt(x, y) : null;
+            miniBase.Put(x, y, Px.Col(o != null && MINI_OBJ.TryGetValue(o.kind, out var oc) ? oc : MINI.TryGetValue(c, out var tc) ? tc : MINI['g']));
+        }
+        return miniBase;
+    }
+    /** The map: lots, people with news for you, friends, you, and what the screen shows. Tap it to make it big; on the big map, tap a place to walk there. */
+    void VillageMap(Rect r)
+    {
+        var e = Event.current;
+        var map = new Rect(r.x + U(6), r.y + U(6), r.width - U(12), r.height - U(14));
+        float s = map.width / World.W;
+        if (miniBig && e.type == EventType.MouseUp && map.Contains(e.mousePosition))
+        {
+            int tx0 = Mathf.FloorToInt((e.mousePosition.x - map.x) / s), ty0 = Mathf.FloorToInt((e.mousePosition.y - map.y) / s); e.Use();
+            Later(() => { miniBig = false; if (!World.Blocked(tx0, ty0)) GoTo(tx0, ty0, null); else { var n = World.NearestOpen(tx0, ty0, mx, my); if (n != null) GoTo(n.Value.x, n.Value.y, null); } });
+        }
+        if (Button(r, "", sChip) && !miniBig) Later(() => { miniBig = true; Sfx.Tap(); });
+        GUI.DrawTexture(map, Tex(MiniBase()));
+        void Dot(float x, float y, Color c, float rad = 2) { float d = U(rad); Box(new Rect(map.x + x * s - d - U(1), map.y + y * s - d - U(1), 2 * d + U(2), 2 * d + U(2)), Px.Col("#2b1e2e")); Box(new Rect(map.x + x * s - d, map.y + y * s - d, 2 * d, 2 * d), c); }
+        foreach (var o in World.objects)
+        {
+            if (o.kind == "npcq" && NpcMark(o.id) != "") Dot(o.x + 0.5f, o.y + 0.5f, Px.Col(NpcMark(o.id) == "?" ? "#7fe07a" : "#f7c646"));
+            if (o.kind == "emee" && V.emee.visits == 0) Dot(o.x + 0.5f, o.y + 0.5f, Px.Col("#f492ba"));
+        }
+        foreach (var o in net.others.Values) Dot(o.px + 0.5f, o.py + 0.8f, Color.white);
+        if ((int)(Time.time / 0.45f) % 2 == 1) Dot(px + 0.5f, py + 0.8f, Color.white, 3);
+        Dot(px + 0.5f, py + 0.8f, Px.Col("#e14b3d"));
+        float hh = cam.orthographicSize, hw = hh * cam.aspect, cx = cam.transform.position.x, cy = -cam.transform.position.y; var vr = new Rect(map.x + (cx - hw) * s, map.y + (cy - hh) * s, 2 * hw * s, 2 * hh * s);
+        var wc = new Color(1, 1, 1, 0.85f); float t = Mathf.Max(1, U(1));
+        Box(new Rect(vr.x, vr.y, vr.width, t), wc); Box(new Rect(vr.x, vr.yMax - t, vr.width, t), wc); Box(new Rect(vr.x, vr.y, t, vr.height), wc); Box(new Rect(vr.xMax - t, vr.y, t, vr.height), wc);
+    }
+    static string ActIcon(string type)
+    {
+        switch (type)
+        {
+            case "home": return "ui:house"; case "arcade": case "academy": case "historian": return "ui:book"; case "lasso": case "uya": return "ui:horse";
+            case "general": return "ui:trophy"; case "shop": return "ui:shop"; case "board": return "ui:scroll"; case "well": return "ui:drop";
+            case "zel": return "beast:mare"; case "cow1": case "cow2": return "beast:cow"; case "goat1": case "goat2": return "beast:goat";
+            case "churn": return "dairy:airag"; case "tulga": return "dairy:urum"; case "rack": return "dairy:aaruul"; case "fish": return "ui:fish";
+            case "sheep": case "emee": return "ui:heart"; case "shear": return "part:wool"; case "felt": return "part:esgii"; case "zasuul": case "arena": return "ui:wrestle";
+            case "ovoo": return "ui:ovoo"; case "archery": return "ui:bow"; case "npcq": return "ui:chat"; case "lot": return "ui:ger"; case "basar": return "ui:dog";
+        }
+        return "ui:star";
+    }
+    /** A round parchment button (.v-round) with an icon or a short text. */
+    bool Round(Rect r, PxCanvas icon, string text = null, GUIStyle st = null)
+    {
+        bool hit = Button(r, "", st ?? sChip);
+        if (icon != null) { float s = r.width * 0.62f; GUI.DrawTexture(new Rect(r.center.x - s / 2, r.center.y - s / 2 - U(2), s, s), Tex(icon), ScaleMode.ScaleToFit); }
+        else if (text != null) GUI.Label(new Rect(r.x, r.y, r.width, r.height - U(4)), text, new GUIStyle(sPixel) { fontSize = PxSize(U(16)), normal = { textColor = Px.Col("#4a2a12") } });
+        return hit;
+    }
     void Hud(float vw, float vh)
     {
         sprintRect = Rect.zero;
-        // top left: coins, level and XP, energy
-        var lv = Rules.Level(V.xp);
-        var chip = UR(8, 8, 190, 64); Ui(chip); GUI.Box(chip, GUIContent.none, sChip);
-        GUI.DrawTexture(UR(14, 13, 22, 22), Tex(Px.Icon("ui:coin"))); GUI.Label(UR(40, 12, 60, 24), V.coins.ToString(), sChipText);
-        GUI.Label(UR(100, 12, 90, 24), Loc.L("Түвшин ", "Lv ") + lv.l, sChipText);
-        Bar(UR(16, 40, 174, 10), lv.cur / (float)lv.need, Px.Col("#f7c646"));
-        Bar(UR(16, 54, 174, 10), V.energy / Rules.ENERGY_MAX, Px.Col("#2ea35f"));
-        // top right: language, the bag and food
-        if (IconButton(UR(vw - 58, 8, 50, 40), Px.Icon("ui:menu"))) Later(() => Open(new MenuModal()));
-        if (IconButton(UR(vw - 112, 8, 50, 40), Px.Icon("ui:bag"))) Later(() => Open(new BagModal()));
-        if (IconButton(UR(vw - 166, 8, 50, 40), Px.Icon("dairy:urum"))) Later(() => Open(new FoodModal("meat")));
-        if (IconButton(UR(vw - 220, 8, 50, 40), Px.Icon("ui:scroll"))) Later(() => Open(new QuestModal()));
-        if (IconButton(UR(vw - 274, 8, 50, 40), Px.Icon("ui:book"))) Later(() => Open(new LearnPage()));
-        if (Button(UR(vw - 314, 8, 36, 40), "?")) Later(() => StartTutorial(true));
-        // small square buttons under the coins: Basar, the 3D eye, playing online and playing together on one screen
-        if (race == null && battle == null)
+        var lv = Rules.Level(V.xp); var ink = Px.Col("#4a2a12");
+        var pix = new GUIStyle(sPixel) { fontSize = PxSize(U(15)), alignment = TextAnchor.MiddleLeft, normal = { textColor = ink } };
+        var small = new GUIStyle(sLabel) { fontSize = Mathf.RoundToInt(U(11)), wordWrap = false, alignment = TextAnchor.MiddleLeft };
+        // top left: your card (it opens the menu), your home province, the map
+        string nm = MyName; float nameW = pix.CalcSize(new GUIContent(nm)).x / UiScale;
+        float cw = Mathf.Min(vw * 0.46f, 8 + 30 + 8 + Mathf.Max(nameW + 16, 104) + 12);
+        var card = UR(10, 10, cw, 46);
+        if (Button(card, "", sChip)) Later(() => Open(new MenuModal()));
+        Box(UR(17, 16, 32, 32), Px.Col("#8a4b1f")); Box(UR(18, 17, 30, 30), Px.Col("#9fd8f7")); GUI.DrawTexture(UR(18, 17, 30, 30), Tex(Px.Portrait(V.look)), ScaleMode.ScaleToFit);
+        GUI.Label(UR(56, 13, cw - 64, 20), nm + " <size=" + Mathf.RoundToInt(U(10)) + "><color=#8a4b1f>▼</color></size>", new GUIStyle(pix) { richText = true });
+        var badge = UR(56, 35, 34, 13); Box(badge, Px.Col("#8a4b1f")); GUI.Label(badge, Loc.L("ТҮВ ", "LV ") + lv.l, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(9)), alignment = TextAnchor.MiddleCenter, normal = { textColor = Color.white } });
+        Box(UR(95, 38, 66, 8), Px.Col("#8a4b1f")); Box(UR(96, 39, 64, 6), Px.Col("#e6c48a")); Box(UR(96, 39, 64 * Mathf.Clamp01(lv.cur / (float)lv.need), 6), Px.Col("#5c9a36"));
+        var ai = Aimags.ById(V.aimag); var et = Aimags.EthnicById(V.eth);
+        string loc = ai != null ? ai.name + (et != null ? " · " + et.name : "") : Loc.L("Нутгаа сонго", "Pick home");
+        float lw = small.CalcSize(new GUIContent(loc)).x / UiScale + 40; var locR = UR(10, 62, Mathf.Min(lw, vw * 0.46f), 26);
+        if (Button(locR, "", sChip)) Later(() => Open(new PassportPage()));
+        GUI.DrawTexture(new Rect(locR.x + U(9), locR.y + U(4), U(14), U(14)), Tex(Emo.Icon("📍")), ScaleMode.ScaleToFit);
+        GUI.Label(new Rect(locR.x + U(27), locR.y, locR.width - U(30), locR.height - U(4)), loc, small);
+        float mh = 126 * World.H / (float)World.W + 14;
+        if (!miniBig) VillageMap(UR(10, 94, 126, mh));
+        // top right: coins, energy, the season, playing online, together on one screen, the guide
+        float py0 = 10;
+        void Pill(PxCanvas icon, string text, float h, GUIStyle st, Action click, string glow = null)
         {
-            if (IconButton(UR(8, 78, 40, 40), Px.BankharFace(0))) Later(() => OpenBasar());
-            if (IconButton(UR(52, 78, 40, 40), Emo.Icon("👁"))) Later(() => TryFirstPerson(null));
-            if (IconButton(UR(96, 78, 40, 40), Emo.Icon("🌐"), null, net.Online ? sPrimary : sBtn)) Later(() => Open(new RoomModal()));
-            if (net.Online || net.status != "solo") Box(UR(126, 82, 7, 7), Px.Col(net.Online ? "#7fe07a" : "#f7c646")); // green: online, yellow: connecting
-            if (net.unread > 0) Outlined(U(132), U(110), net.unread.ToString(), U(11), Color.white);
-            if (IconButton(UR(140, 78, 40, 40), Emo.Icon("🤝"), null, p2 != null ? sPrimary : sBtn)) Later(() => Open(new TogetherModal()));
+            float tw = text != null ? st.CalcSize(new GUIContent(text)).x / UiScale : 0, iw = icon != null ? 20 + (text != null ? 6 : 0) : 0, w = 24 + iw + tw;
+            var r = UR(vw - 10 - w, py0, w, h);
+            if (Button(r, "", sChip) && click != null) Later(click);
+            float x = r.x + U(12);
+            if (icon != null) { GUI.DrawTexture(new Rect(x, r.y + (r.height - U(4) - U(18)) / 2, U(18), U(18)), Tex(icon), ScaleMode.ScaleToFit); x += U(iw); }
+            if (text != null) GUI.Label(new Rect(x, r.y, U(tw) + U(4), r.height - U(4)), text, st);
+            if (glow != null) GlowAt(glow, r);
+            py0 += h + 6;
         }
-        GlowAt("coins", UR(8, 8, 110, 30)); GlowAt("energy", UR(8, 50, 190, 18)); GlowAt("quests", UR(vw - 220, 8, 50, 40)); GlowAt("learn", UR(vw - 274, 8, 50, 40));
-        GlowAt("help", UR(vw - 314, 8, 36, 40)); GlowAt("basar", UR(8, 78, 40, 40)); GlowAt("fp", UR(52, 78, 40, 40));
+        Pill(Px.Icon("ui:coin"), V.coins.ToString(), 34, pix, () => Open(new ShopModal("wear")), "coins");
+        int en = Mathf.RoundToInt(V.energy);
+        Pill(Emo.Icon("🍖"), en.ToString(), 34, en < 20 ? new GUIStyle(pix) { normal = { textColor = Px.Col("#c2302a") } } : pix, () => Open(new FoodModal("meat")), "energy");
+        var sea = Seasons.Current(); string seaIcon = sea.id == "spring" ? "🌸" : sea.id == "autumn" ? "🍂" : sea.id == "winter" ? "❄️" : "☀️";
+        Pill(Emo.Icon(seaIcon), sea.name.ToString(), 28, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(12)) }, () => Open(new SeasonModal()));
+        int n = net.others.Count + 1;
+        string netText = net.Online ? $"● {n} · {net.room}" : net.status == "solo" ? "○ " + Loc.L("Ганцаараа", "Solo") : "◌ " + Loc.L("Холбогдож…", "Connecting…");
+        Pill(null, netText, 26, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(10)), normal = { textColor = Px.Col(net.Online ? "#2e7d32" : "#8a6a4a") } }, () => Open(new RoomModal()));
+        if (race == null && battle == null) Pill(Emo.Icon("🤝"), null, 34, pix, () => Open(new TogetherModal()));
+        Pill(null, "?", 34, new GUIStyle(pix) { fontSize = PxSize(U(22)) }, () => StartTutorial(true), "help");
         if (race != null) { RaceHud(vw, vh); return; }
         if (battle != null)
         {
             GUI.Box(UR(vw / 2 - 210, 56, 420, 34), BattleLabel(), sToast);
-            if (TouchUI && Button(UR(vw - 166, vh - 128, 158, 56), Loc.L("Сум харвах (F)", "Shoot (F)"), sPrimary)) ShootNearest();
+            if (TouchUI && Button(UR(vw - 166, vh - 184, 158, 56), Loc.L("Сум харвах (F)", "Shoot (F)"), sPrimary)) ShootNearest();
             else if (!TouchUI) GUI.Box(UR(vw / 2 - 160, 94, 320, 26), Loc.L("F: сум харвах · E: уургадах", "F: shoot · E: lasso"), sToast);
         }
-        if (Time.timeSinceLevelLoad < 9 && modal == null && TouchUI) // on a computer, Bolormaa teaches the keys as you go
+        if (Time.timeSinceLevelLoad < 9 && modal == null && TouchUI) GUI.Box(UR(vw / 2 - 160, vh - 130, 320, 32), Loc.L("Дэлгэц дээр чирж алх", "Drag on the screen to walk"), sNote); // on a computer, Bolormaa teaches the keys as you go
+        // bottom left: Basar, chat, the bag, and "more" (3D, learn, quests, music)
+        float ty = vh - 12 - 50, tx = 10;
+        if (Round(UR(tx, ty, 50, 50), null, "•••")) Later(() => { moreOpen = !moreOpen; Sfx.Tap(); });
+        var moreR = UR(tx, ty, 50, 50); ty -= 56;
+        if (Round(UR(tx, ty, 50, 50), Px.Icon("ui:bag"))) Later(() => Open(new BagModal())); ty -= 56;
+        var talkR = UR(tx, ty, 50, 50);
+        if (Round(talkR, Px.Icon("ui:chat"))) Later(() => Open(new RoomModal()));
+        if (net.unread > 0) { var b = new Rect(talkR.xMax - U(14), talkR.y - U(4), U(18), U(18)); Box(b, Px.Col("#e14b3d")); GUI.Label(b, net.unread.ToString(), new GUIStyle(small) { alignment = TextAnchor.MiddleCenter, normal = { textColor = Color.white } }); }
+        ty -= 56;
+        var basR = UR(tx, ty, 50, 50); if (Round(basR, Px.BankharFace(0), null, sChipHi)) Later(() => OpenBasar()); ty -= 56;
+        if (riding && Round(UR(tx, ty, 50, 50), Px.Icon("ui:horse"))) Later(Dismount);
+        GlowAt("basar", basR);
+        if (moreOpen)
         {
-            string hint = Loc.L("Дэлгэц дээр чирж алх, товшиж оч", "Drag on the screen to walk, tap to go somewhere");
-            GUI.Box(UR(vw / 2 - 210, vh - 118, 420, 32), hint, sToast);
+            float my0 = vh - 12 - 50;
+            if (Round(UR(tx + 58, my0, 50, 50), Emo.Icon("👁"))) Later(() => { moreOpen = false; TryFirstPerson(null); }); GlowAt("fp", UR(tx + 58, my0, 50, 50)); my0 -= 56;
+            if (Round(UR(tx + 58, my0, 50, 50), Px.Icon("ui:book"))) Later(() => { moreOpen = false; Open(new LearnPage()); }); GlowAt("learn", UR(tx + 58, my0, 50, 50)); my0 -= 56;
+            if (Round(UR(tx + 58, my0, 50, 50), Px.Icon("ui:scroll"))) Later(() => { moreOpen = false; Open(new QuestModal()); }); GlowAt("quests", UR(tx + 58, my0, 50, 50)); my0 -= 56;
+            if (Round(UR(tx + 58, my0, 50, 50), Emo.Icon("🎵"), null, Music.On ? sChip : sBtn)) Later(Music.Toggle);
         }
-        // bottom: your milk and the dairy foods you made. Tap a food to eat it.
-        float x = 8;
-        foreach (var k in Rules.DAIRY_ORDER)
-        {
-            int n = V.Have(k); if (n <= 0) continue;
-            var r = UR(x, vh - 56, 48, 48);
-            if (Button(r, "")) Later(() => { if (Rules.DAIRY[k].food) Eat(k); else Toast($"{Rules.DAIRY[k].name}: " + Loc.L("тавиур, тулга, хөхүүр дээр цагаан идээ хийнэ.", "make dairy foods at the rack, stove or churn.")); });
-            GUI.DrawTexture(UR(x + 10, vh - 53, 28, 28), Tex(Px.Icon("dairy:" + k)));
-            GUI.Label(UR(x + 4, vh - 26, 40, 16), n.ToString(), new GUIStyle(sCenter) { fontSize = Ts(11), fontStyle = FontStyle.Bold });
-            x += 52;
-        }
-        if (x == 8 && Button(UR(x, vh - 56, 48, 48), "")) Later(() => GoTo(9, 14, null)); // nothing yet: a shortcut to the dairy yard
-        if (x == 8) GUI.DrawTexture(UR(x + 8, vh - 50, 32, 32), Tex(Px.Icon("beast:cow")));
-        // bottom right: riding, run and jump for touch, and the action button
-        float bx = vw - 166;
-        if (riding && Button(UR(bx - 66, vh - 56, 60, 48), Loc.L("Буух", "Get off"))) Later(Dismount);
-        if (riding) bx -= 66;
-        if (TouchUI) { if (Button(UR(bx - 88, vh - 56, 80, 48), runLock ? Loc.L("Алхах", "Walk") : Loc.L("Гүйх", "Run"), runLock ? sPrimary : sBtn)) runLock = !runLock; if (Button(UR(bx - 172, vh - 56, 80, 48), Loc.L("Үсрэх", "Jump"))) Jump(); GlowAt("run", UR(bx - 88, vh - 56, 80, 48)); GlowAt("jump", UR(bx - 172, vh - 56, 80, 48)); }
+        else { GlowAt("fp", moreR); GlowAt("learn", moreR); GlowAt("quests", moreR); }
+        // bottom right: run, jump and the action button (the web version's v-bottom order)
+        float right = vw - 10;
         if (ctx != null && modal == null)
         {
-            string label = LabelFor(ctx) + (TouchUI ? "" : "  [E]");
-            var here = ctx; if (Button(UR(vw - 166, vh - 64, 158, 56), label, sPrimary)) Later(() => DoAction(here));
+            string label = LabelFor(ctx); var lst = new GUIStyle(pix) { alignment = TextAnchor.MiddleCenter };
+            float aw = Mathf.Max(86, lst.CalcSize(new GUIContent(label)).x / UiScale + 20); var ar = UR(right - aw, vh - 12 - 86, aw, 86);
+            var here = ctx; if (Button(ar, "", sChip)) Later(() => DoAction(here));
+            GUI.DrawTexture(new Rect(ar.center.x - U(18), ar.y + U(8), U(36), U(36)), Tex(Px.Icon(ActIcon(ctx.type))), ScaleMode.ScaleToFit);
+            GUI.Label(new Rect(ar.x, ar.y + U(46), ar.width, U(18)), label, lst);
+            if (!TouchUI) { var kr = new Rect(ar.center.x - U(9), ar.y + U(64), U(18), U(14)); Box(kr, Px.Col("#8a4b1f")); GUI.Label(kr, "E", new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(9)), alignment = TextAnchor.MiddleCenter, normal = { textColor = Color.white } }); }
+            right -= aw + 8;
         }
+        var jr = UR(right - 56, vh - 12 - 56, 56, 56); if (Round(jr, null)) Jump(); GUI.Label(new Rect(jr.x, jr.y, jr.width, jr.height - U(4)), "↑", new GUIStyle(sBig) { fontSize = Mathf.RoundToInt(U(28)), normal = { textColor = Px.Col("#4a2a12") } }); GlowAt("jump", jr); right -= 64;
+        var rr = UR(right - 56, vh - 12 - 56, 56, 56); if (Round(rr, Emo.Icon("🏃"), null, runLock ? sSel : sChip)) runLock = !runLock; GlowAt("run", rr); right -= 64;
+        // bottom middle: your milk and the dairy foods you made. Tap a food to eat it.
+        var have = Rules.DAIRY_ORDER.Where(k => V.Have(k) > 0).ToList();
+        float left = moreOpen ? 126 : 68, room = right - left;
+        if (have.Count == 0)
+        {
+            string go = Loc.L("Саах →", "Go milk →"); float gw = pix.CalcSize(new GUIContent(go)).x / UiScale + 56;
+            var gr = UR(left + (room - gw) / 2, vh - 12 - 46, gw, 46);
+            if (Button(gr, "", sSlot)) Later(() => GoTo(9, 14, null)); // nothing yet: a shortcut to the dairy yard
+            GUI.DrawTexture(new Rect(gr.x + U(8), gr.y + U(9), U(28), U(28)), Tex(Px.Icon("beast:cow")), ScaleMode.ScaleToFit);
+            GUI.Label(new Rect(gr.x + U(42), gr.y, gr.width - U(46), gr.height), go, new GUIStyle(pix) { normal = { textColor = Px.Col("#5a2d10") } });
+        }
+        else
+        {
+            float hw2 = Mathf.Min(520, have.Count * 50 + 8), x = left + (room - hw2) / 2 + 6;
+            foreach (var k in have)
+            {
+                var r = UR(x, vh - 12 - 46, 46, 46);
+                if (Button(r, "", sSlot)) Later(() => { if (Rules.DAIRY[k].food) Eat(k); else Toast($"{Rules.DAIRY[k].name}: " + Loc.L("тавиур, тулга, хөхүүр дээр цагаан идээ хийнэ.", "make dairy foods at the rack, stove or churn.")); });
+                GUI.DrawTexture(new Rect(r.x + U(9), r.y + U(9), U(28), U(28)), Tex(Px.Icon("dairy:" + k)), ScaleMode.ScaleToFit);
+                Outlined(r.xMax - U(10), r.yMax - U(9), V.Have(k).ToString(), U(10), Color.white);
+                x += 50;
+            }
+        }
+    }
+    /** The big map in the middle of the screen, over everything else in the village. */
+    void BigMap(float vw, float vh)
+    {
+        if (!miniBig) return;
+        Ui(new Rect(-guiOX, -guiOY, Screen.width, Screen.height)); // taps on the dimmed village don't walk there
+        Box(new Rect(-guiOX, -guiOY, Screen.width, Screen.height), new Color(0.1f, 0.06f, 0.12f, 0.45f));
+        float w = Mathf.Min(vw * 0.92f, 640), h = w * World.H / World.W + 14;
+        var e = Event.current;
+        var r = UR((vw - w) / 2, (vh - h) / 2, w, h);
+        if (e.type == EventType.MouseDown && !r.Contains(e.mousePosition)) { e.Use(); Later(() => miniBig = false); }
+        VillageMap(r);
     }
 
     void DrawModal()
