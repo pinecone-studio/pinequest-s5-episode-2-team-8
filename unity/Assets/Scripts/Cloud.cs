@@ -1,5 +1,5 @@
 // Cloud save (as web/js/cloud.js): a child's progress outside the wallet, in the shared shape of rules.js (cleanCloud /
-// mergeCloud) — character, lessons, badges, passport stamps, Mongol script, the historian's quest. Net uploads it and takes
+// mergeCloud) — character, lessons, badges, passport stamps, Mongol script, the historian's quest, story mode. Net uploads it and takes
 // back the server's merged copy; the family login brings it along, so it follows the child to another device.
 using System.Collections.Generic;
 using System.Linq;
@@ -20,7 +20,8 @@ public static class Cloud
             .Select(l => J.Quote(l.id) + ":{\"done\":" + (l.done ? "true" : "false") + ",\"best\":" + l.best + ",\"family\":" + l.family + "}"))).Append('}');
         b.Append(Map("ach", v.ach)).Append(Map("stamps", v.stamps)).Append(Map("bichig", v.bichig));
         b.Append(",\"bichigMem\":{").Append(string.Join(",", v.bichigMem.Where(k => !string.IsNullOrEmpty(k)).Distinct().Select(k => J.Quote(k) + ":1"))).Append('}');
-        b.Append(",\"hist\":").Append(v.histStep).Append('}');
+        b.Append(",\"hist\":").Append(v.histStep);
+        b.Append(Map("story", v.story.Where(e => e != null && ((e.k ?? "").EndsWith(":done") || SaveData.Get(v.story, e.k + ":done") <= 0)).ToList())).Append('}'); // no part of a finished chapter
         return b.ToString();
     }
 
@@ -57,6 +58,12 @@ public static class Cloud
         foreach (var id in c["bichigMem"].Keys) if (!v.bichigMem.Contains(id)) { v.bichigMem.Add(id); changed = true; }
         int hist = c["hist"].I;
         if (hist > v.histStep) { v.histStep = hist; v.histFound = 0; changed = true; } // a later task: start it fresh
+        foreach (var id in c["story"].Keys) // a part reached only counts while neither side finished that chapter
+        {
+            int n = c["story"][id].I;
+            if (id.EndsWith(":done")) { if (n > SaveData.Get(v.story, id)) { SaveData.Set(v.story, id, n); changed = true; } }
+            else if (n > SaveData.Get(v.story, id) && SaveData.Get(v.story, id + ":done") <= 0 && c["story"][id + ":done"].I <= 0) { SaveData.Set(v.story, id, n); changed = true; }
+        }
         return changed;
     }
     /** Badges and stamps: every one from either side, with the earliest date. */
