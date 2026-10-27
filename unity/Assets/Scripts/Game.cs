@@ -57,6 +57,7 @@ public sealed partial class Game : MonoBehaviour
         if (cam == null) { cam = new GameObject("Camera").AddComponent<Camera>(); cam.tag = "MainCamera"; }
         cam.orthographic = true; cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = Px.Col(Px.K.grassD);
         cam.transform.position = new Vector3(0, 0, -10);
+        if (cam.GetComponent<AudioListener>() == null) cam.gameObject.AddComponent<AudioListener>(); // without a listener Unity plays every sound silently
 
         // the ground, buildings and trees are one big pixel picture
         var map = new GameObject("Map").AddComponent<SpriteRenderer>();

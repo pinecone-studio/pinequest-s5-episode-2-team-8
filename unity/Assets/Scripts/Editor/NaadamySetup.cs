@@ -20,6 +20,7 @@ public static class NaadamySetup
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         var cam = new GameObject("Main Camera").AddComponent<Camera>();
         cam.tag = "MainCamera"; cam.orthographic = true; cam.transform.position = new Vector3(0, 0, -10);
+        cam.gameObject.AddComponent<AudioListener>(); // the music and sounds are heard through it
         EditorSceneManager.SaveScene(scene, SCENE);
         EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(SCENE, true) };
 
@@ -57,6 +58,7 @@ public static class NaadamySetup
         PlayerSettings.WebGL.decompressionFallback = false;
         PlayerSettings.WebGL.dataCaching = true;                       // a second visit starts without downloading the game again
         PlayerSettings.WebGL.nameFilesAsHashes = true;                 // every build has new file names, so a browser never mixes a cached old build with a new one
+        PlayerSettings.SplashScreen.show = false;                      // straight into the game after the page's own loading bar
         Build(BuildTarget.WebGL, "Builds/WebGL");
     }
 

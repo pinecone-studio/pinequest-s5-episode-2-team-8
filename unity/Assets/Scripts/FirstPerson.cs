@@ -265,12 +265,28 @@ public sealed partial class Game
         System.Collections.IEnumerator building; int built, chunks;
         // the player, in blocks: x east, z south, y up
         float Px_, Py, Pz, vx, vy, vz, yaw = Mathf.PI / 2, pitch = -0.08f, fov = 1.25f, bob; bool ground, sprint, inWater, runLock, locked;
-        float lastW = -9, dogX, dogZ, lockFrame = -9; Vector2 move; readonly Dictionary<int, (bool left, Vector2 p0, Vector2 p)> touches = new Dictionary<int, (bool, Vector2, Vector2)>();
+        float lastW = -9, dogX, dogZ, lockAt; bool sawLock; Vector2 move; readonly Dictionary<int, (bool left, Vector2 p0, Vector2 p)> touches = new Dictionary<int, (bool, Vector2, Vector2)>();
         Thing near; Act ctx; float ctxT; Color fog, lo, hi; bool snowing; string season;
         bool oldFog; FogMode oldMode; Color oldColor; float oldStart, oldEnd;
 
         public override bool FullScreen => true;
-        public override bool CanEscape => !locked && Time.frameCount - lockFrame > 1;
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [System.Runtime.InteropServices.DllImport("__Internal")] static extern int NaadamyPointerLock(); // Plugins/WebGL/NaadamyPointer.jslib
+#else
+        static int NaadamyPointerLock() => Cursor.lockState == CursorLockMode.Locked ? 1 : Application.isFocused ? 0 : -1;
+#endif
+        /** The mouse is ours only while the browser says so. A browser takes it a moment after the click, and gives it
+         *  back on Esc without passing the key on, so that Esc leaves the view here; losing focus only frees the mouse. */
+        void CheckLock(Game g)
+        {
+            int s = NaadamyPointerLock();
+            if (s == 1) { sawLock = true; return; }
+            if (!sawLock && Time.unscaledTime - lockAt < 1.5f) return;
+            Free();
+            if (sawLock && s == 0) g.Later(() => { if (g.modal == this) g.Close(); });
+        }
+        void Free() { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; locked = false; }
 
         public FirstPerson(Game g, FpSource src)
         {
@@ -433,7 +449,7 @@ public sealed partial class Game
         public override void Tick(Game g, float dt)
         {
             if (building != null && !building.MoveNext()) building = null;
-            if (locked && Cursor.lockState != CursorLockMode.Locked) { locked = false; lockFrame = Time.frameCount; } // Esc in the editor lets the mouse go
+            if (locked) CheckLock(g);
             if (locked)
             {
                 float mx = 0, my = 0; try { mx = Input.GetAxisRaw("Mouse X"); my = Input.GetAxisRaw("Mouse Y"); } catch (ArgumentException) { }
@@ -463,7 +479,6 @@ public sealed partial class Game
             if (Input.GetKeyDown(KeyCode.Space)) DoJump();
             if (Input.GetKeyDown(KeyCode.E) || Input.GetKeyDown(KeyCode.Return)) Interact(g);
             if (Input.GetKeyDown(KeyCode.F) && g.battle != null) g.ShootNearest();
-            if (Input.GetKeyDown(KeyCode.Escape) && locked) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; locked = false; lockFrame = Time.frameCount; }
         }
         public override void Press(Game g) { }
         public override void Pointer(Game g, int id, Vector2 pos, bool down, bool up)
@@ -471,7 +486,7 @@ public sealed partial class Game
             if (id < 0) // the mouse: the first click takes it for looking around, then clicks use things (or shoot, in a battle)
             {
                 if (!down || g.OverUI(pos) || Game.TouchUI && Input.touchCount > 0) return;
-                if (!locked) { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; locked = true; return; }
+                if (!locked) { Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false; locked = true; lockAt = Time.unscaledTime; sawLock = false; return; }
                 if (g.battle != null && !g.battle.over) Shoot(g); else Interact(g);
                 return;
             }
@@ -519,7 +534,7 @@ public sealed partial class Game
         public override void Draw(Game g)
         {
             if (fcam == null) return;
-            if (g.modal != this && locked) { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; locked = false; } // a window opened over the view: give the mouse back
+            if (g.modal != this && locked) Free(); // a window opened over the view: give the mouse back
             float t = Time.time; int sw = Screen.width, sh = Screen.height;
             // season tint and evening darkness, like the top view
             if (season == "winter") g.Box(new Rect(0, 0, sw, sh), new Color(0.92f, 0.95f, 0.98f, 0.16f));
@@ -574,7 +589,7 @@ public sealed partial class Game
             if (g.Button(g.URect(8, 8, 48, 44), "X")) g.Later(g.Close);
             var tr = g.URect(64, 8, Mathf.Min(360, vw - 72), 44); GUI.Box(tr, $"<b>{src.title}</b>" + (src.sub != null ? $"  <size={Game.PxSize(g.U(11f) * 1.3f)}>{src.sub}</size>" : ""), g.sToast);
             if (g.battle != null) GUI.Box(g.URect(vw / 2 - 210, 58, 420, 30), g.BattleLabel(), g.sToast);
-            if (!locked && !Game.TouchUI && building == null) GUI.Box(g.URect(vw / 2 - 230, 94, 460, 28), Loc.L("Дэлгэц дээр дарж хулганаар эргэн харна · Esc хулганаа чөлөөлнө", "Click the view to look around with the mouse · Esc frees the mouse"), g.sToast);
+            if (!Game.TouchUI && building == null) GUI.Box(g.URect(vw / 2 - 190, 94, 380, 30), locked ? Loc.L("Esc: Нутаг руу буцах", "Esc: back to Nutag") : Loc.L("Дарж эргэн харна · Esc: гарах", "Click to look around · Esc: leave"), g.sToast);
             string info = src.info?.Invoke();
             if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, vh - 140, Mathf.Min(520, vw - 16), 72); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sToast) { alignment = TextAnchor.MiddleLeft, fontSize = Game.PxSize(g.U(12f) * 1.3f), wordWrap = true }); }
             float bx0 = 8;

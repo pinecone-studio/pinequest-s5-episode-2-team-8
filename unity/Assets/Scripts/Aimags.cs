@@ -143,7 +143,7 @@ public sealed partial class Game
             if (nx != null) { if (g.Btn(Loc.L("Дараагийн аялал: ", "Next trip: ") + Aimags.ById(nx).name, true, 40)) g.Later(() => g.PassGuard(nx, () => g.Open(new AimagPage(nx)))); }
             else g.Text("<b>" + Loc.L("Та Монголоор бүрэн аялсан!", "You have travelled all of Mongolia!") + "</b>");
             GUILayout.EndVertical(); GUILayout.EndHorizontal();
-            int cols = Mathf.Max(2, Mathf.FloorToInt(Screen.safeArea.width / g.U(130)));
+            int cols = g.GridCols(order.Select(id => "<b>" + Aimags.ById(id).name + "</b>"), new GUIStyle(g.sLabel) { wordWrap = false, fontSize = Game.PxSize(g.U(11f) * 1.3f) }, 16, 7);
             for (int i = 0; i < order.Count; i += cols)
             {
                 GUILayout.BeginHorizontal();
@@ -163,6 +163,7 @@ public sealed partial class Game
                     GUI.Label(new Rect(r.x, r.y + g.U(62), r.width, g.U(16)), sub + (home ? " · " + Loc.L("Миний нутаг", "Home") : ""), new GUIStyle(st) { fontSize = Game.PxSize(g.U(9f) * 1.3f) });
                     GUI.color = old;
                 }
+                g.PadRow(i + cols - Mathf.Min(order.Count, i + cols), 110, 96);
                 GUILayout.EndHorizontal();
             }
         }
@@ -243,6 +244,7 @@ public sealed partial class Game
                         GUI.DrawTexture(new Rect(r.center.x - g.U(11), r.y + g.U(4), g.U(22), g.U(38)), g.Tex(Px.Char(l2, 0, 0)));
                         GUI.Label(new Rect(r.x, r.y + g.U(46), r.width, g.U(28)), x.name.ToString(), new GUIStyle(eth == x.id ? g.sPrimary.Clean() : g.sSmall) { alignment = TextAnchor.UpperCenter, fontSize = Game.PxSize(g.U(10f) * 1.3f) });
                     }
+                    g.PadRow(i + cols - Mathf.Min(Aimags.ETHNIC.Count, i + cols), 100, 78);
                     GUILayout.EndHorizontal();
                 }
                 GUILayout.BeginVertical(g.sBtn);
@@ -255,7 +257,8 @@ public sealed partial class Game
                 Basar(g, Loc.L($"{e.name.mn} ард түмэн ихэвчлэн эдгээр нутагт амьдардаг. Чи хаана төрсөн бэ?", $"The {e.name.en} people mostly live here. Where were you born?"));
                 if (aimag != null) { Aimags.DrawLand(land.c, aimag, Time.time, 160, 70); land.Show(g, 120); }
                 var allowed = showAll ? Aimags.AIMAGS.Select(a => a.id).ToList() : e.aimags;
-                int cols = Mathf.Max(3, Mathf.FloorToInt(Mathf.Min(Screen.safeArea.width, g.U(720)) / g.U(120)));
+                var nameSt = new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false, fontSize = Game.PxSize(g.U(11f) * 1.3f) };
+                int cols = g.GridCols(allowed.Select(id => Aimags.ById(id).name.ToString()), nameSt, 46);
                 for (int i = 0; i < allowed.Count; i += cols)
                 {
                     GUILayout.BeginHorizontal();
@@ -264,8 +267,9 @@ public sealed partial class Game
                         var x = Aimags.ById(allowed[k]); var r = GUILayoutUtility.GetRect(g.U(110), g.U(40), GUILayout.ExpandWidth(true));
                         if (GUI.Button(r, "", aimag == x.id ? g.sPrimary : g.sBtn)) { var id = x.id; g.Later(() => { aimag = id; Sfx.Tap(); }); }
                         GUI.DrawTexture(new Rect(r.x + g.U(6), r.center.y - g.U(12), g.U(24), g.U(24)), g.Tex(Aimags.Icon(x.id)));
-                        GUI.Label(new Rect(r.x + g.U(34), r.y, r.width - g.U(36), r.height), x.name.ToString(), new GUIStyle(aimag == x.id ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false, fontSize = Game.PxSize(g.U(11f) * 1.3f) });
+                        GUI.Label(new Rect(r.x + g.U(34), r.y, r.width - g.U(36), r.height), x.name.ToString(), aimag == x.id ? new GUIStyle(nameSt) { normal = { textColor = Color.white } } : nameSt);
                     }
+                    g.PadRow(i + cols - Mathf.Min(allowed.Count, i + cols), 110, 40);
                     GUILayout.EndHorizontal();
                 }
                 if (!showAll && e.aimags.Count < 22 && GUILayout.Button(Loc.L("Өөр аймагт төрсөн", "I was born somewhere else"), g.sSmall)) g.Later(() => showAll = true);
@@ -276,7 +280,7 @@ public sealed partial class Game
             else if (step == 2)
             {
                 Basar(g, Loc.L("Одоо дүрээ хувцаслая! " + (e != null ? e.name.mn + " ястны уламжлалт малгай, дээлээр эхэллээ." : ""), "Now dress your character! " + (e != null ? "We started with the traditional " + e.name.en + " hat and deel." : "")));
-                GUILayout.BeginHorizontal(); g.IconAt(Px.Char(look, 0, 0), 96);
+                GUILayout.BeginHorizontal(); g.IconAt(Px.Char(look, 0, 0), 96); g.Gap(10);
                 GUILayout.BeginVertical(); GUILayout.Label("<b>" + V.name + "</b>", g.sTitle); g.Small(string.Join(" · ", new[] { e?.name.ToString(), Aimags.ById(aimag)?.name.ToString() }.Where(s => !string.IsNullOrEmpty(s)))); GUILayout.EndVertical();
                 GUILayout.EndHorizontal();
                 GUILayout.Label(Loc.L("Арьсны өнгө", "Skin tone"), g.sSmall);
@@ -293,7 +297,7 @@ public sealed partial class Game
             {
                 var a = Aimags.ById(aimag);
                 if (a != null) { Aimags.DrawLand(land.c, aimag, Time.time, 160, 70); land.Show(g, 130); }
-                GUILayout.BeginHorizontal(g.sBtn); g.IconAt(Px.Char(look, 0, 0), 80);
+                GUILayout.BeginHorizontal(g.sBtn); g.IconAt(Px.Char(look, 0, 0), 80); g.Gap(10);
                 GUILayout.BeginVertical();
                 GUILayout.Label("<b>" + Loc.L($"Сайн уу, {V.name}!", $"Hello, {V.name}!") + "</b>", g.sTitle);
                 g.Text(Loc.L($"Чи {a?.name.mn}-д төрсөн {e?.name.mn} {V.age} настай {(V.age >= 18 ? "хүн" : "хүүхэд")}.", $"You are a {V.age}-year-old {e?.name.en} {(V.age >= 18 ? "person" : "child")} born in {a?.name.en}."));

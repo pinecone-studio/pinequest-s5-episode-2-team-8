@@ -33,6 +33,7 @@ public sealed class Music : MonoBehaviour
         if (order.Count == 0) { order.AddRange(Enumerable.Range(0, Credits.Count).OrderBy(_ => Random.value)); }
         at = order[0]; order.RemoveAt(0);
         var clip = Resources.Load<AudioClip>("Music/" + Credits[at].file); if (clip == null) return;
+        clip.LoadAudioData();
         from = a.isPlaying ? a : b.isPlaying ? b : null; to = from == a ? b : a;
         to.clip = clip; to.volume = 0; to.Play(); fadeT = 0;
     }
@@ -46,8 +47,9 @@ public sealed class Music : MonoBehaviour
             if (q >= 1) { if (from != null) from.Stop(); fadeT = -1; }
         }
         var cur = to ?? a;
-        if (cur != null && cur.clip != null && cur.isPlaying && cur.clip.length - cur.time < FADE && fadeT < 0) Next();
-        else if (cur != null && !cur.isPlaying && fadeT < 0 && Application.isFocused) Next();
+        // a browser decodes a whole track before it plays: wait for it instead of skipping to the next one
+        if (cur == null || cur.clip == null || fadeT >= 0 || cur.clip.loadState == AudioDataLoadState.Loading) return;
+        if (cur.isPlaying ? cur.clip.length - cur.time < FADE : Application.isFocused) Next();
     }
     void OnApplicationPause(bool paused) { if (!on) return; if (paused) { a.Pause(); b.Pause(); } else { if (a.clip != null) a.UnPause(); if (b.clip != null) b.UnPause(); } }
 }

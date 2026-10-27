@@ -154,8 +154,8 @@ public sealed partial class Game
     {
         bool hit = Button(r, "", st);
         float s = Mathf.Min(r.height - U(10), U(28));
-        if (text == null) GUI.DrawTexture(new Rect(r.center.x - s / 2, r.center.y - s / 2, s, s), Tex(icon));
-        else { GUI.DrawTexture(new Rect(r.x + U(6), r.center.y - s / 2, s, s), Tex(icon)); GUI.Label(new Rect(r.x + U(8) + s, r.y, r.width - s - U(10), r.height), text, new GUIStyle((st ?? sBtn)) { normal = { background = null }, active = { background = null }, hover = { background = null }, alignment = TextAnchor.MiddleLeft, padding = new RectOffset() }); }
+        if (text == null) GUI.DrawTexture(new Rect(r.center.x - s / 2, r.center.y - s / 2, s, s), Tex(icon), ScaleMode.ScaleToFit);
+        else { GUI.DrawTexture(new Rect(r.x + U(6), r.center.y - s / 2, s, s), Tex(icon), ScaleMode.ScaleToFit); GUI.Label(new Rect(r.x + U(8) + s, r.y, r.width - s - U(10), r.height), text, new GUIStyle((st ?? sBtn)) { normal = { background = null }, active = { background = null }, hover = { background = null }, alignment = TextAnchor.MiddleLeft, padding = new RectOffset() }); }
         return hit;
     }
     public void Bar(Rect r, float f, Color fill)
@@ -450,7 +450,20 @@ public sealed partial class Game
         var r = GUILayoutUtility.GetRect(U(height) * art.W / art.H, U(height), GUILayout.ExpandWidth(true));
         float w = r.height * art.W / art.H; GUI.DrawTexture(new Rect(r.center.x - w / 2, r.y, w, r.height), Tex(art));
     }
-    public void IconAt(PxCanvas art, float size) { var r = GUILayoutUtility.GetRect(U(size), U(size), GUILayout.Width(U(size)), GUILayout.Height(U(size))); GUI.DrawTexture(r, Tex(art)); }
+    /** A picture fitted into a size × size box, keeping its shape: people are taller than they are wide. */
+    public void IconAt(PxCanvas art, float size)
+    {
+        float k = U(size) / Mathf.Max(art.W, art.H), w = art.W * k, h = art.H * k;
+        var r = GUILayoutUtility.GetRect(w, h, GUILayout.Width(w), GUILayout.Height(h)); GUI.DrawTexture(r, Tex(art));
+    }
+    /** Empty cells that finish a short last row of a grid, so its buttons stay as wide as the ones above. */
+    public void PadRow(int cells, float w, float h) { for (int i = 0; i < cells; i++) GUILayoutUtility.GetRect(U(w), U(h), GUILayout.ExpandWidth(true)); }
+    /** How many grid cells fit across a page when each must hold the longest of these labels plus `extra` units. */
+    public int GridCols(IEnumerable<string> labels, GUIStyle st, float extra, int max = 6)
+    {
+        float w = 0; foreach (var l in labels) w = Mathf.Max(w, st.CalcSize(new GUIContent(l)).x);
+        return Mathf.Clamp(Mathf.FloorToInt((Mathf.Min(Screen.safeArea.width - U(16), U(760)) - U(24)) / (w + U(extra))), 2, max);
+    }
     /** A row in a list: icon, a bold name and a small line, and room for a button after (call EndRow). */
     public void Row(PxCanvas icon, string name, string sub, bool dim = false)
     {
@@ -475,7 +488,9 @@ public sealed partial class Game
     {
         // three to a row on one line each: pixel letters are wide, and wrapped chips spill over each other
         int hit = -1; GUILayout.BeginHorizontal(); var on = new GUIStyle(sPrimary) { wordWrap = false }; var off = new GUIStyle(sBtn) { wordWrap = false };
-        for (int i = 0; i < labels.Count; i++) { if (i > 0 && i % 3 == 0) { GUILayout.EndHorizontal(); GUILayout.BeginHorizontal(); } if (GUILayout.Button(labels[i], i == current ? on : off, GUILayout.MinWidth(U(minW)), GUILayout.MinHeight(U(36)))) hit = i; }
+        float w = U(minW); foreach (var l in labels) w = Mathf.Max(w, off.CalcSize(new GUIContent(l)).x); // all as wide as the widest, so the rows line up
+        for (int i = 0; i < labels.Count; i++) { if (i > 0 && i % 3 == 0) { GUILayout.EndHorizontal(); GUILayout.BeginHorizontal(); } if (GUILayout.Button(labels[i], i == current ? on : off, GUILayout.MinWidth(w), GUILayout.MinHeight(U(36)))) hit = i; }
+        if (labels.Count > 3) for (int i = labels.Count % 3; i > 0 && i < 3; i++) GUILayoutUtility.GetRect(w, U(36), GUILayout.ExpandWidth(true)); // a short last row keeps the same chip width
         GUILayout.EndHorizontal(); return hit;
     }
     public bool Swatch(Color c, bool on, float size = 36)
