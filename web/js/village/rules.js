@@ -256,7 +256,8 @@
   }
   function mergeCloud(a, b) {
     a = cleanCloud(a); b = cleanCloud(b);
-    const each = (x, y, f) => Object.fromEntries([...new Set([...Object.keys(x), ...Object.keys(y)])].map((k) => [k, f(x[k], y[k])]));
+    const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined); // not Object.prototype's: a key may be "constructor"
+    const each = (x, y, f) => Object.fromEntries([...new Set([...Object.keys(x), ...Object.keys(y)])].map((k) => [k, f(own(x, k), own(y, k))]));
     const earliest = (x, y) => (x && y ? Math.min(x, y) : x || y);
     const max = (x, y) => Math.max(x || 0, y || 0);
     const who = b.charAt > a.charAt || (!a.eth && !a.aimag) ? b : a; // the most recent character, else the one that has one
