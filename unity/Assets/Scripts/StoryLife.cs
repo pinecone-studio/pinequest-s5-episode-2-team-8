@@ -132,7 +132,7 @@ public sealed partial class Game
     {
         sealed class Guard { public float x, y, a, b, dir = 1, wait; public float seen; }
         readonly List<Guard> guards = new List<Guard>();
-        bool hidden; float caughtT = -9, alarm; int caught;
+        bool hidden; float caughtT = -9; int caught;
         readonly float[] covers = { 170, 340, 470 };   // dark places to crouch in: behind gers and the wool cart
         public Escape(Game g) : base(g)
         {
@@ -149,7 +149,7 @@ public sealed partial class Game
         public override void Tick(StoryScene s, float dt)
         {
             float t = Time.time;
-            if (caughtT > 0) { if (t - caughtT > 1.8f) { caughtT = -9; px = 40; py = 140; alarm = 0; hidden = false; foreach (var gd in guards) gd.seen = 0; } return; }
+            if (caughtT > 0) { if (t - caughtT > 1.8f) { caughtT = -9; px = 40; py = 140; hidden = false; foreach (var gd in guards) gd.seen = 0; } return; }
             if (s.Pressed("hide"))
             {
                 if (AtReeds) { done = true; won = true; Sfx.Good(); return; }

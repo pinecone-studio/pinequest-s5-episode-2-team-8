@@ -1,5 +1,5 @@
 // Cloud save (as web/js/cloud.js): a child's progress outside the wallet, in the shared shape of rules.js (cleanCloud /
-// mergeCloud) — character, lessons, badges, passport stamps, Mongol script, the historian's quest. Net uploads it and takes
+// mergeCloud) — character, lessons, badges, passport stamps, Mongol script, the historian's quest, the story mode. Net uploads it and takes
 // back the server's merged copy; the family login brings it along, so it follows the child to another device.
 using System.Collections.Generic;
 using System.Linq;
@@ -20,7 +20,8 @@ public static class Cloud
             .Select(l => J.Quote(l.id) + ":{\"done\":" + (l.done ? "true" : "false") + ",\"best\":" + l.best + ",\"family\":" + l.family + "}"))).Append('}');
         b.Append(Map("ach", v.ach)).Append(Map("stamps", v.stamps)).Append(Map("bichig", v.bichig));
         b.Append(",\"bichigMem\":{").Append(string.Join(",", v.bichigMem.Where(k => !string.IsNullOrEmpty(k)).Distinct().Select(k => J.Quote(k) + ":1"))).Append('}');
-        b.Append(",\"hist\":").Append(v.histStep).Append('}');
+        b.Append(",\"hist\":").Append(v.histStep);
+        b.Append(Map("story", v.story)).Append('}');
         return b.ToString();
     }
 
@@ -55,6 +56,11 @@ public static class Cloud
             else if (n > e.v) { e.v = n; changed = true; }
         }
         foreach (var id in c["bichigMem"].Keys) if (!v.bichigMem.Contains(id)) { v.bichigMem.Add(id); changed = true; }
+        foreach (var id in c["story"].Keys)   // the story mode: the furthest part reached in each chapter
+        {
+            int n = c["story"][id].I;
+            if (n > SaveData.Get(v.story, id)) { SaveData.Set(v.story, id, n); changed = true; }
+        }
         int hist = c["hist"].I;
         if (hist > v.histStep) { v.histStep = hist; v.histFound = 0; changed = true; } // a later task: start it fresh
         return changed;
