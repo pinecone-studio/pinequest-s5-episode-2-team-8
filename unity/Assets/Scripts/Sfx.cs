@@ -53,7 +53,23 @@ public static class Sfx
         }
         Play(c, 0.6f, mul * (1 + (UnityEngine.Random.value - 0.5f) * 0.18f));
     }
-    static AudioClip hit, swish, thud, horn, twang;
+    static AudioClip hit, swish, thud, horn, twang, crowd;
+    /** A crowd roaring: noise that swells and falls, with a murmur of many voices in it. */
+    public static void Crowd(float vol = 0.7f)
+    {
+        if (crowd == null)
+        {
+            var rnd = new System.Random(11); float lp = 0, lp2 = 0;
+            crowd = Tone("crowd", 1.8f, t =>
+            {
+                float n = (float)(rnd.NextDouble() * 2 - 1); lp += (n - lp) * 0.12f; lp2 += (lp - lp2) * 0.3f;
+                float voices = Mathf.Sin(2 * Mathf.PI * (210 + 40 * Mathf.Sin(t * 7)) * t) * 0.08f + Mathf.Sin(2 * Mathf.PI * (320 + 50 * Mathf.Sin(t * 5.3f)) * t) * 0.06f;
+                float env = Mathf.Clamp01(t / 0.25f) * Mathf.Clamp01((1.8f - t) / 0.7f);
+                return (lp2 * 1.6f + voices * (0.5f + 0.5f * Mathf.Sin(t * 9))) * env * 0.6f;
+            });
+        }
+        Play(crowd, vol);
+    }
     /** A blow landing: a short noisy knock. */
     public static void Hit(float pitch = 1) { hit ??= Noise("hit", 0.09f, 0.45f, 180); Play(hit, 0.8f, pitch); }
     /** A swing through the air. */
