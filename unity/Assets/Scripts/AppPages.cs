@@ -63,7 +63,7 @@ public sealed partial class Game
             g.Small(Loc.L("Компьютер дээр “node server/server.js” ажиллуулж, түүний хаягийг энд бичвэл Басар AI ухаантай болно (ж: 192.168.1.10:8000). Хоосон бол офлайн мэдлэгээр ажиллана.", "Run “node server/server.js” on a computer and write its address here to give Basar AI smarts (e.g. 192.168.1.10:8000). Empty: offline knowledge."));
             GUILayout.BeginHorizontal();
             server = GUILayout.TextField(server, 80, new GUIStyle(g.sBtn) { alignment = TextAnchor.MiddleLeft }, GUILayout.MinHeight(g.U(38)));
-            if (GUILayout.Button(Loc.L("Хадгалах", "Save"), g.sPrimary, GUILayout.Width(g.U(100)), GUILayout.MinHeight(g.U(38)))) g.Later(() => { g.V.server = server.Trim(); g.V.Save(); Basar.Recheck(); g.net.Connect(g); g.StartCoroutine(Basar.Check(g)); g.Toast(Loc.L("Хадгаллаа", "Saved")); });
+            if (GUILayout.Button(Loc.L("Хадгалах", "Save"), g.sPrimary, GUILayout.Width(g.U(100)), GUILayout.MinHeight(g.U(38)))) g.Later(() => { g.V.server = server.Trim(); g.V.Save(); if (g.V.server != "") { g.App.server = g.V.server; g.App.Save(); } Basar.Recheck(); g.net.Connect(g); g.StartCoroutine(Basar.Check(g)); g.Toast(Loc.L("Хадгаллаа", "Saved")); });
             GUILayout.EndHorizontal();
             g.Small(Basar.ai ? Loc.L("● Басар AI ухаантай ажиллаж байна.", "● Basar is running with AI.") : Loc.L("○ Басар офлайн мэдлэгээр ажиллаж байна.", "○ Basar is using offline knowledge."));
             if (g.Btn(Loc.L("Хаах", "Close"), true, 36)) g.Later(g.Close);
@@ -131,14 +131,85 @@ public sealed partial class Game
             foreach (var k in kids)
             {
                 g.Row(Px.Mascot(k.avatar), k.name, $"{k.age} {Loc.L("нас", "yrs")}" + (k.code != "" ? " · " + Loc.L("нууцтай", "locked") : ""));
-                if (k.code != "" && g.SmallBtn(Loc.L("Нууц арилгах", "Remove lock"), false, 120)) { var kk = k; g.Later(() => { var p = kk.id == g.V.id ? g.V : kk; p.code = ""; p.Save(); g.Toast(Loc.L("Нууц зураг арилгалаа", "Picture password removed")); }); }
+                if (k.code != "" && k.fam == "" && g.SmallBtn(Loc.L("Нууц арилгах", "Remove lock"), false, 120)) { var kk = k; g.Later(() => { var p = kk.id == g.V.id ? g.V : kk; p.code = ""; p.Save(); g.Toast(Loc.L("Нууц зураг арилгалаа", "Picture password removed")); }); }
                 if (kids.Count > 1 && k.id != g.V.id && g.SmallBtn(Loc.L("Хасах", "Remove"), false, 90)) { var kk = k; g.Later(() => g.Open(new ConfirmModal(Loc.L($"{kk.name}-г хасах уу?", $"Remove {kk.name}?"), Loc.L("Буцаах боломжгүй.", "This cannot be undone."), () => { app.profiles.Remove(kk.id); SaveData.Delete(kk.id); app.Save(); }))); }
                 g.EndRow();
             }
             if (g.Btn("+ " + Loc.L("Хүүхэд нэмэх", "Add a child"))) g.Later(() => { g.LogOut(); });
             GUILayout.EndVertical();
+            FamilyCard(g, kids);
             if (g.Btn(Loc.L("Бидний зорилго, шударга үнэ", "Our mission & fair pricing"))) g.Later(() => g.Open(new AboutPage()));
             if (g.Btn(Loc.L("Бүх өгөгдлийг устгах", "Erase all data"), false, 34)) g.Later(() => g.Open(new ConfirmModal(Loc.L("Бүх өгөгдлийг устгах уу?", "Erase all data?"), Loc.L("Профайл, ахиц, тохиргоо устна.", "Profiles, progress and settings will be erased."), () => { PlayerPrefs.DeleteAll(); PlayerPrefs.Save(); g.App = new AppState(); g.V = null; g.CloseAll(); })));
+        }
+        // the family code: made here, then each child is added with their 3 pictures so they can log in on other devices
+        bool busy; string joinCode = "", famErr = "";
+        void FamilyCard(Game g, List<SaveData> kids)
+        {
+            var app = g.App;
+            GUILayout.BeginVertical(g.sPanel);
+            GUILayout.Label("<b>" + Loc.L("Гэр бүлийн код", "Family code") + "</b>", g.sTitle);
+            if (string.IsNullOrEmpty(app.familyCode))
+            {
+                g.Text(Loc.L("Код үүсгэвэл хүүхдүүд өөр утас, компьютер дээр нууц зургаараа нэвтэрч, ахицаа үргэлжлүүлнэ.", "With a family code, your children can log in on another phone or computer with their secret pictures and keep their progress."));
+                if (g.Btn(busy ? "…" : Loc.L("Гэр бүлийн код үүсгэх", "Make a family code"), true, 44, !busy)) g.Later(() => AddChild(g, kids.FirstOrDefault(k => k.code != "") ?? g.V));
+                g.Small(Loc.L("Өөр төхөөрөмж дээр код үүсгэсэн бол:", "Made a code on another device already?"));
+                GUILayout.BeginHorizontal();
+                joinCode = GUILayout.TextField(joinCode, 9, new GUIStyle(g.sBtn) { alignment = TextAnchor.MiddleLeft }, GUILayout.MinHeight(g.U(38)));
+                if (GUILayout.Button(Loc.L("Нэгдэх", "Join"), g.sPrimary, GUILayout.Width(g.U(100)), GUILayout.MinHeight(g.U(38))) && !busy) g.Later(() =>
+                {
+                    string code = Family.Clean(joinCode);
+                    if (code.Length != 8) { famErr = Loc.L("8 үсэг, тоотой кодоо бичээрэй", "Write the 8-letter code"); return; }
+                    busy = true; famErr = "";
+                    g.StartCoroutine(Family.Post(Family.ServerOf(g, g.V), "{\"act\":\"members\",\"code\":" + J.Quote(code) + "}", r =>
+                    {
+                        busy = false;
+                        if (!r["ok"].B) { famErr = Family.Why(r); return; }
+                        app.familyCode = code; app.server = Family.ServerOf(g, g.V).Trim(); app.Save();
+                    }));
+                });
+                GUILayout.EndHorizontal();
+            }
+            else
+            {
+                GUILayout.Label(Family.Show(app.familyCode), new GUIStyle(g.sBig) { alignment = TextAnchor.MiddleCenter });
+                g.Small(Loc.L("Өөр төхөөрөмж дээр: нэвтрэх хуудас → “Гэр бүлийн кодоор нэвтрэх”. Кодыг зөвхөн гэр бүлдээ хэлээрэй.", "On another device: the login page → “Log in with a family code”. Share the code only with your family."));
+                foreach (var k in kids)
+                {
+                    bool inFamily = k.fam == app.familyCode;
+                    g.Row(Px.Mascot(k.avatar), k.name, inFamily ? "√ " + Loc.L("Гэр бүлд", "In the family") : null);
+                    var kk = k;
+                    if (inFamily) { if (g.SmallBtn(Loc.L("Зураг солих", "Change pictures"), false, 130, !busy)) g.Later(() => { var p = kk.id == g.V.id ? g.V : kk; g.Open(new PicturesModal(p, () => AddChild(g, p))); }); }
+                    else if (g.SmallBtn(Loc.L("Гэр бүлд нэмэх", "Add to family"), true, 130, !busy)) g.Later(() => AddChild(g, kk));
+                    g.EndRow();
+                }
+            }
+            if (famErr != "") GUILayout.Label($"<color=#e14b3d>{famErr}</color>", g.sLabel);
+            GUILayout.EndVertical();
+        }
+        void AddChild(Game g, SaveData k)
+        {
+            var p = k.id == g.V.id ? g.V : k;
+            if (Family.PicsJson(p.code) == null) { g.Open(new PicturesModal(p, () => AddChild(g, p))); return; }
+            busy = true; famErr = "";
+            g.StartCoroutine(Family.Link(g, p, r =>
+            {
+                busy = false;
+                if (r["ok"].B) g.Toast(Loc.L($"{p.name} гэр бүлд нэмэгдлээ", $"{p.name} is in the family")); else famErr = Family.Why(r);
+            }));
+        }
+        /** A child's 3 secret pictures, chosen by a grown-up for the family code. */
+        sealed class PicturesModal : Modal
+        {
+            readonly SaveData p; readonly Action then; readonly List<int> sel = new List<int>();
+            public PicturesModal(SaveData p, Action then) { this.p = p; this.then = then; }
+            public override void Press(Game g) { }
+            public override void Draw(Game g)
+            {
+                GUILayout.BeginHorizontal(); g.IconAt(Px.Mascot(p.avatar), 36); GUILayout.Label($"<b>{p.name}</b>", g.sTitle); GUILayout.EndHorizontal();
+                g.Small(Loc.L("3 нууц зураг сонгоорой. Дараалал нь чухал.", "Choose 3 secret pictures. The order matters."));
+                g.PicPad(sel, code => { p.code = code; p.Save(); g.Close(); then(); });
+                if (g.Btn(Loc.L("Болих", "Cancel"))) g.Later(g.Close);
+            }
         }
         /** What the child earned and learned, and the latest activity. */
         static void LearnedReport(Game g, SaveData child)

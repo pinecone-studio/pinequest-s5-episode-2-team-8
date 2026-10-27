@@ -52,7 +52,7 @@ async function openSocket(page, port, id, ticket, name, room) {
     window.gameSocket = new WebSocket(url);
     window.gameSocket.addEventListener('message', (event) => window.wsEvents.push(JSON.parse(event.data)));
   }, `ws://127.0.0.1:${port}/ws`);
-  await page.waitForFunction(() => window.gameSocket.readyState === WebSocket.OPEN, { timeout: 8000 });
+  await page.waitForFunction(() => window.gameSocket.readyState === WebSocket.OPEN, { timeout: 8000, polling: 100 });
   await page.evaluate((join) => window.gameSocket.send(JSON.stringify(join)), {
     t: 'join', room, id, ticket, name, look: {}, x: 20, y: 13, dir: 0,
   });
@@ -61,11 +61,14 @@ async function openSocket(page, port, id, ticket, name, room) {
 async function waitForMessage(page, predicate, description, timeout = 8000) {
   const test = predicate.toString();
   try {
-    await page.waitForFunction(`() => window.wsEvents.some(${test})`, { timeout });
+    // a string is evaluated as an expression, so it must be the check itself, not a function that would do it; checked on a
+    // timer, since a tab in the background gets no animation frames
+    await page.waitForFunction(`window.wsEvents.some(${test})`, { timeout, polling: 100 });
   } catch (error) {
-    throw new Error(`timed out waiting for ${description}: ${error.message}`, { cause: error });
+    const seen = await page.evaluate(() => (window.wsEvents || []).map((message) => message.t + (message.why ? `:${message.why}` : '')).join(', ')).catch(() => '?');
+    throw new Error(`timed out waiting for ${description} (received: ${seen || 'nothing'}): ${error.message}`, { cause: error });
   }
-  return page.evaluate(`() => window.wsEvents.find(${test})`);
+  return page.evaluate(`window.wsEvents.find(${test})`);
 }
 
 try {
@@ -152,6 +155,8 @@ try {
   assert.equal(endA.winner, idA, 'forfeiting player awards the match to the opponent');
   assert.equal(endB.winner, idA, 'both servers agree on the winner');
 
+  // forget the first match's messages, so the waits below see only the second invite and match
+  await Promise.all([pageA, pageB].map((page) => page.evaluate(() => { window.wsEvents.length = 0; })));
   await pageA.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-invite', to: id })), idB);
   await waitForMessage(pageB, (message) => message.t === 'wr-invite' && message.from === window.sharedTest.idA, 'second cross-instance wrestling invite');
   await pageB.evaluate((id) => window.gameSocket.send(JSON.stringify({ t: 'wr-accept', from: id })), idA);
