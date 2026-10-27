@@ -59,6 +59,8 @@ public static class NaadamySetup
         PlayerSettings.WebGL.dataCaching = true;                       // a second visit starts without downloading the game again
         PlayerSettings.WebGL.nameFilesAsHashes = true;                 // every build has new file names, so a browser never mixes a cached old build with a new one
         PlayerSettings.SplashScreen.show = false;                      // straight into the game after the page's own loading bar
+        PlayerSettings.WebGL.debugSymbolMode = WebGLDebugSymbolMode.Off; // no symbol files or function names shipped with the game
+        EditorUserBuildSettings.development = false;                   // a release build: no profiler hooks, no development console
         Build(BuildTarget.WebGL, "Builds/WebGL");
     }
 
