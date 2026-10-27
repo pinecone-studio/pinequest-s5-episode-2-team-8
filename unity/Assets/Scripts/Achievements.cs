@@ -120,23 +120,29 @@ public sealed partial class Game
         {
             var list = Achievements.LIST.Where(a => a.cat == cat).ToList();
             GUILayout.Label($"<b>{name}</b>  <size={Ts(11)}>{list.Count(a => v.ach.Exists(x => x.k == a.id))}/{list.Count}</size>", sTitle);
-            int cols = Mathf.Max(2, Mathf.FloorToInt(Mathf.Min(Screen.safeArea.width, U(720)) / U(170)));
-            for (int i = 0; i < list.Count; i += cols)
+            // equal tiles, each as tall as its words: the badge and its name, what to do for it, then the date or how far along you are
+            var nameSt = new GUIStyle(sLabel) { fontSize = Ts(13) }; var desc = new GUIStyle(sSmall) { fontSize = Ts(11) };
+            float pad = U(10), ic = U(40);
+            float Measure(int i, float w)
             {
-                GUILayout.BeginHorizontal();
-                for (int k = i; k < Mathf.Min(list.Count, i + cols); k++)
-                {
-                    var a = list[k]; var got = v.ach.Find(x => x.k == a.id); bool on = got != null;
-                    GUILayout.BeginVertical(on ? sPanel : sBtn, GUILayout.MinWidth(U(150)));
-                    GUILayout.BeginHorizontal(); IconAt(BadgePic(a, on), 44);
-                    GUILayout.BeginVertical(); GUILayout.Label("<b>" + a.name + "</b>", sLabel); GUILayout.Label(a.desc.ToString(), sSmall); GUILayout.EndVertical();
-                    GUILayout.EndHorizontal();
-                    if (on) GUILayout.Label("√ " + DateTimeOffset.FromUnixTimeMilliseconds(got.v).LocalDateTime.ToString("yyyy.MM.dd"), sSmall);
-                    else { var pr = Achievements.Test(a.id, v, App).prog; if (pr != null) Bar(GUILayoutUtility.GetRect(10, U(8), GUILayout.ExpandWidth(true)), Mathf.Min(1, pr[0] / (float)pr[1]), Px.Col("#2ea35f")); }
-                    GUILayout.EndVertical();
-                }
-                GUILayout.EndHorizontal();
+                var a = list[i]; bool on = v.ach.Exists(x => x.k == a.id);
+                float nh = nameSt.CalcHeight(new GUIContent("<b>" + a.name + "</b>"), w - pad * 2 - ic - U(6)), dh = desc.CalcHeight(new GUIContent(a.desc.ToString()), w - pad * 2);
+                bool bar = !on && Achievements.Test(a.id, v, App).prog != null;
+                return pad + Mathf.Max(ic, nh) + U(4) + dh + (on ? desc.CalcHeight(new GUIContent("√ 2026.01.01"), w) + U(2) : bar ? U(12) : 0) + pad;
             }
+            Grid("badges-" + cat, list.Count, 200, Measure, (i, r) =>
+            {
+                var a = list[i]; var got = v.ach.Find(x => x.k == a.id); bool on = got != null;
+                GUI.Box(r, GUIContent.none, on ? sPanel : sBtn);
+                GUI.DrawTexture(new Rect(r.x + pad, r.y + pad, ic, ic), Tex(BadgePic(a, on)), ScaleMode.ScaleToFit);
+                float tx = r.x + pad + ic + U(6), tw = r.width - pad * 2 - ic - U(6);
+                var nc = new GUIContent("<b>" + a.name + "</b>"); float nh = nameSt.CalcHeight(nc, tw);
+                GUI.Label(new Rect(tx, r.y + pad + Mathf.Max(0, (ic - nh) / 2), tw, nh), nc, nameSt);
+                float y = r.y + pad + Mathf.Max(ic, nh) + U(4); var dc = new GUIContent(a.desc.ToString()); float dh = desc.CalcHeight(dc, r.width - pad * 2);
+                GUI.Label(new Rect(r.x + pad, y, r.width - pad * 2, dh), dc, desc); y += dh + U(2);
+                if (on) GUI.Label(new Rect(r.x + pad, y, r.width - pad * 2, U(18)), "√ " + DateTimeOffset.FromUnixTimeMilliseconds(got.v).LocalDateTime.ToString("yyyy.MM.dd"), desc);
+                else { var pr = Achievements.Test(a.id, v, App).prog; if (pr != null) Bar(new Rect(r.x + pad, y + U(2), r.width - pad * 2, U(8)), Mathf.Min(1, pr[0] / (float)pr[1]), Px.Col("#2ea35f")); }
+            }, 8);
         }
     }
     sealed class AchievementsPage : Page
