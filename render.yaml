@@ -4,8 +4,8 @@ services:
     runtime: node
     region: singapore
     plan: 0.5c-512mb
-    buildCommand: node --check server.js
-    startCommand: node server.js
+    buildCommand: node --check server/server.js
+    startCommand: node server/server.js
     healthCheckPath: /api/hello
     envVars:
       - key: DATA_DIR

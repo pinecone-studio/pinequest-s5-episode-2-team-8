@@ -2,8 +2,8 @@
 /* Naadamy server: serves the app and links players into a shared village (Нутаг).
    Zero dependencies: only Node's built-in modules, so nothing to install and no licenses.
 
-   Run:  node server.js            (port 8000)
-         PORT=3000 node server.js
+   Run:  node server/server.js            (port 8000)
+         PORT=3000 node server/server.js
    Everyone on the same Wi-Fi opens http://<this-computer-ip>:8000 and plays together. */
 'use strict';
 const http = require('http');
@@ -11,20 +11,20 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const R = require('./js/village/rules.js');
-const QR = require('./js/qr.js');
-const basar = require('./basar-ai.js')(__dirname);
+const R = require('../web/js/village/rules.js');
+const QR = require('../web/js/qr.js');
 
-const ROOT = __dirname;
+const REPO = path.join(__dirname, '..'); // .env and data/ stay in the repo root
+const ROOT = path.join(REPO, 'web'); // only the app is served
+const basar = require('./basar-ai.js')(REPO);
 const PORT = Number(process.env.PORT || process.argv[2] || 8000);
 const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
 let actualPort = PORT;
-const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'rooms.json');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
   '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
-const BLOCKED = [/^\/data(\/|$)/, /^\/\.git/, /^\/\.env/, /^\/server\.js$/, /^\/basar-ai\.js$/, /^\/node_modules/];
 
 // ---------------------------------------------------------------- static files
 function serveStatic(req, res) {
@@ -36,7 +36,6 @@ function serveStatic(req, res) {
   }
   if (url.pathname === '/api/basar') return basar.handle(req, res);
   let p = decodeURIComponent(url.pathname);
-  if (BLOCKED.some((re) => re.test(p))) { res.writeHead(404); return res.end(); }
   if (p.endsWith('/')) p += 'index.html';
   const file = path.normalize(path.join(ROOT, p));
   if (!file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }

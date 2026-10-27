@@ -1,9 +1,9 @@
 /* Copies the content of the web version of Naadamy into the Unity project, so both always tell the same stories:
    - data (questions, lessons, provinces, facts…) as JSON in Assets/Resources/Data
    - pixel art that is drawn by the web version's own code (province trip maps, animals, Nomin…) as PNGs in Assets/Resources/Art
-   Run it from the repo root after changing the web content:  node NaadamyUnity/Tools/export-web-data.js */
+   Run it from the repo root after changing the web content:  node unity/Tools/export-web-data.js */
 const fs = require('fs'), path = require('path'), vm = require('vm'), { Canvas, toPNG } = require('./fakecanvas');
-const root = path.resolve(__dirname, '..', '..'), out = path.join(__dirname, '..', 'Assets', 'Resources', 'Data'), art = path.join(__dirname, '..', 'Assets', 'Resources', 'Art');
+const root = path.resolve(__dirname, '..', '..', 'web'), out = path.join(__dirname, '..', 'Assets', 'Resources', 'Data'), art = path.join(__dirname, '..', 'Assets', 'Resources', 'Art');
 fs.mkdirSync(out, { recursive: true }); fs.mkdirSync(art, { recursive: true });
 
 // a tiny stand-in for the browser, enough for the web files to run

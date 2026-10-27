@@ -22,7 +22,7 @@ async function waitForSavedPhrase() {
 }
 
 async function startServer() {
-  const server = spawn(process.execPath, [join(root, 'server.js')], {
+  const server = spawn(process.execPath, [join(root, 'server', 'server.js')], {
     env: { ...process.env, PORT: '0', DATA_DIR: dataDir },
     stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
   });
