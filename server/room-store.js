@@ -730,7 +730,8 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        for (const [code, state] of Object.entries(rooms)) {
+        // always in the same order: two servers saving the same rooms in different orders would wait on each other (deadlock)
+        for (const [code, state] of Object.entries(rooms).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
           if (!ROOM_CODE.test(code)) continue;
           await client.query(
             `INSERT INTO naadamy_rooms (code, state, updated_at)

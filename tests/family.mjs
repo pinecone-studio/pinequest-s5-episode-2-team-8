@@ -120,6 +120,9 @@ try {
     const p = TG.store.addProfile({ name: 'Номин', age: 7, avatar: '🦅', code: '🐎🥛🌙' });
     TG.store.state.loggedIn = true; TG.store.state.settings.sound = false; TG.store.state.lang = 'en';
     p.village = { tips: true, tutorial: true, coins: 600, xp: 200, room: 'FAMWEB' };
+    // progress for the cloud save: character, a lesson, a badge, a stamp, Mongol script and the historian
+    Object.assign(p, { eth: 'khalkh', aimag: 'tuv', charAt: 1000, learn: { ger: { done: true, best: 3, family: 2000 } }, ach: { character: 3000 },
+      passport: { stamps: { tuv: 4000 } }, bichig: { s: { a: 2 }, mem: { a: 1 } }, hist: { step: 2, done: false } });
     TG.go('village');
   });
   await until(() => home.evaluate(() => { const v = TG.store.active().village; return v.srv && v.srv.coins === 600 && !v.syncOp; }), 'the first device uploads its coins');
@@ -156,9 +159,25 @@ try {
   await until(() => other.evaluate(() => TG.store.state.loggedIn && TG.store.active() && TG.store.active().village && TG.store.active().village.id), 'the other device logs in');
   const joined = await other.evaluate(() => { const p = TG.store.active(); return { id: p.village.id, name: p.name, age: p.age, avatar: p.avatar, code: p.code, fam: p.fam }; });
   assert.deepEqual(joined, { id: homeId, name: 'Номин', age: 7, avatar: '🦅', code: '🐎🥛🌙', fam: webCode });
+  const carried = await other.evaluate(() => { const p = TG.store.active(); return { eth: p.eth, aimag: p.aimag, learn: p.learn.ger, ach: p.ach, stamps: p.passport.stamps, bichig: p.bichig, hist: p.hist.step }; });
+  assert.deepEqual(carried, { eth: 'khalkh', aimag: 'tuv', learn: { done: true, best: 3, family: 2000 }, ach: { character: 3000 }, stamps: { tuv: 4000 }, bichig: { s: { a: 2 }, mem: { a: 1 } }, hist: 2 });
+  assert.equal(await other.evaluate(() => !!document.querySelector('.eth-grid')), false, 'no character to make again');
+  ok('the cloud save comes along: character, lesson, badge, stamp, Mongol script and the historian');
   await other.evaluate(() => { const v = TG.store.active().village; v.tips = true; v.tutorial = true; v.room = 'FAMWEB'; TG.store.state.settings.sound = false; TG.go('village'); });
   await until(() => other.evaluate(() => { const v = TG.store.active().village; return v.coins === 600 && v.xp === 200 && v.srv.coins === 600; }), 'the other device gets the same coins and XP');
   ok('another device logs in with the code and the pictures, and has the same coins and XP');
+
+  // a stamp earned on the other device reaches the first one
+  const answeredBefore = await other.evaluate(() => TG._village.cloudAt());
+  await other.evaluate(() => { TG.store.active().passport.stamps.uvs = 5000; TG.store.save(); });
+  // uploads are at most every 3 s; wait for the server's answer to this one
+  await until(() => other.evaluate((before) => TG._village.cloudAt() > before, answeredBefore), 'the other device uploads the stamp', 15000);
+  await home.evaluate(() => TG.go('village'));
+  await until(() => home.evaluate(() => TG._village.live() && TG._village.live().online), 'the first device is back online');
+  await home.evaluate(() => TG._village.reconnect());
+  await until(() => home.evaluate(() => TG.store.active().passport.stamps.uvs === 5000), 'the first device gets the stamp from the other one', 15000);
+  assert.equal(await home.evaluate(() => TG.store.active().passport.stamps.tuv), 4000, 'its own stamp stays');
+  ok('progress made on either device reaches the other');
   assert.deepEqual(errors, []);
 
   console.log(results.join('\n'));

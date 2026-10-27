@@ -325,7 +325,7 @@ public sealed partial class Game
                 Basar(g, Loc.L("Нутагт хамтдаа явцгаая! Аймгийн паспортоор Монголоор аялж, нутгаа ч бас олоорой.", "Let’s go to Nutag together! Travel Mongolia with your aimag passport and find your home province too."));
                 Nav(g, 2, () =>
                 {
-                    V.eth = eth; V.aimag = aimag; V.look.deel = look.deel; V.look.skin = look.skin; V.look.hat = look.hat; V.Save();
+                    V.eth = eth; V.aimag = aimag; V.charAt = SaveData.NowMs(); V.look.deel = look.deel; V.look.skin = look.skin; V.look.hat = look.hat; V.Save();
                     g.CheckAchievements(true); g.Close();
                     g.Toast(Loc.L("Нутагт тавтай морил!", "Welcome to Nutag!"));
                     if (!V.tips && V.tutorialSeen > 0) g.Open(new TipsModal());

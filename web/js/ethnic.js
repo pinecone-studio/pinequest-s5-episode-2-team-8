@@ -93,7 +93,7 @@
       }
     }
     function finish() {
-      p.eth = d.eth; p.aimag = d.aimag; v.look = { ...(v.look || {}), ...d.look }; S.save();
+      p.eth = d.eth; p.aimag = d.aimag; p.charAt = Date.now(); v.look = { ...(v.look || {}), ...d.look }; S.save();
       TG.achievements && TG.achievements.check(true);
       onDone();
     }

@@ -84,6 +84,7 @@ public sealed class SaveData
     public List<string> campWon = new List<string>(); // defend-the-homeland chapters won
     public string ticket = "";                      // multiplayer identity ticket (64 hex)
     public string fam = "";                         // the family code this child was added to (Family.cs)
+    public long charAt;                             // when the character (eth, aimag) was last chosen, for the cloud save
     // the server account this device last saw (Net.Sync): what the device has on top of it is progress still to upload
     public bool hasSrv;
     public int srvCoins, srvXp, srvRod = 1;

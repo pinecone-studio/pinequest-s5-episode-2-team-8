@@ -46,7 +46,7 @@ function childOf(message) {
 
 const shown = (member, now) => ({ id: member.id, name: member.name, age: member.age, avatar: member.avatar, locked: (member.until || 0) > now });
 
-module.exports = function createFamily(roomStore, { now = () => Date.now() } = {}) {
+module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null } = {}) {
   // a few requests a minute per address: family codes and pictures cannot be guessed by trying many
   const hits = new Map();
   function allow(ip) {
@@ -121,7 +121,8 @@ module.exports = function createFamily(roomStore, { now = () => Date.now() } = {
     if (!result.ok) return result;
     const ticket = crypto.randomBytes(32).toString('hex');
     await roomStore.addDeviceTicket(id, ticket);
-    return { ok: true, id, ticket, ...childOf(stored), code };
+    // the child's cloud save comes along, so the new device has their character and lessons before the first join
+    return { ok: true, id, ticket, ...childOf(stored), code, cloud: await cloudOf(id) };
   }
 
   /** HTTP handler for POST /api/family with { act: 'create' | 'join' | 'members' | 'login', ... }. */

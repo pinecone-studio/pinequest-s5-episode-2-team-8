@@ -106,7 +106,7 @@
   TG.villageReward = (c, x) => reward(c, x);   // lessons, quizzes and family activities pay out in Нутаг
   TG.villageQuest = (k, n) => quest(k, n);
   const checkAch = () => { if (TG.achievements) TG.achievements.check(); };
-  TG._village = { wardrobe: () => wardrobe(), hud: () => hud(), recipes: () => Object.values(RECIPES).flat(), phaser: () => live && live.view, battle: (id) => startBattle(id), battleState: () => live && live.battle, shootNearest: () => shootNearest(), general: () => generalModal(), fp: () => openFP(), live: () => live, milk: (id) => milkGame(id), station: (st) => dairyStation(st), goTo: (...a) => goTo(...a), lots: () => lotsArr(), build: (i) => TG.gerwork.build(i), together: (id) => together(id), reconnect: () => net.rejoin(), shear: (i) => TG.gerwork.shear(i), shearable: (i) => TG.gerwork.shearable(i), felt: () => TG.gerwork.felt(), invite: (id) => net.send({ t: 'wr-invite', to: id }), context: () => contextAction(), arena: () => arenaModal(), school: () => wrestleSchool(), practice: () => practiceBout(), tournament: (r) => tournament(r), dog: () => live && live.dog, lot: (i) => lotAction(i), archery: () => archeryGame(), emee: () => emeeVisit(), npc: (id) => npcTalk(id), enterGer: (i) => enterGer(i), mount: (c) => mount(c), dismount: () => dismount(), race: (c) => raceStart(c), raceState: () => live && live.race, multiplayer: () => openMultiplayer(), room: () => roomModal(),
+  TG._village = { wardrobe: () => wardrobe(), hud: () => hud(), recipes: () => Object.values(RECIPES).flat(), phaser: () => live && live.view, battle: (id) => startBattle(id), battleState: () => live && live.battle, shootNearest: () => shootNearest(), general: () => generalModal(), fp: () => openFP(), live: () => live, milk: (id) => milkGame(id), station: (st) => dairyStation(st), goTo: (...a) => goTo(...a), lots: () => lotsArr(), build: (i) => TG.gerwork.build(i), together: (id) => together(id), reconnect: () => net.rejoin(), shear: (i) => TG.gerwork.shear(i), shearable: (i) => TG.gerwork.shearable(i), felt: () => TG.gerwork.felt(), invite: (id) => net.send({ t: 'wr-invite', to: id }), context: () => contextAction(), arena: () => arenaModal(), school: () => wrestleSchool(), practice: () => practiceBout(), tournament: (r) => tournament(r), dog: () => live && live.dog, lot: (i) => lotAction(i), archery: () => archeryGame(), emee: () => emeeVisit(), npc: (id) => npcTalk(id), enterGer: (i) => enterGer(i), mount: (c) => mount(c), dismount: () => dismount(), race: (c) => raceStart(c), raceState: () => live && live.race, multiplayer: () => openMultiplayer(), cloudAt: () => net.cloudAt, room: () => roomModal(),
     tut: (st) => { if (live) live.tut = st; }, nomin: (cmd) => nomin(cmd), basar: () => openBasar(),
     questsState: () => ({ day: questDay(), list: quests(), defs: QUESTS, seen: V().questsSeen }),
     npcs: () => WD.objects.filter((o) => o.kind === 'npcq' && NPCS[o.id]).map((o) => ({ id: o.id, x: o.x, y: o.y, mark: npcMark(o.id), name: NPCS[o.id].name })), objects: () => WD.objects, jump: () => jump() }; // used by automated tests and the tutorial
@@ -305,6 +305,18 @@
      *  its op id is saved with the profile, so after a reload or a dropped connection it is sent again and counted only once. */
     syncing: null, syncTimer: 0,
     queueSync() { clearTimeout(this.syncTimer); this.syncTimer = setTimeout(() => this.sync(), 800); },
+    /** Uploads the cloud save when it changed since the server last had it: at most every few seconds, as the profile is
+     *  saved very often (walking saves it too). */
+    cloudSent: '', cloudTimer: 0, cloudAt: 0,
+    queueCloud() { if (!this.cloudTimer) this.cloudTimer = setTimeout(() => { this.cloudTimer = 0; this.saveCloud(); }, 3000); },
+    saveCloud() {
+      const p = S.active();
+      if (!p || !live || !live.online) return;
+      const cloud = TG.cloud.of(p), text = JSON.stringify(cloud);
+      if (text === this.cloudSent) return;
+      this.cloudSent = text;
+      this.send({ t: 'cloud-save', cloud });
+    },
     sync() {
       const v = V();
       if (this.syncing) return this.syncing;
@@ -404,6 +416,7 @@
         setStatus('online');
         TG.toast(`🟢 ${L('Нутагт холбогдлоо', 'Connected to village')} · ${m.room}` + (live.others.size ? ` · ${live.others.size} ${L('найз байна', 'friends here')}` : ''));
         net.sync();
+        net.cloudSent = ''; net.saveCloud(); // the server merges this device's lessons, badges… and sends back the whole copy
         TG.gerwork.sync();
         if (m.v !== R.VERSION) setTimeout(() => TG.toast(L('⚠️ Тоглоом болон серверийн хувилбар зөрж байна. Хуудсаа дахин ачаалж, серверээ шинэчилнэ үү.', '⚠️ The game and server versions differ. Reload the page and update the server if needed.')), 2500);
         break;
@@ -423,6 +436,10 @@
         if (pending) { clearTimeout(pending.timer); net.pendingPurchase.delete(m.op); pending.resolve(m); }
         break;
       }
+      case 'cloud':
+        if (TG.cloud.apply(S.active(), m.cloud || {})) { S.save(); if (TG.achievements) TG.achievements.check(); }
+        net.cloudSent = JSON.stringify(TG.cloud.of(S.active())); net.cloudAt = Date.now();
+        break;
       case 'sync-result': {
         const sent = v.syncOp;
         if (!sent || m.op !== sent.op) { applyWallet(m.wallet); applyInventory(m.inventory); break; }
@@ -598,6 +615,7 @@
   const fmtLeft = (ms) => { const s = Math.ceil(ms / 1000); return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}${L('с', 's')}`; };
 
   // ================================================================ screen
+  S.onSave(() => { if (live && live.online) net.queueCloud(); });
   TG.gerwork.init({ V, live: () => live, net, reward, spendCoins, quest, factCard, lotsArr, enterGer, colours: (i) => gerColours(i), save: () => S.save(), refresh: () => { if (live) { hud(); updateCtx(); } } });
   TG.villageScreen = ({ setCleanup }) => {
     quests();

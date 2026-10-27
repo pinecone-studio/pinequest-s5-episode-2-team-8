@@ -96,6 +96,7 @@ public static class Family
             if (!known) { p.name = r["name"].S; p.age = r["age"].I; p.avatar = r["avatar"].I; p.created = SaveData.DayKey(); }
             p.ticket = r["ticket"].S; // this device's own ticket
             p.code = picsCode; p.fam = r["code"].S;
+            Cloud.Apply(p, r["cloud"]); // character, lessons, badges… from the other device
             if (string.IsNullOrWhiteSpace(p.server)) p.server = server.Trim();
             p.Save();
             if (!known) g.App.profiles.Add(pid);

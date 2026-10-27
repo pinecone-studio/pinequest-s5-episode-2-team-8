@@ -64,6 +64,7 @@
       p.village.ticket = result.ticket; // this device's own ticket; the old one may have been lost
       p.code = picCode(pics);
     }
+    if (result.cloud) TG.cloud.apply(p, result.cloud); // character, lessons, badges… from the other device
     p.fam = result.code;
     S.state.familyCode = result.code;
     S.save();
