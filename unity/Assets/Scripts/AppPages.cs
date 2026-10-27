@@ -26,6 +26,7 @@ public sealed partial class Game
                 GUI.Label(new Rect(r.x + g.U(46), r.y, r.width - g.U(80), r.height), label, new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
                 GUI.Label(new Rect(r.xMax - g.U(30), r.y, g.U(22), r.height), ">", new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter });
             }
+            Item("🏹", Loc.L("Түүхийн аялал: Чингис хаан", "Story mode: Chinggis Khaan"), () => g.OpenStory());
             Item("📚", Loc.L("Өв соёлын сургууль", "Heritage school"), () => g.Open(new LearnPage()));
             Item("✍️", Loc.L("Монгол бичгийн академи", "Mongol script academy"), () => g.Open(new BichigPage()));
             Item("🐕", Loc.L("Басартай ярилцах", "Talk with Basar"), () => g.OpenBasar());

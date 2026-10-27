@@ -82,6 +82,7 @@ public sealed class SaveData
     public List<string> bichigMem = new List<string>(); // letters written from memory
     public int histStep, histFound;                   // the historian's task chain: current step, and whether its item was found
     public List<string> campWon = new List<string>(); // defend-the-homeland chapters won
+    public List<KV> story = new List<KV>();           // story mode: chapter id → the part reached; "<id>:done" once finished
     public string ticket = "";                      // multiplayer identity ticket (64 hex)
     public string fam = "";                         // the family code this child was added to (Family.cs)
     // the server account this device last saw (Net.Sync): what the device has on top of it is progress still to upload
@@ -95,6 +96,7 @@ public sealed class SaveData
     static void Put(List<KV> l, string k, long v) { foreach (var e in l) if (e.k == k) { e.v = v; return; } l.Add(new KV { k = k, v = v }); }
     public static int Get(List<KV> l, string k) => (int)Find(l, k);
     public static void Add(List<KV> l, string k, int n) => Put(l, k, Math.Max(0, Find(l, k) + n));
+    public static void Set(List<KV> l, string k, int v) => Put(l, k, v);
 
     public int Have(string k) => (int)Find(produce, k);
     public void Stock(string k, int n) => Put(produce, k, Math.Max(0, Have(k) + n));

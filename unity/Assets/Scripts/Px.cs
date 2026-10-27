@@ -38,6 +38,22 @@ public sealed class PxCanvas
         for (int y = 0; y < src.H; y++) for (int x = 0; x < src.W; x++) Put(X + x, Y + y, src.Get(flip ? src.W - 1 - x : x, y));
     }
 
+    /** A parallax layer as tall as this canvas: copies src's columns from x = sx on, over the whole width (fast, for scenes). */
+    public void BlitRow(PxCanvas src, int sx)
+    {
+        int h = Math.Min(H, src.H);
+        for (int y = 0; y < h; y++)
+        {
+            int di = (H - 1 - y) * W, si = (src.H - 1 - y) * src.W;
+            for (int x = 0; x < W; x++)
+            {
+                int xs = sx + x; if (xs < 0 || xs >= src.W) continue;
+                var c = src.px[si + xs]; if (c.a == 0) continue;
+                if (c.a == 255) px[di + x] = c; else Put(x, y, c);
+            }
+        }
+    }
+
     /** drawImage with scaling (nearest neighbour), from a part of src into a rectangle here. */
     public void BlitScaled(PxCanvas src, float dx, float dy, float dw, float dh, bool flip = false, int sx = 0, int sy = 0, int sw = -1, int sh = -1)
     {

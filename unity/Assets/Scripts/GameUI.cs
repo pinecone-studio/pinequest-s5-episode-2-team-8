@@ -526,9 +526,10 @@ public sealed partial class Game
             if (Round(UR(tx + 58, my0, 50, 50), Emo.Icon("👁"))) Later(() => { moreOpen = false; TryFirstPerson(null); }); GlowAt("fp", UR(tx + 58, my0, 50, 50)); my0 -= 56;
             if (Round(UR(tx + 58, my0, 50, 50), Px.Icon("ui:book"))) Later(() => { moreOpen = false; Open(new LearnPage()); }); GlowAt("learn", UR(tx + 58, my0, 50, 50)); my0 -= 56;
             if (Round(UR(tx + 58, my0, 50, 50), Px.Icon("ui:scroll"))) Later(() => { moreOpen = false; Open(new QuestModal()); }); GlowAt("quests", UR(tx + 58, my0, 50, 50)); my0 -= 56;
+            if (Round(UR(tx + 58, my0, 50, 50), StoryFace("chinggis", "smile", 0))) Later(() => { moreOpen = false; OpenStory(); }); GlowAt("story", UR(tx + 58, my0, 50, 50)); my0 -= 56; // the story mode
             if (Round(UR(tx + 58, my0, 50, 50), Emo.Icon("🎵"), null, Music.On ? sChip : sBtn)) Later(Music.Toggle);
         }
-        else { GlowAt("fp", moreR); GlowAt("learn", moreR); GlowAt("quests", moreR); }
+        else { GlowAt("fp", moreR); GlowAt("learn", moreR); GlowAt("quests", moreR); GlowAt("story", moreR); }
         // bottom right: run, jump and the action button (the web version's v-bottom order)
         float right = vw - 10;
         if (ctx != null && modal == null)
