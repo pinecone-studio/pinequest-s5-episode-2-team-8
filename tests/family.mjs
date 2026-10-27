@@ -125,9 +125,11 @@ try {
   await until(() => home.evaluate(() => { const v = TG.store.active().village; return v.srv && v.srv.coins === 600 && !v.syncOp; }), 'the first device uploads its coins');
   await home.evaluate(() => TG.go('family'));
   await home.waitForSelector('.gate-q');
-  const answer = await home.evaluate(() => document.querySelector('.gate-q').textContent.match(/\d+/g).reduce((a, b) => a * b));
-  await home.type('.gate-input', String(answer));
-  await home.evaluate(() => document.querySelector('.gate .btn.primary').click());
+  await sleep(300); // the dialog takes the keyboard focus a moment after it opens
+  await home.evaluate(() => {
+    document.querySelector('.gate-input').value = document.querySelector('.gate-q').textContent.match(/\d+/g).reduce((a, b) => a * b);
+    document.querySelector('.gate .btn.primary').click();
+  });
   await home.waitForSelector('[data-family="none"]');
   await clickText(home, '[data-family] button', 'family code');
   await home.waitForSelector('[data-family]:not([data-family="none"])');

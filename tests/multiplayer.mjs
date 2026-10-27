@@ -14,9 +14,11 @@ const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url))
 const chrome = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome');
 const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (fn, label, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return; await sleep(150); } throw new Error(`timed out waiting for: ${label}`); };
+// WAIT_MS: a longer wait for a remote database (each step is a few queries away)
+const until = async (fn, label, ms = Number(process.env.WAIT_MS) || 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return; await sleep(150); } throw new Error(`timed out waiting for: ${label}`); };
 
-const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, HEARTBEAT_MS: '600' }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
+// with a remote database (WAIT_MS) a join takes longer than two missed 0.6 s pings
+const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, HEARTBEAT_MS: process.env.WAIT_MS ? '3000' : '600' }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
 const port = await new Promise((res, rej) => { server.on('message', (m) => m.port && res(m.port)); server.on('exit', (c) => rej(new Error('server exited ' + c))); setTimeout(() => rej(new Error('server did not start')), 8000); });
 // connect over the computer's Wi-Fi address like a second device would (falls back to localhost without a network)
 const lan = Object.values(networkInterfaces()).flat().find((i) => i && i.family === 'IPv4' && !i.internal);
@@ -537,24 +539,25 @@ try {
   await new Promise((r) => ghost.on('connect', r));
   ghost.write(`GET /ws HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${crypto.randomBytes(16).toString('base64')}\r\n\r\n`);
   await sleep(200);
-  const payload = Buffer.from(JSON.stringify({ t: 'join', room: 'NUTAG', id: 'ghost-1', ticket: crypto.randomBytes(32).toString('hex'), name: 'Сүнс', look: {}, x: 20, y: 13 })), mask = crypto.randomBytes(4);
+  const payload = Buffer.from(JSON.stringify({ t: 'join', room: 'NUTAG', id: 'ghost-' + crypto.randomBytes(4).toString('hex'), ticket: crypto.randomBytes(32).toString('hex'), name: 'Сүнс', look: {}, x: 20, y: 13 })), mask = crypto.randomBytes(4);
   const header = payload.length < 126
     ? Buffer.from([0x81, 0x80 | payload.length])
     : Buffer.from([0x81, 0x80 | 126, payload.length >> 8, payload.length & 255]);
   ghost.write(Buffer.concat([header, mask, Buffer.from(payload.map((x, i) => x ^ mask[i & 3]))]));
   ghost.pause();                                                // never answers the server's pings again
   await until(() => a.evaluate(() => [...TG._village.live().others.values()].some((o) => o.name === 'Сүнс')), 'A sees the ghost join');
-  await until(() => a.evaluate(() => ![...TG._village.live().others.values()].some((o) => o.name === 'Сүнс')), 'the silent player is removed', 6000);
+  await until(() => a.evaluate(() => ![...TG._village.live().others.values()].some((o) => o.name === 'Сүнс')), 'the silent player is removed', Math.max(6000, Number(process.env.WAIT_MS) || 0));
   ghost.destroy();
   ok('a player whose connection silently died is removed automatically');
 
   // chat flood guard: only one phrase a second gets through
-  const spam = new WebSocket(`ws://127.0.0.1:${port}/ws`), heard = [];
+  const spam = new WebSocket(`ws://127.0.0.1:${port}/ws`), heard = [], spamId = 'spam-' + crypto.randomBytes(4).toString('hex');
   await new Promise((r) => (spam.onopen = r));
-  spam.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t === 'say' && m.id === 'spam-1') heard.push(m); };
-  spam.send(JSON.stringify({ t: 'join', room: 'SPAM', id: 'spam-1', ticket: crypto.randomBytes(32).toString('hex'), name: 'Spam', look: {}, x: 20, y: 13 }));
-  await sleep(200);
+  spam.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t === 'welcome') heard.welcome = true; if (m.t === 'say' && m.id === spamId) heard.push(m); };
+  spam.send(JSON.stringify({ t: 'join', room: 'SPAM', id: spamId, ticket: crypto.randomBytes(32).toString('hex'), name: 'Spam', look: {}, x: 20, y: 13 }));
+  await until(() => heard.welcome, 'the chat spammer joins');
   for (let k = 0; k < 5; k++) spam.send(JSON.stringify({ t: 'say', k: 'e', i: 0 }));
+  await until(() => heard.length > 0, 'the first phrase gets through');
   await sleep(400);
   spam.close();
   if (heard.length !== 1) throw new Error(`chat flood guard let ${heard.length} phrases through instead of 1`);
@@ -564,6 +567,22 @@ try {
   await until(() => a.evaluate(() => TG._village.live().others.size === 0), 'A sees B leave');
   if (!(await a.evaluate(() => (TG._village.live().chat || []).some((l) => l.k === 'leave' && l.n === 'Сарнай')))) throw new Error('the chat log has no leave line');
   ok('leaving removes the player for others');
+
+  // a fast builder: the next stages are sent before the claim is answered (the client then sends them as claims again)
+  const builderRoom = 'GER' + crypto.randomBytes(2).toString('hex').toUpperCase();
+  const builder = new WebSocket(`ws://localhost:${port}/ws`);
+  const built = [];
+  builder.onmessage = (event) => { const message = JSON.parse(event.data); if (message.t === 'welcome') built.welcome = true; if (message.t === 'lot' || message.t === 'deny') built.push(message); };
+  await new Promise((resolveOpen) => { builder.onopen = resolveOpen; });
+  builder.send(JSON.stringify({ t: 'join', room: builderRoom, id: 'builder-' + crypto.randomBytes(4).toString('hex'), ticket: crypto.randomBytes(32).toString('hex'), name: 'Builder', look: {}, x: 20, y: 13 }));
+  await until(() => built.welcome, 'the fast builder joins');
+  builder.send(JSON.stringify({ t: 'ger-claim', i: 3, stage: 1 }));
+  builder.send(JSON.stringify({ t: 'ger-claim', i: 3, stage: 2 }));
+  builder.send(JSON.stringify({ t: 'ger-stage', stage: 3 }));
+  await until(() => built.some((message) => message.t === 'lot' && message.lot.stage === 3), 'the fast builder\'s ger reaches stage 3');
+  if (built.some((message) => message.t === 'deny')) throw new Error(`the fast builder was denied: ${JSON.stringify(built.filter((message) => message.t === 'deny'))}`);
+  builder.close();
+  ok('stages sent before the claim is answered are kept, in order');
 } catch (e) {
   errors.push(e.message);
 }
