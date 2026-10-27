@@ -252,6 +252,7 @@
       ach: map(o.ach, (t) => int(t, CLOUD_TIME)), stamps: map(o.stamps, (t) => int(t, CLOUD_TIME)),
       bichig: map(o.bichig, (n) => int(n, 1000)), bichigMem: map(o.bichigMem, (v) => (v ? 1 : 0)),
       hist: int(o.hist, 1000),
+      story: map(o.story, (n) => int(n, 1000)), // story mode: chapter → the furthest part reached ("ch1:done": finished)
     };
   }
   function mergeCloud(a, b) {
@@ -266,6 +267,7 @@
       ach: each(a.ach, b.ach, earliest), stamps: each(a.stamps, b.stamps, earliest),
       bichig: each(a.bichig, b.bichig, max), bichigMem: each(a.bichigMem, b.bichigMem, () => 1),
       hist: max(a.hist, b.hist),
+      story: each(a.story, b.story, max),
     };
   }
 

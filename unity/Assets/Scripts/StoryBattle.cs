@@ -345,7 +345,7 @@ public sealed partial class Game
         public override void Draw(StoryScene s, PxCanvas c)
         {
             float t = Time.time; var all = new List<(float y, Action draw)>();
-            foreach (var d in drops) { var dd = d; all.Add((d.y, () => c.Blit(Px.DairyIcon("aaruul"), Mathf.RoundToInt(dd.x - camX - 8), Mathf.RoundToInt(dd.y - 16 + Mathf.Sin(t * 4) * 2)))); }   // dried curd: a heart back
+            foreach (var d in drops) { var dd = d; all.Add((d.y, () => { int dx = Mathf.RoundToInt(dd.x - camX), dy = Mathf.RoundToInt(dd.y - 16 + Mathf.Sin(t * 4) * 2); c.Blit(Px.DairyIcon("aaruul"), dx - 8, dy); if ((int)(t * 4) % 2 == 0) { var gl = new Color32(255, 240, 160, 255); c.Put(dx, dy - 3, gl); c.Put(dx - 1, dy - 2, gl); c.Put(dx + 1, dy - 2, gl); c.Put(dx, dy - 1, gl); } })); }   // dried curd: a heart back
             if (cart != null) { var cc = cart; all.Add((cart.y, () => DrawCart(c, cc.x - camX, cc.y, t))); }
             foreach (var f in folk) { var ff = f; all.Add((f.y, () => StoryScene.DrawPerson(c, ff.look, ff.x - camX, ff.y, 1, true, false, t, true))); }
             if (borte != null) { var b = borte; all.Add((b.y, () => StoryScene.DrawPerson(c, b.look, b.x - camX, b.y, b.Face, !found, false, t, true))); }
@@ -363,7 +363,7 @@ public sealed partial class Game
                 if (f.kind == "archer" || f.move == "volley") for (int x = 0; x < 150; x += 4) { var col = new Color32(255, 70, 60, (byte)(70 + 120 * k)); c.Put(Mathf.RoundToInt(f.x - camX + f.face * (10 + x)), Mathf.RoundToInt(f.aimY - 20), col); if (f.move == "volley") { c.Put(Mathf.RoundToInt(f.x - camX + f.face * (10 + x)), Mathf.RoundToInt(f.aimY - 32), col); c.Put(Mathf.RoundToInt(f.x - camX + f.face * (10 + x)), Mathf.RoundToInt(f.aimY - 8), col); } }
                 if (f.kind == "rider" || f.move == "charge") for (int x = 0; x < Mathf.Abs(f.chargeTo - f.x); x += 3) { c.Put(Mathf.RoundToInt(f.x - camX + f.face * x), Mathf.RoundToInt(f.y + 1), new Color32(255, 60, 50, (byte)(60 + 140 * k))); c.Put(Mathf.RoundToInt(f.x - camX + f.face * x), Mathf.RoundToInt(f.y - 1), new Color32(255, 60, 50, (byte)(40 + 100 * k))); }
             }
-            if (goT > 0 && seg < 3 && (int)(t * 3) % 2 == 0) { int ax = StoryScene.VW - 24, ay = 92; for (int i = 0; i < 6; i++) { c.Put(ax + i, ay - i, Color.white); c.Put(ax + i, ay + i, Color.white); c.Put(ax + i - 3, ay - i, Color.white); c.Put(ax + i - 3, ay + i, Color.white); } }
+            if (goT > 0 && seg < 3 && (int)(t * 3) % 2 == 0) { int ax = StoryScene.VW - 14, ay = 92; for (int i = 0; i < 6; i++) { c.Put(ax - i, ay - i, Color.white); c.Put(ax - i, ay + i, Color.white); c.Put(ax - i - 4, ay - i, Color.white); c.Put(ax - i - 4, ay + i, Color.white); } }   // » ride on
         }
         void DrawFighter(StoryScene s, PxCanvas c, Fighter f, float t)
         {
