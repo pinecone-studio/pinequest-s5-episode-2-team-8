@@ -71,7 +71,7 @@ public sealed class Net
     public void Connect(Game g)
     {
         Close(); replaced = false;
-        serverUrl = WsUrl(g.V.server); room = string.IsNullOrEmpty(g.V.room) ? "NUTAG" : g.V.room;
+        serverUrl = WsUrl(Family.ServerOf(g, g.V)); room = string.IsNullOrEmpty(g.V.room) ? "NUTAG" : g.V.room;
         if (serverUrl == null) { status = "solo"; return; }
         closed = false; status = "connecting"; Open(g);
     }
@@ -401,8 +401,8 @@ public sealed partial class Game
         {
             var n = g.net; code ??= n.room;
             g.Title(Loc.L("Хамт тоглох өрөө", "Play-together room"));
-            if (string.IsNullOrEmpty(g.V.server)) { g.Text(Loc.L("Найзуудтайгаа хамт тоглохын тулд том хүнээс ☰ → Тохиргоо хэсэгт серверийн хаягийг бичүүлээрэй.", "To play with friends, ask a grown-up to add the server address in ☰ → Settings.")); if (g.Btn(Loc.L("Тохиргоо", "Settings"), true, 40)) g.Later(() => g.Swap(new SettingsModal())); }
-            if (!string.IsNullOrEmpty(g.V.server))
+            if (string.IsNullOrEmpty(Family.ServerOf(g, g.V))) { g.Text(Loc.L("Найзуудтайгаа хамт тоглохын тулд том хүнээс ☰ → Тохиргоо хэсэгт серверийн хаягийг бичүүлээрэй.", "To play with friends, ask a grown-up to add the server address in ☰ → Settings.")); if (g.Btn(Loc.L("Тохиргоо", "Settings"), true, 40)) g.Later(() => g.Swap(new SettingsModal())); }
+            if (!string.IsNullOrEmpty(Family.ServerOf(g, g.V)))
             {
                 g.Small(n.Online ? Loc.L($"“{n.room}” өрөөнд {n.others.Count + 1} хүн байна. Ижил кодтой хүмүүс нэг нутагт хамт тоглоно.", $"{n.others.Count + 1} people in room “{n.room}”. Everyone with the same code plays in one village.")
                     : n.status == "solo" ? Loc.L("Сервертэй холбогдоогүй байна.", "Not connected to the server.") : Loc.L("Холбогдож байна…", "Connecting…"));

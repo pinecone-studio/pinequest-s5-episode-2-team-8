@@ -42,8 +42,15 @@ public static class Family
         if (parts.Length != 3 || parts.Any(p => !int.TryParse(p, out int i) || i < 0 || i > 8)) return null;
         return "[" + string.Join(",", parts.Select(int.Parse)) + "]";
     }
-    /** Where this profile reaches the server: its own address, or the one this device last used. */
-    public static string ServerOf(Game g, SaveData p) => !string.IsNullOrWhiteSpace(p.server) ? p.server : g.App.server;
+    /** The hosted Naadamy server (Render), built into the app so nobody has to type an address. Empty until it is deployed:
+     *  then set it, e.g. "https://naadamy-team8.onrender.com". An address in Settings still wins (a server on the home Wi-Fi). */
+    public const string HOSTED = "";
+    /** Where this profile reaches the server: its own address, the one this device last used, or the hosted one. "": play alone. */
+    public static string ServerOf(Game g, SaveData p)
+    {
+        if (p != null && !string.IsNullOrWhiteSpace(p.server)) return p.server;
+        return !string.IsNullOrWhiteSpace(g.App.server) ? g.App.server : HOSTED;
+    }
 
     public static string Why(J r)
     {
