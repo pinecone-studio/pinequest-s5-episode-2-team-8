@@ -11,18 +11,21 @@ BAYER4 = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
 
 
 def hexc(h, a=255):
+    """'#rrggbb' or '#rrggbbaa' (or an RGB/RGBA tuple) to an RGBA tuple."""
+    if not isinstance(h, str):
+        return tuple(int(v) for v in h[:3]) + ((int(h[3]),) if len(h) > 3 else (a,))
     h = h.lstrip('#')
-    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), a)
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), int(h[6:8], 16) if len(h) >= 8 else a)
 
 
 def mix(c1, c2, t):
-    a, b = hexc(c1) if isinstance(c1, str) else c1, hexc(c2) if isinstance(c2, str) else c2
+    a, b = hexc(c1), hexc(c2)
     return tuple(int(round(a[i] + (b[i] - a[i]) * t)) for i in range(4))
 
 
 def shade(c, f):
     """f < 0 darkens towards a cool shadow, f > 0 lightens towards a warm light."""
-    c = hexc(c) if isinstance(c, str) else c
+    c = hexc(c)
     if f < 0:
         return mix(c, (40, 24, 48, c[3]), -f)
     return mix(c, (255, 246, 222, c[3]), f)

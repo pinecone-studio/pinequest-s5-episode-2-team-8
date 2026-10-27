@@ -47,11 +47,27 @@ public static class Sfx
     {
         if (!blips.TryGetValue(who, out var c))
         {
-            float f = who == "basar" ? 310 : who == "general" ? 135 : who == "emee" ? 440 : who == "historian" ? 370 : 560, dur = who == "basar" ? 0.06f : who == "emee" ? 0.075f : 0.045f;
+            float f = who == "basar" ? 310 : who == "general" ? 135 : who == "emee" ? 440 : who == "historian" ? 370 : who == "chinggis" ? 118 : who == "temujin" ? 150 : who == "man" ? 140 : who == "elder" ? 128 : who == "woman" ? 400 : who == "child" ? 300 : 560, dur = who == "basar" ? 0.06f : who == "emee" ? 0.075f : 0.045f;
             bool bark = who == "basar", sq = who != "emee" && who != "historian";
             c = blips[who] = Tone("blip_" + who, dur + 0.02f, t => { float hz = bark ? f * Mathf.Lerp(1, 0.55f, t / dur) : f; float w = sq ? Sq(hz, t) * 0.5f : Mathf.Sin(2 * Mathf.PI * hz * t); return t < dur ? w * Env(t, dur) * 0.35f : 0; });
         }
         Play(c, 0.6f, mul * (1 + (UnityEngine.Random.value - 0.5f) * 0.18f));
+    }
+    static AudioClip hit, swish, thud, horn, twang;
+    /** A blow landing: a short noisy knock. */
+    public static void Hit(float pitch = 1) { hit ??= Noise("hit", 0.09f, 0.45f, 180); Play(hit, 0.8f, pitch); }
+    /** A swing through the air. */
+    public static void Swish() { swish ??= Noise("swish", 0.16f, 0.25f, 2400); Play(swish, 0.7f, 0.9f + UnityEngine.Random.value * 0.2f); }
+    /** Something heavy falling or a horse's stamp. */
+    public static void Thud() { thud ??= Tone("thud", 0.22f, t => Mathf.Sin(2 * Mathf.PI * (90 - 120 * t) * t) * Env(t, 0.22f) * 0.6f); Play(thud); }
+    /** A bowstring and a whistling arrow (the Mongol dugaraa sum whistles in flight). */
+    public static void Twang() { twang ??= Tone("twang", 0.3f, t => (Sq(196 - 40 * t, t) * 0.2f * Mathf.Exp(-t * 30) + Mathf.Sin(2 * Mathf.PI * (1600 + 600 * t) * t) * 0.12f * Mathf.Clamp01(t * 20) * (1 - t / 0.3f))); Play(twang); }
+    /** A horn call: the allies are coming. */
+    public static void Horn() { horn ??= Tone("horn", 1.1f, t => { float f = t < 0.35f ? 196 : 262; float saw = 2 * ((t * f) % 1) - 1; return (saw * 0.35f + Mathf.Sin(2 * Mathf.PI * f * t) * 0.4f) * Mathf.Clamp01(t / 0.05f) * Mathf.Clamp01((1.1f - t) / 0.3f) * 0.35f; }); Play(horn); }
+    static AudioClip Noise(string name, float len, float vol, float cut)
+    {
+        var rnd = new System.Random(name.Length); float lp = 0, a = Mathf.Clamp01(cut / RATE * 6.28f);
+        return Tone(name, len, t => { lp += ((float)(rnd.NextDouble() * 2 - 1) - lp) * a; return lp * vol * 3 * Env(t, len); });
     }
     public static void Pop() => Play(pop);
     public static void Good() => Play(good);
