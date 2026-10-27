@@ -276,7 +276,7 @@ public sealed class Net
             case "move-correct":
                 if (g.V != null)
                 {
-                    try { float cx = m["x"].F; float cy = m["y"].F; int cdir = m["dir"].I; g.V.posX = cx; g.V.posY = cy; g.V.hasPos = true; g.MyDir = cdir; /* Game uses px/py/dir fields */ }
+                    try { float cx = m["x"].F; float cy = m["y"].F; int cdir = m["dir"].I; g.CorrectMove(cx, cy, cdir); /* Game uses px/py/dir fields */ }
                     catch (Exception) { }
                 }
                 return;
@@ -302,6 +302,7 @@ public sealed partial class Game
 {
     public readonly Net net = new Net();
     public float MyX => px; public float MyY => py; public int MyDir => dir; public bool MyRiding => riding;
+    public void CorrectMove(float x, float y, int d) { px = x; py = y; dir = d; vx = vy = 0; SavePos(); } // the server put me back where it says I am
     (string text, PxCanvas icon, float t) myBubble = (null, null, -99);
     public void MyBubble(string text, PxCanvas icon) => myBubble = (text, icon, Time.time);
     /** A lot someone else owns on the server (their ger stands there). */
