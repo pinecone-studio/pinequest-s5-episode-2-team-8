@@ -16,6 +16,7 @@ public sealed class AppState
     public bool en, loggedIn, sound = true, bigText, music = true;
     public float musicVolume = 0.35f;
     public string activeId = "";
+    public string server = "", familyCode = "";   // the server this device last used, and its family code (Family.cs)
     public List<string> profiles = new List<string>();
     public List<FamilyMember> family = new List<FamilyMember>
     {
@@ -30,7 +31,7 @@ public sealed class AppState
 
     public static AppState Load()
     {
-        try { string raw = PlayerPrefs.GetString(KEY, ""); if (raw != "") { var s = JsonUtility.FromJson<AppState>(raw); if (s != null) return s; } }
+        try { string raw = PlayerPrefs.GetString(KEY, ""); if (raw != "") { var s = JsonUtility.FromJson<AppState>(raw); if (s != null) { s.server ??= ""; s.familyCode ??= ""; return s; } } }
         catch (Exception e) { Debug.LogWarning("Naadamy: could not read the app state. " + e.Message); }
         return new AppState();
     }

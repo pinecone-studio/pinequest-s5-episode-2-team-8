@@ -42,7 +42,7 @@ Shared lists (phrases, emotes, looks, roofs, moves…) live in `js/village/rules
 - Other `reason` values: `invalid`, `identity`, `no-family`, `full`, `storage`.
 - Pictures are stored as a salted scrypt hash. With only 729 combinations, the lock is what protects them, not the hash.
 
-The web client keeps `familyCode` in its stored state, and `fam` (the family code) on each profile that is in the family.
+The web client keeps `familyCode` in its stored state, and `fam` (the family code) on each profile that is in the family. Unity (`Family.cs`) keeps `familyCode` and `server` (the address it last used) in `AppState`, and `fam` in each `SaveData`; its picture codes are saved as `"0-4-2"` and sent as `[0,4,2]`. Because Unity has no page origin, its family login also asks for the server address.
 
 ## Connection flow
 

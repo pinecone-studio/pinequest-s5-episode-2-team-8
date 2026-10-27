@@ -78,6 +78,24 @@ public sealed partial class Game
             GUILayout.EndHorizontal();
         }
     }
+    /** The 3×3 secret pictures: tapped ones fill the 3 dots; the third calls onPick with the code ("0-4-2"). */
+    public void PicPad(List<int> sel, Action<string> onPick)
+    {
+        GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
+        for (int k = 0; k < 3; k++) { var r = GUILayoutUtility.GetRect(U(36), U(36), GUILayout.Width(U(36))); GUI.Box(r, "", sBtn); if (k < sel.Count) GUI.DrawTexture(new Rect(r.x + U(4), r.y + U(4), r.width - U(8), r.height - U(8)), Tex(Px.PicKey(sel[k]))); }
+        GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
+        for (int row = 0; row < 3; row++)
+        {
+            GUILayout.BeginHorizontal();
+            for (int c = 0; c < 3; c++)
+            {
+                int i = row * 3 + c; var r = GUILayoutUtility.GetRect(U(60), U(56), GUILayout.ExpandWidth(true));
+                if (GUI.Button(r, "", sTile) && sel.Count < 3) { Sfx.Tap(); Later(() => { sel.Add(i); if (sel.Count == 3) { string code = string.Join("-", sel); onPick(code); } }); }
+                float s = Mathf.Min(r.height, r.width) - U(14); GUI.DrawTexture(new Rect(r.center.x - s / 2, r.center.y - s / 2, s, s), Tex(Px.PicKey(i)));
+            }
+            GUILayout.EndHorizontal();
+        }
+    }
     /** Big number buttons (easier than the phone keyboard for little ones). */
     public string NumPad(string v)
     {
@@ -186,6 +204,8 @@ public sealed partial class Game
         string tab; SaveData picking; readonly List<int> sel = new List<int>(); bool shake;
         // registering
         int step; string name = "", err = "", ageText = ""; int age = 8, avatar; readonly Live live = new Live(160, 90);
+        // logging in with the family code: the code (and server), then which child, then their pictures
+        int famStep; string famCode = "", famServer; bool busy; List<J> members = new List<J>(); J member;
         public AuthPage() { tab = I.App.profiles.Count > 0 ? "login" : "register"; }
         protected override bool Back => false;
         public override bool CanEscape => false;
@@ -222,10 +242,12 @@ public sealed partial class Game
             g.Gap(10);
             GUILayout.BeginVertical(g.sPanel);
             scroll = g.BeginScroll(scroll, safe.height - g.U(330)); // whatever is left under the header; the rest scrolls
-            if (tab == "login" && g.App.profiles.Count > 0) Login(g); else Register(g);
+            if (tab == "family") FamilyLogin(g); else if (tab == "login" && g.App.profiles.Count > 0) Login(g); else Register(g);
             g.EndScroll();
             GUILayout.EndVertical();
             g.Gap(8);
+            if (tab != "family" && GUILayout.Button("<u>" + Loc.L("Гэр бүлийн кодоор нэвтрэх", "Log in with a family code") + "</u>", new GUIStyle(g.sCenter) { fontSize = Mathf.RoundToInt(g.U(14)), normal = { textColor = Color.white } }))
+                g.Later(() => { tab = "family"; famStep = 0; err = ""; sel.Clear(); });
             if (GUILayout.Button("<u>" + Loc.L("Төслийн тухай", "About the project") + "</u>", new GUIStyle(g.sCenter) { fontSize = Mathf.RoundToInt(g.U(14)), normal = { textColor = Color.white } })) g.Later(() => g.Open(new AboutPage()));
             GUILayout.FlexibleSpace();
             GUILayout.EndArea();
@@ -256,21 +278,67 @@ public sealed partial class Game
                 GUILayout.EndHorizontal();
             }
         }
-        void PicPad(Game g, Action<string> onPick)
+        void PicPad(Game g, Action<string> onPick) => g.PicPad(sel, onPick);
+        void FamilyLogin(Game g)
         {
-            GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
-            for (int k = 0; k < 3; k++) { var r = GUILayoutUtility.GetRect(g.U(36), g.U(36), GUILayout.Width(g.U(36))); GUI.Box(r, "", g.sBtn); if (k < sel.Count) GUI.DrawTexture(new Rect(r.x + g.U(4), r.y + g.U(4), r.width - g.U(8), r.height - g.U(8)), g.Tex(Px.PicKey(sel[k]))); }
-            GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
-            for (int row = 0; row < 3; row++)
+            famServer ??= g.App.server ?? "";
+            void Error() { if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel); }
+            void Leave() { tab = g.App.profiles.Count > 0 ? "login" : "register"; err = ""; sel.Clear(); }
+            if (famStep == 0)
             {
+                GUILayout.Label("<b>" + Loc.L("Гэр бүлийн код", "Family code") + "</b>", g.sLabel);
+                g.Small(Loc.L("Кодыг том хүн эцэг эхийн самбараас харна.", "A grown-up can find the code on the parent dashboard."));
+                famCode = g.Field(famCode, 9, "ABCD-2345"); g.Gap(6);
+                g.Small(Loc.L("Серверийн хаяг (ж: 192.168.1.10:8000)", "Server address (e.g. 192.168.1.10:8000)"));
+                famServer = g.Field(famServer, 80, "192.168.1.10:8000"); g.Gap(10);
+                Error();
                 GUILayout.BeginHorizontal();
-                for (int c = 0; c < 3; c++)
+                if (g.Btn("←")) g.Later(Leave);
+                if (g.Btn(busy ? "…" : Loc.L("Цааш →", "Next →"), true, 40, !busy)) g.Later(() =>
                 {
-                    int i = row * 3 + c; var r = GUILayoutUtility.GetRect(g.U(60), g.U(56), GUILayout.ExpandWidth(true));
-                    if (GUI.Button(r, "", g.sTile) && sel.Count < 3) { Sfx.Tap(); g.Later(() => { sel.Add(i); if (sel.Count == 3) { string code = string.Join("-", sel); onPick(code); } }); }
-                    float s = Mathf.Min(r.height, r.width) - g.U(14); GUI.DrawTexture(new Rect(r.center.x - s / 2, r.center.y - s / 2, s, s), g.Tex(Px.PicKey(i)));
-                }
+                    string code = Family.Clean(famCode);
+                    if (code.Length != 8) { err = Loc.L("8 үсэг, тоотой кодоо бичээрэй", "Write the 8-letter code"); return; }
+                    busy = true; err = "";
+                    g.StartCoroutine(Family.Post(famServer, "{\"act\":\"members\",\"code\":" + J.Quote(code) + "}", r =>
+                    {
+                        busy = false;
+                        if (!r["ok"].B) { err = Family.Why(r); return; }
+                        famCode = code; members = r["members"].ToList(); famStep = 1;
+                    }));
+                });
                 GUILayout.EndHorizontal();
+            }
+            else if (famStep == 1)
+            {
+                GUILayout.Label("<b>" + Loc.L("Хэн тоглох вэ?", "Who’s playing?") + "</b>", g.sLabel);
+                foreach (var m in members)
+                {
+                    GUILayout.BeginHorizontal(g.sBtn);
+                    g.IconAt(Px.Mascot(m["avatar"].I), 40);
+                    GUILayout.Label($"<b>{m["name"].S}</b>\n<size={g.Ts(11)}>{m["age"].I} {Loc.L("нас", "yrs")}{(m["locked"].B ? " · " + Loc.L("түр түгжээтэй", "locked for now") : "")}</size>", g.sLabel);
+                    GUILayout.FlexibleSpace();
+                    if (g.SmallBtn(Loc.L("Тоглох", "Play"))) { var mm = m; g.Later(() => { member = mm; famStep = 2; err = ""; sel.Clear(); }); }
+                    GUILayout.EndHorizontal();
+                }
+                if (g.Btn(Loc.L("Буцах", "Back"), false, 32)) g.Later(() => { famStep = 0; err = ""; });
+            }
+            else
+            {
+                GUILayout.BeginHorizontal(); g.IconAt(Px.Mascot(member["avatar"].I), 36); GUILayout.Label($"<b>{member["name"].S}</b>", g.sTitle); GUILayout.EndHorizontal();
+                g.Small(Loc.L("Нууц 3 зургаа дарааллаар нь дар", "Tap your 3 secret pictures in order"));
+                PicPad(g, pics =>
+                {
+                    if (busy) { sel.Clear(); return; }
+                    busy = true; err = "";
+                    g.StartCoroutine(Family.Login(g, famServer, famCode, member["id"].S, pics, (r, p) =>
+                    {
+                        busy = false;
+                        if (p != null) { g.Later(() => g.Enter(p)); return; }
+                        Sfx.Bad(); err = Family.Why(r); sel.Clear();
+                    }));
+                });
+                Error();
+                if (g.Btn(Loc.L("Буцах", "Back"), false, 32)) g.Later(() => { famStep = 1; err = ""; sel.Clear(); });
             }
         }
         void Basar(Game g, string text) { GUILayout.BeginHorizontal(); g.IconAt(Px.BankharFace(1), 40); g.Gap(10); GUILayout.Label(text, g.sTeach); GUILayout.EndHorizontal(); g.Gap(8); }

@@ -780,6 +780,19 @@ async function handleProgressSave(conn) {
   conn.send({ t: 'progress-result', accepted: false, reason: 'server-only', revision: 0 });
 }
 
+/** One player's ger actions run one after another: a stage sent right after a claim must find the claimed lot, which only
+ *  exists once the claim is saved (with PostgreSQL that takes a few round trips). */
+function queueLotAction(conn, action, message) {
+  const run = () => {
+    const p = conn.player, r = conn.room;
+    if (!p || !r) return;
+    if (action === 'claim') return persistLotAction(conn, action, message);
+    const i = r.lots.findIndex((lot) => lot && lot.by === p.id);
+    if (i >= 0) return persistLotAction(conn, action, { ...message, i });
+  };
+  conn.lotQueue = (conn.lotQueue || Promise.resolve()).then(run, run);
+}
+
 async function persistLotAction(conn, action, message) {
   const p = conn.player, r = conn.room;
   if (!p || !r) return;
@@ -794,6 +807,14 @@ async function persistLotAction(conn, action, message) {
       (current) => {
         const lots = normalizeLots(current.lots);
         let lot = lots[i];
+        if (action === 'claim' && lot && lot.by === p.id) {
+          // the claim was sent again before the first one was answered: the client did not know yet that the plot is
+          // its own, so the next stage came as a claim. It counts as that stage.
+          if (!Number.isInteger(message.stage) || R.lotStage(lot) >= R.GER_DONE || message.stage !== R.lotStage(lot) + 1) return { changed: false };
+          lot.stage = message.stage;
+          current.lots = lots;
+          return { changed: true, event: { t: 'lot', act: 'stage', i, lot, by: p.id } };
+        }
         if (action === 'claim') {
           if (lot) return { changed: false, deny: 'taken' };
           if (lots.some((owned) => owned && owned.by === p.id)) return { changed: false, deny: 'own' };
@@ -921,18 +942,14 @@ function onMessage(conn, text) {
       break;
     // ---- own ger
     case 'ger-claim':
-      persistLotAction(conn, 'claim', m);
+      queueLotAction(conn, 'claim', m);
       break;
-    case 'ger-stage': {
-      const i = r.lots.findIndex((lot) => lot && lot.by === p.id);
-      if (i >= 0) persistLotAction(conn, 'stage', { ...m, i });
+    case 'ger-stage':
+      queueLotAction(conn, 'stage', m);
       break;
-    }
-    case 'ger-style': {
-      const i = r.lots.findIndex((l) => l && l.by === p.id); if (i < 0) return;
-      persistLotAction(conn, 'style', { ...m, i });
+    case 'ger-style':
+      queueLotAction(conn, 'style', m);
       break;
-    }
     // ---- live wrestling
     case 'wr-invite': {
       if (roomStore.sharedRealtime) {
