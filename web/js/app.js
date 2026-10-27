@@ -153,6 +153,43 @@
       card.replaceChildren(h('h2', null, L('Хэн тоглох вэ?', 'Who’s playing?')), list);
     }
 
+    // another device: the family code, then which child, then that child's 3 pictures (checked by the server)
+    function familyLogin() {
+      const err = h('div', { class: 'err' });
+      const input = h('input', { class: 'input big-input fam-code-input', maxlength: 9, placeholder: 'ABCD-2345', autocapitalize: 'characters', autocomplete: 'off', 'aria-label': L('Гэр бүлийн код', 'Family code'), onkeydown: (e) => { if (e.key === 'Enter') find(); } });
+      const find = async () => {
+        const code = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (code.length !== 8) { err.textContent = L('8 үсэг, тоотой кодоо бичээрэй', 'Write the 8-letter code'); return; }
+        err.textContent = L('Хайж байна…', 'Looking…');
+        const r = await TG.family.api({ act: 'members', code });
+        if (!r.ok) { err.textContent = TG.family.why(r); return; }
+        pickChild(code, r.members);
+      };
+      card.replaceChildren(h('h2', null, L('Гэр бүлийн код', 'Family code')),
+        h('p', { class: 'muted' }, L('Кодыг том хүн эцэг эхийн самбараас харна.', 'A grown-up can find the code on the parent dashboard.')), input, err,
+        h('div', { class: 'row-btns' }, h('button', { class: 'btn ghost', onclick: () => TG.go('auth') }, '←'), h('button', { class: 'btn primary', onclick: find }, L('Цааш →', 'Next →'))));
+      setTimeout(() => input.focus(), 200);
+    }
+    function pickChild(code, members) {
+      const mascot = (m) => (TG.MASCOTS[m.avatar] || TG.MASCOTS[0]).e;
+      const pictures = (m) => {
+        const err = h('div', { class: 'err' });
+        card.replaceChildren(h('h2', null, `${mascot(m)} ${m.name}`), h('p', { class: 'muted' }, L('Нууц 3 зургаа дарааллаар нь дар', 'Tap your 3 secret pictures in order')),
+          picPad(async (pics, reset) => {
+            err.textContent = '';
+            const r = await TG.family.login(code, m, TG.family.picIndexes(pics));
+            if (r.ok) return enter(r.profile);
+            TG.sfx.bad(); err.textContent = TG.family.why(r);
+            card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); reset();
+          }), err,
+          h('div', { class: 'row-btns' }, h('button', { class: 'btn ghost sm', onclick: () => pickChild(code, members) }, L('Буцах', 'Back'))));
+      };
+      card.replaceChildren(h('h2', null, L('Хэн тоглох вэ?', 'Who’s playing?')),
+        h('div', { class: 'auth-profiles' }, members.map((m) => h('button', { class: 'auth-prof', onclick: () => pictures(m) },
+          h('span', { class: 'av big' }, mascot(m)), h('b', null, m.name), h('small', null, `${m.age} ${L('нас', 'yrs')}${m.locked ? ' · ⏳' : ''}`)))),
+        h('div', { class: 'row-btns' }, h('button', { class: 'btn ghost sm', onclick: familyLogin }, L('Буцах', 'Back'))));
+    }
+
     function register() {
       const d = { name: '', age: 8, avatar: TG.MASCOTS[0].e, code: null, aimag: null };
       let step = 0;
@@ -188,13 +225,14 @@
       };
       draw();
     }
-    tab === 'login' && S.state.profiles.length ? login() : register();
+    if (tab === 'family') familyLogin(); else if (tab === 'login' && S.state.profiles.length) login(); else register();
     return h('div', { class: 'auth' }, authScene(),
       h('button', { class: 'lang-btn corner', onclick: toggleLang }, S.state.lang === 'mn' ? 'EN' : 'МН'),
       h('div', { class: 'auth-wrap' },
         h('div', { class: 'auth-brand' }, h('div', { class: 'ob-logo', html: LOGO }), h('h1', null, 'Naadamy'),
           h('p', null, L('Монгол өв соёлоо гэр бүл, найзуудтайгаа хамт сурцгаая', 'Learn Mongolian heritage together with family and friends'))),
         tabs, card,
+        tab === 'family' ? null : h('button', { class: 'link-btn auth-about', onclick: () => TG.go('auth', { tab: 'family' }) }, '🔑 ', L('Гэр бүлийн кодоор нэвтрэх', 'Log in with a family code')),
         h('button', { class: 'link-btn auth-about', onclick: () => TG.go('about') }, L('Төслийн тухай', 'About the project'))));
   };
 
@@ -361,6 +399,44 @@
 
   // ---------------- family / parent dashboard ----------------
   let parentChild = null;
+  /** The family code: made here, then each child is added with their 3 pictures so they can log in on other devices. */
+  function familyCard() {
+    const st = S.state, F = TG.family, code = st.familyCode;
+    const setPictures = (p, then) => {
+      const close = TG.modal(h('div', { class: 'center' }, h('h2', null, `${p.avatar} ${p.name}`),
+        h('p', { class: 'muted' }, L('3 нууц зураг сонгоорой. Дараалал нь чухал.', 'Choose 3 secret pictures. The order matters.')),
+        picPad((pics) => { p.code = pics; S.save(); close(); then(); })));
+    };
+    const addChild = async (p) => {
+      if (!F.picIndexes(p.code)) return setPictures(p, () => addChild(p));
+      const r = await F.link(p);
+      TG.toast(r.ok ? L(`${p.name} гэр бүлд нэмэгдлээ`, `${p.name} is in the family`) : r.text || F.why(r));
+      render();
+    };
+    const title = h('h3', null, '🔑 ', L('Гэр бүлийн код', 'Family code'));
+    if (!code) {
+      const err = h('div', { class: 'err' });
+      const input = h('input', { class: 'input fam-code-input', maxlength: 9, placeholder: 'ABCD-2345', autocapitalize: 'characters', autocomplete: 'off', 'aria-label': L('Гэр бүлийн код', 'Family code') });
+      const joinExisting = async () => {
+        const typed = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const r = typed.length === 8 ? await F.api({ act: 'members', code: typed }) : { ok: false, reason: 'no-family' };
+        if (!r.ok) { err.textContent = F.why(r); return; }
+        st.familyCode = typed; S.save(); render();
+      };
+      return h('section', { class: 'card', 'data-family': 'none' }, title,
+        h('p', { class: 'muted' }, L('Код үүсгэвэл хүүхдүүд өөр утас, компьютер дээр нууц зургаараа нэвтэрч, ахицаа үргэлжлүүлнэ.', 'With a family code, your children can log in on another phone or computer with their secret pictures and keep their progress.')),
+        h('button', { class: 'btn primary block', onclick: () => addChild(st.profiles.find((p) => F.picIndexes(p.code)) || S.active()) }, L('Гэр бүлийн код үүсгэх', 'Make a family code')),
+        h('p', { class: 'muted', style: { marginTop: '12px' } }, L('Өөр төхөөрөмж дээр код үүсгэсэн бол:', 'Made a code on another device already?')),
+        h('div', { class: 'inline' }, input, h('button', { class: 'btn ghost', onclick: joinExisting }, L('Нэгдэх', 'Join'))), err);
+    }
+    return h('section', { class: 'card', 'data-family': code }, title,
+      h('div', { class: 'fam-code' }, F.showCode(code)),
+      h('p', { class: 'muted' }, L('Өөр төхөөрөмж дээр: нэвтрэх хуудас → “Гэр бүлийн кодоор нэвтрэх”. Кодыг зөвхөн гэр бүлдээ хэлээрэй.', 'On another device: the login page → “Log in with a family code”. Share the code only with your family.')),
+      st.profiles.map((p) => h('div', { class: 'child-row' }, h('span', null, p.avatar, ' ', h('b', null, p.name)),
+        p.fam === code
+          ? h('span', null, h('span', { class: 'tag ok' }, '✓ ', L('Гэр бүлд', 'In the family')), ' ', h('button', { class: 'link-btn', onclick: () => setPictures(p, () => addChild(p)) }, L('Зураг солих', 'Change pictures')))
+          : h('button', { class: 'btn sm primary', onclick: () => addChild(p) }, L('Гэр бүлд нэмэх', 'Add to family')))));
+  }
   SCREENS.family = () => {
     if (Date.now() >= parentUntil) { setTimeout(openFamily, 0); return shell([h('p', { class: 'muted' }, '🔒')]); }
     const st = S.state, profiles = st.profiles;
@@ -424,9 +500,10 @@
       h('section', { class: 'card' },
         h('h3', null, '🧒 ', L('Хүүхдүүд', 'Children')),
         profiles.map((p) => h('div', { class: 'child-row' }, h('span', null, p.avatar, ' ', h('b', null, p.name), ` · ${p.age} ${L('нас', 'yrs')}`, p.code ? ' · 🔒' : ''),
-          h('span', null, p.code ? h('button', { class: 'link-btn', onclick: () => { p.code = null; S.save(); render(); TG.toast(L('Нууц зураг арилгалаа', 'Picture password removed')); } }, L('Нууц зураг арилгах', 'Remove password')) : null,
+          h('span', null, p.code && !p.fam ? h('button', { class: 'link-btn', onclick: () => { p.code = null; S.save(); render(); TG.toast(L('Нууц зураг арилгалаа', 'Picture password removed')); } }, L('Нууц зураг арилгах', 'Remove password')) : null,
             profiles.length > 1 ? h('button', { class: 'link-btn danger', onclick: () => { S.removeProfile(p.id); render(); } }, L('Хасах', 'Remove')) : null))),
         h('button', { class: 'btn ghost block', onclick: () => { S.state.loggedIn = false; S.save(); TG.go('auth', { tab: 'register' }); } }, '+ ', L('Хүүхэд нэмэх', 'Add a child'))),
+      familyCard(),
       h('button', { class: 'about-link', onclick: () => TG.go('about') }, h('span', null, L('Бидний зорилго, шударга үнэ', 'Our mission & fair pricing')), TG.icon('chevronRight')),
       h('button', { class: 'link-btn danger center-block', onclick: () => {
         const close = TG.modal(h('div', { class: 'center' }, h('h2', null, L('Бүх өгөгдлийг устгах уу?', 'Erase all data?')), h('p', { class: 'muted' }, L('Профайл, ахиц, тохиргоо устна.', 'Profiles, progress and settings will be erased.')),

@@ -27,6 +27,7 @@ const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter((i) => 
 let actualPort = PORT;
 const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
 const roomStore = createRoomStore({ dataDir: DATA_DIR });
+const family = require('./family.js')(roomStore);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
   '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
@@ -40,6 +41,7 @@ function serveStatic(req, res) {
     return res.end(JSON.stringify({ naadamy: true, rooms: rooms.size, players: c.total, nutag: c.nutag, urls: lanIPs().map((ip) => `http://${ip}:${actualPort}/`) }));
   }
   if (url.pathname === '/api/basar') return basar.handle(req, res);
+  if (url.pathname === '/api/family') return family.handle(req, res);
   let p = decodeURIComponent(url.pathname);
   if (p.endsWith('/')) p += 'index.html';
   const file = path.normalize(path.join(ROOT, p));

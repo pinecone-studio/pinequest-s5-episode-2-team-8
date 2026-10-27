@@ -17,6 +17,11 @@ class FakePool {
     this.wallets = new Map();
     this.walletOperations = new Map();
     this.progress = new Map();
+    this.deviceTickets = new Map();
+    this.families = new Map();
+  }
+  async query(sql, values) {
+    return (await this.connect()).query(sql, values);
   }
   async connect() {
     return {
@@ -50,6 +55,32 @@ class FakePool {
         if (/^SELECT ticket_hash FROM naadamy_identities/.test(statement)) {
           const ticketHash = this.identities.get(values[0]);
           return { rows: ticketHash ? [{ ticket_hash: ticketHash }] : [] };
+        }
+        if (/^INSERT INTO naadamy_player_tickets/.test(statement)) {
+          const hashes = this.deviceTickets.get(values[0]) || [];
+          if (!hashes.includes(values[1])) hashes.push(values[1]);
+          this.deviceTickets.set(values[0], hashes);
+          return { rows: [] };
+        }
+        if (/^DELETE FROM naadamy_player_tickets WHERE player_id = \$1 AND ticket_hash NOT IN/.test(statement)) {
+          this.deviceTickets.set(values[0], (this.deviceTickets.get(values[0]) || []).slice(-values[1]));
+          return { rows: [] };
+        }
+        if (/^SELECT 1 FROM naadamy_player_tickets/.test(statement)) {
+          return { rows: (this.deviceTickets.get(values[0]) || []).includes(values[1]) ? [{ '?column?': 1 }] : [] };
+        }
+        if (/^INSERT INTO naadamy_families/.test(statement)) {
+          if (this.families.has(values[0])) return { rows: [] };
+          this.families.set(values[0], JSON.parse(values[1]));
+          return { rows: [{ code: values[0] }] };
+        }
+        if (/^SELECT members FROM naadamy_families WHERE code = \$1( FOR UPDATE)?$/.test(statement)) {
+          const members = this.families.get(values[0]);
+          return { rows: members ? [{ members: structuredClone(members) }] : [] };
+        }
+        if (/^UPDATE naadamy_families SET members =/.test(statement)) {
+          this.families.set(values[0], JSON.parse(values[1]));
+          return { rows: [] };
         }
         if (/^INSERT INTO naadamy_wallets/.test(statement)) {
           if (!this.wallets.has(values[0])) this.wallets.set(values[0], {
@@ -136,6 +167,18 @@ try {
   assert.equal(await store.authenticatePlayer('other-player', 'invalid'), false, 'malformed tickets are rejected');
   assert.equal(await store.authenticatePlayer('__proto__', ticket), true, 'special object-property names can register safely');
   assert.equal(await store.authenticatePlayer('__proto__', 'b'.repeat(64)), false, 'special object-property names remain protected');
+  await store.addDeviceTicket('identity-player', 'c'.repeat(64));
+  assert.equal(await store.authenticatePlayer('identity-player', 'c'.repeat(64)), true, 'a ticket from a family login works on its device');
+  assert.equal(await store.authenticatePlayer('identity-player', ticket), true, 'the first device keeps working');
+  assert.equal(await store.authenticatePlayer('__proto__', 'c'.repeat(64)), false, 'a device ticket only works for its own player');
+  const familyMember = { id: 'identity-player', name: 'Сараа', age: 8, avatar: 1, salt: '00', hash: '11', fails: 0, until: 0 };
+  assert.equal(await store.createFamily('ABCD2345', familyMember), true, 'PostgreSQL stores a new family');
+  assert.equal(await store.createFamily('ABCD2345', familyMember), false, 'a family code is never given twice');
+  const familyResult = await store.mutateFamily('ABCD2345', (family) => { family.members[0].fails = 2; return { changed: true, result: 'saved' }; });
+  assert.equal(familyResult, 'saved');
+  assert.equal((await store.getFamily('ABCD2345')).members[0].fails, 2, 'a family change is saved');
+  assert.equal(await store.getFamily('bad'), null, 'malformed family codes are not looked up');
+  assert.equal(await store.mutateFamily('ZZZZ2222', (family) => ({ changed: false, result: family })), null, 'an unknown family reaches mutate as null');
   const pgWallet = await store.getWallet('identity-player', { coins: 500, xp: 250 });
   assert.deepEqual(pgWallet, { coins: 500, xp: 250, revision: 0 }, 'PostgreSQL creates the wallet from the one-time profile migration');
   const pgAccount = await store.getAccount('inventory-player', { coins: 500, xp: 250 }, { owned: ['deel-blue', 'hat-cap', 'not-a-real-item'], rod: 2 });

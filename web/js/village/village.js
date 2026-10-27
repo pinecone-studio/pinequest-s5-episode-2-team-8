@@ -10,8 +10,9 @@
   const coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
 
   // ================================================================ saved data (per child profile)
-  function V() {
-    const p = S.active(); if (!p) return null;
+  function V() { return villageOf(S.active()); }
+  function villageOf(p) {
+    if (!p) return null;
     const v = p.village || (p.village = {});
     const d = { id: 'u' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4), xp: 0, coins: 40, produce: {}, milkT: {}, fish: {},
       owned: ['deel-blue'], look: { deel: 'blue', skin: R.SKINS[0], hat: null, face: null, neck: null, pet: null }, rod: 1, room: 'NUTAG',
@@ -200,17 +201,13 @@
   }
 
   // ================================================================ multiplayer connection
-  function playerTicket(v) {
-    if (/^[a-f0-9]{64}$/i.test(v.ticket || '')) return v.ticket;
-    if (v.ticket) {
-      setStatus('solo');
-      TG.toast(L('Энэ профайлын нэвтрэх түлхүүр эвдэрсэн байна. Профайлаа сэргээх боломжгүй тул шинэ профайл үүсгээрэй.', 'This profile’s sign-in key is invalid. It cannot be recovered; create a new profile.'));
-      return null;
-    }
+  /** A profile's player id and sign-in ticket, making the ticket the first time. On failure { why } says what went wrong. */
+  function identityOf(p) {
+    const v = villageOf(p);
+    if (/^[a-f0-9]{64}$/i.test(v.ticket || '')) return { id: v.id, ticket: v.ticket };
+    if (v.ticket) return { why: L('Энэ профайлын нэвтрэх түлхүүр эвдэрсэн байна. Профайлаа сэргээх боломжгүй тул шинэ профайл үүсгээрэй.', 'This profile’s sign-in key is invalid. It cannot be recovered; create a new profile.') };
     if (!window.crypto || typeof window.crypto.getRandomValues !== 'function') {
-      setStatus('solo');
-      TG.toast(L('Энэ төхөөрөмж аюулгүй нэвтрэх түлхүүр үүсгэж чадсангүй.', 'This device could not create a secure sign-in key.'));
-      return null;
+      return { why: L('Энэ төхөөрөмж аюулгүй нэвтрэх түлхүүр үүсгэж чадсангүй.', 'This device could not create a secure sign-in key.') };
     }
     serverBase(v); // decided before the ticket exists: this profile has never been online, so all its progress is still to upload
     const bytes = window.crypto.getRandomValues(new Uint8Array(32));
@@ -218,16 +215,24 @@
     S.save();
     try {
       const saved = JSON.parse(localStorage.getItem(S.KEY) || 'null');
-      const profile = saved && Array.isArray(saved.profiles) && saved.profiles.find((entry) => entry.id === S.active().id);
+      const profile = saved && Array.isArray(saved.profiles) && saved.profiles.find((entry) => entry.id === p.id);
       if (!profile || !profile.village || profile.village.ticket !== v.ticket) throw new Error('ticket was not persisted');
     } catch (error) {
       console.error('Could not persist the multiplayer identity ticket:', error.message);
       v.ticket = null;
-      setStatus('solo');
-      TG.toast(L('Нэвтрэх түлхүүрийг төхөөрөмжид хадгалж чадсангүй. Хадгалалт боломжтой болсны дараа дахин холбоно уу.', 'Could not save the sign-in key on this device. Reconnect after device storage is available.'));
-      return null;
+      return { why: L('Нэвтрэх түлхүүрийг төхөөрөмжид хадгалж чадсангүй. Хадгалалт боломжтой болсны дараа дахин холбоно уу.', 'Could not save the sign-in key on this device. Reconnect after device storage is available.') };
     }
-    return v.ticket;
+    return { id: v.id, ticket: v.ticket };
+  }
+  TG.villageIdentity = identityOf;
+  /** A profile that logged in with the family code: the server's player, with nothing of its own to upload yet. */
+  TG.villageJoinIdentity = (p, id, ticket) => { const v = villageOf(p); v.id = id; v.ticket = ticket; serverBase(v); S.save(); };
+  function playerTicket() {
+    const identity = identityOf(S.active());
+    if (identity.ticket) return identity.ticket;
+    setStatus('solo');
+    TG.toast(identity.why);
+    return null;
   }
   const net = {
     ws: null, retry: 0, timer: 0, closed: true,
@@ -242,7 +247,7 @@
     },
     open() {
       if (!live) return;
-      const v = V(), ticket = playerTicket(v);
+      const v = V(), ticket = playerTicket();
       if (!ticket) return;
       const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + location.pathname.replace(/[^/]*$/, '') + 'ws';
       let ws; try { ws = new WebSocket(url); } catch (e) { return setStatus('solo'); }

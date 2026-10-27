@@ -532,6 +532,10 @@ blockquote { margin: 12px 0; padding: 14px 16px; background: var(--surface-2); b
 .add-fam .inline { display: flex; gap: 8px; margin-top: 10px; }
 .emoji-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .child-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.fam-code { font-family: ui-monospace, Menlo, monospace; font-size: 2rem; font-weight: 700; letter-spacing: .12em; text-align: center; padding: 10px; margin: 8px 0; border-radius: 14px; background: var(--line); user-select: all; }
+.fam-code-input { text-transform: uppercase; letter-spacing: .1em; font-family: ui-monospace, Menlo, monospace; }
+[data-family] .inline { display: flex; gap: 8px; }
+[data-family] .inline .input { flex: 1; min-width: 0; }
 .about-link { display: flex; align-items: center; justify-content: space-between; width: 100%; text-align: left; padding: 18px 20px; border-radius: 22px; color: #fff; font-family: var(--font-display); font-weight: 600; background: linear-gradient(135deg, #121A3A, #2F6BFF); box-shadow: 0 14px 28px -14px rgba(35, 53, 140, .8); }
 .about-link .ic { width: 22px; height: 22px; }
 
