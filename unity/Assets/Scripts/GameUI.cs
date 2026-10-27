@@ -51,12 +51,15 @@ public sealed partial class Game
     }
 
     // ================================================================ toasts, floating text, tap rings, confetti
-    readonly List<(string text, float t)> toasts = new List<(string, float)>();
+    sealed class Pop { public string text, kind; public float t, life; }
+    readonly List<Pop> toasts = new List<Pop>();
+    GUIStyle sPop, sPopBasar, sPopHungry, sPopText, sPopWho; // the toast cards: plain, Basar's gold one, the warm "you're hungry" one
     readonly List<(Vector2 at, string text, Color col, float t)> floaters = new List<(Vector2, string, Color, float)>();
     readonly List<(Vector2 at, float t)> rings = new List<(Vector2, float)>();
     sealed class Bit { public Vector2 p, v; public Color c; public float t0, spin; }
     readonly List<Bit> confetti = new List<Bit>();
-    public void Toast(string text) { toasts.Add((text, Time.time)); if (toasts.Count > 3) toasts.RemoveAt(0); }
+    /** A popup card at the top. kind: null | "basar" (his face and name) | "hungry" (a wobbling buuz). Long texts stay longer. */
+    public void Toast(string text, string kind = null) { toasts.Add(new Pop { text = text, kind = kind, t = Time.time, life = Mathf.Clamp(2.4f + text.Length * 0.05f, 3.6f, 8) }); if (toasts.Count > 3) toasts.RemoveAt(0); }
     public void Float(float x, float y, string text, Color col) => floaters.Add((new Vector2(x, y), text, col, Time.time));
     public void Confetti(int n)
     {
@@ -164,6 +167,11 @@ public sealed partial class Game
         sSel = Style(Frame("#fff3c4", Ring("#e14b3d", 3), 0, null, 0, u), null, displayFont, T(16), ink, TextAnchor.MiddleCenter, true); // a picked tile or swatch: a red outline
         sChip = Style(Frame("#f6dca8", new[] { ("#e5a157", 2), ("#8a4b1f", 2) }, 4, "#5a2d10", 4, u), null, pixelFont, F(11), ink, TextAnchor.MiddleLeft); sChipText = sChip.Clean();
         sToast = Style(Frame("#141b2d", new (string, int)[0], 4, null, 0, u), null, bodyFont, T(15), paper, TextAnchor.MiddleCenter, true); sToast.padding = new RectOffset(T(18), T(18), T(10), T(10));
+        sPop = Style(Frame("#fffaf0", new[] { ("#5a2d10", 2), ("#f7c98a", 2) }, 4, "#8a4b1f", 3, u), null, bodyFont, T(15), ink, TextAnchor.MiddleLeft, true);
+        sPopBasar = Style(Frame("#fff3c4", new[] { ("#5a2d10", 2), ("#e5a157", 3) }, 4, "#8a4b1f", 3, u), null, bodyFont, T(15), ink, TextAnchor.MiddleLeft, true);
+        sPopHungry = Style(Frame("#ffe9dc", new[] { ("#6b1f17", 2), ("#f08a6e", 3) }, 4, "#a33a2a", 3, u), null, bodyFont, T(15), ink, TextAnchor.MiddleLeft, true);
+        sPopText = new GUIStyle { font = bodyFont, fontSize = T(15), wordWrap = true, richText = true, alignment = TextAnchor.MiddleLeft, normal = { textColor = ink } };
+        sPopWho = new GUIStyle { font = pixelFont, fontSize = F(10), alignment = TextAnchor.LowerLeft, normal = { textColor = Px.Col("#a8641e") } };
         sOpt = Style(Frame("#08060e", Ring("#ffffff", 3), 0, null, 0, u), Frame("#08060e", Ring("#f7c646", 3), 0, null, 0, u), pixelFont, F(14), paper, TextAnchor.MiddleLeft, true); // an answer in the story box
         sTag = Style(Frame("#fbe8c2", Ring("#c99a5a", 2), 0, null, 0, u), null, pixelFont, F(10), ink, TextAnchor.MiddleCenter); sTag.padding = new RectOffset(T(6), T(6), T(2), T(2));
         sLabel = new GUIStyle { font = bodyFont, fontSize = T(15), wordWrap = true, richText = true, normal = { textColor = ink } };
@@ -321,11 +329,54 @@ public sealed partial class Game
     static PxCanvas Ring() { if (ringArt != null) return ringArt; ringArt = new PxCanvas(32, 32); for (int y = 0; y < 32; y++) for (int x = 0; x < 32; x++) { float d = Mathf.Sqrt((x - 15.5f) * (x - 15.5f) + (y - 15.5f) * (y - 15.5f)); if (d > 12 && d < 15.5f) ringArt.Put(x, y, Color.white); } return ringArt; }
     static PxCanvas Disc() { if (discArt != null) return discArt; discArt = new PxCanvas(64, 64); for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++) { float d = Mathf.Sqrt((x - 31.5f) * (x - 31.5f) + (y - 31.5f) * (y - 31.5f)); if (d < 31.5f) discArt.Put(x, y, d > 28 ? new Color32(43, 30, 46, 255) : new Color32(255, 255, 255, 200)); } return discArt; }
 
+    static readonly Dictionary<string, PxCanvas> badgeArt = new Dictionary<string, PxCanvas>();
+    /** A round pixel badge for a toast's icon: a coloured disc with a dark rim and a light spot top left. */
+    static PxCanvas Badge(string fill)
+    {
+        if (badgeArt.TryGetValue(fill, out var c)) return c;
+        c = new PxCanvas(20, 20); Color32 f = Px.Col(fill), rim = Px.Col("#5a2d10"), hi = Color32.Lerp(f, new Color32(255, 255, 255, 255), 0.55f);
+        for (int y = 0; y < 20; y++) for (int x = 0; x < 20; x++) { float d = Mathf.Sqrt((x - 9.5f) * (x - 9.5f) + (y - 9.5f) * (y - 9.5f)); if (d < 9.8f) c.Put(x, y, d > 8.4f ? rim : (x - 6.5f) * (x - 6.5f) + (y - 6.5f) * (y - 6.5f) < 5 ? hi : f); }
+        return badgeArt[fill] = c;
+    }
+    static float BackOut(float x) { x -= 1; return 1 + 2.70158f * x * x * x + 1.70158f * x * x; } // overshoots a little, then settles: a pop
     void Toasts(float sx, float sy, float vw)
     {
-        float ty = 8;
-        for (int i = toasts.Count - 1; i >= 0; i--) if (Time.time - toasts[i].t > 3.6f) toasts.RemoveAt(i);
-        foreach (var t in toasts) { float w = Mathf.Min(460, vw - 32); var r = new Rect(sx + U((vw - w) / 2), sy + U(ty + 44), U(w), U(44)); GUI.Box(r, t.text, sToast); ty += 50; }
+        float ty = 8, now = Time.time;
+        for (int i = toasts.Count - 1; i >= 0; i--) if (now - toasts[i].t > toasts[i].life) toasts.RemoveAt(i);
+        var oldM = GUI.matrix; var oldC = GUI.color;
+        foreach (var t in toasts)
+        {
+            float age = now - t.t, inn = Mathf.Clamp01(age / 0.35f), outt = Mathf.Clamp01((t.life - age) / 0.35f);
+            bool basar = t.kind == "basar", hungry = t.kind == "hungry";
+            var st = basar ? sPopBasar : hungry ? sPopHungry : sPop;
+            float w = Mathf.Min(460, vw - 32), bw = basar ? 46 : 38, textW = U(w - bw - 34);
+            float h = Mathf.Max(U(52), sPopText.CalcHeight(new GUIContent(t.text), textW) + U(basar ? 34 : 24));
+            float drop = (1 - inn) * U(-18) + (1 - outt) * U(-14); // drops in from above, floats up as it fades
+            var r = new Rect(sx + U((vw - w) / 2), sy + U(ty + 44) + drop, U(w), h);
+            ty += h / UiScale + 8;
+            GUI.matrix = oldM; GUIUtility.ScaleAroundPivot(Vector2.one * Mathf.LerpUnclamped(0.6f, 1, BackOut(inn)), r.center);
+            GUI.color = new Color(oldC.r, oldC.g, oldC.b, oldC.a * Mathf.Min(inn * 2, outt));
+            GUI.Box(r, GUIContent.none, st);
+            // the icon badge, bobbing (a hungry buuz wobbles, a sparkle twinkles)
+            var br = new Rect(r.x + U(10), r.y + (r.height - U(bw)) / 2 - U(2) + Mathf.Round(Mathf.Sin(age * 5) * U(2)), U(bw), U(bw));
+            GUI.DrawTexture(br, Tex(Badge(basar ? "#f7c646" : hungry ? "#f08a6e" : "#9fd6ff")));
+            var icon = basar ? Px.BankharFace(1) : Emo.Icon(hungry ? "buuz" : "sparkles");
+            if (icon != null)
+            {
+                var m = GUI.matrix;
+                if (hungry) GUIUtility.RotateAroundPivot(Mathf.Sin(age * 16) * 12 * Mathf.Max(0, 1 - age / 1.4f), br.center);
+                if (!basar && !hungry) GUIUtility.ScaleAroundPivot(Vector2.one * (0.9f + 0.1f * Mathf.Sin(age * 7)), br.center);
+                float pad = U(basar ? 5 : 8); GUI.DrawTexture(new Rect(br.x + pad, br.y + pad, br.width - 2 * pad, br.height - 2 * pad), Tex(icon), ScaleMode.ScaleToFit);
+                GUI.matrix = m;
+            }
+            float tx = br.xMax + U(12), tw = r.xMax - tx - U(14);
+            if (basar) GUI.Label(new Rect(tx, r.y + U(4), tw, U(16)), Loc.L("БАСАР", "BASAR"), sPopWho);
+            GUI.Label(new Rect(tx, r.y + U(basar ? 18 : 4), tw, r.height - U(basar ? 24 : 12)), t.text, sPopText);
+            // how long it stays: a thin line along the bottom that runs out
+            Color line = Px.Col(basar ? "#e5a157" : hungry ? "#e14b3d" : "#c99a5a"); line.a = GUI.color.a;
+            Box(new Rect(r.x + U(12), r.yMax - U(8), (r.width - U(24)) * Mathf.Clamp01(1 - age / t.life), U(2)), line);
+        }
+        GUI.matrix = oldM; GUI.color = oldC;
     }
     void ConfettiDraw()
     {

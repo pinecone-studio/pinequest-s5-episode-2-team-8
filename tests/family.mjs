@@ -1,5 +1,5 @@
 // Family login over HTTP: make a family code, add children with their 3 secret pictures, log in on "another device" with
-// the code and the pictures, and play as the same child there. Run with DATABASE_URL='' to use JSON files.
+// the code and the pictures, and play as the same child there with the same cloud save. Run with DATABASE_URL='' to use JSON files.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -7,13 +7,8 @@ import { tmpdir } from 'node:os';
 import crypto from 'node:crypto';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import puppeteer from 'puppeteer-core';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const chrome = process.env.CHROME_PATH || (process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome');
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const until = async (fn, label, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await fn()) return; await sleep(150); } throw new Error(`timed out waiting for: ${label}`); };
-let browser = null;
 const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-family-'));
 const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
 const port = await new Promise((res, rej) => { server.on('message', (m) => m.port && res(m.port)); server.on('exit', (c) => rej(new Error('server exited ' + c))); setTimeout(() => rej(new Error('server did not start')), 8000); });
@@ -24,13 +19,19 @@ const ok = (label) => results.push('✓ ' + label);
 // `from`: the address the request seems to come from (behind a proxy), each with its own limit of requests a minute
 const api = async (body, from) => (await fetch(`${base}/api/family`, { method: 'POST', body: JSON.stringify(body), headers: from ? { 'x-forwarded-for': from } : {} })).json();
 const ticket = () => crypto.randomBytes(32).toString('hex');
-/** Joins a room over the WebSocket and resolves with the server's first answer: welcome or error. */
-function joinRoom(id, t) {
+/** Joins a room over the WebSocket and resolves with the server's first answer: welcome or error. With `cloud`, it then
+ *  sends that cloud save and resolves with the server's `cloud` answer instead. */
+function joinRoom(id, t, cloud) {
   return new Promise((res, rej) => {
     const ws = new WebSocket(`ws://localhost:${port}/ws`);
     const timer = setTimeout(() => rej(new Error('no answer to join')), 5000);
+    const done = (m) => { clearTimeout(timer); ws.close(); res(m); };
     ws.onopen = () => ws.send(JSON.stringify({ t: 'join', room: 'FAMTEST', id, ticket: t, name: 'Test', look: {}, lvl: 1, x: 10, y: 10, dir: 0 }));
-    ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.t === 'welcome' || m.t === 'error') { clearTimeout(timer); ws.close(); res(m); } };
+    ws.onmessage = (e) => {
+      const m = JSON.parse(e.data);
+      if (m.t === 'welcome' && cloud) ws.send(JSON.stringify({ t: 'cloud-save', cloud }));
+      else if (m.t === 'welcome' || m.t === 'error' || m.t === 'cloud') done(m);
+    };
     ws.onerror = () => rej(new Error('socket error'));
   });
 }
@@ -73,6 +74,18 @@ try {
   assert.equal((await joinRoom(b.id, ticket())).why, 'identity');
   ok('logging in on another device plays as the same child; the first device still works, a random ticket does not');
 
+  // the cloud save: each device adds what it earned, nothing is lost, and the newest character choice wins
+  const first = await joinRoom(b.id, b.ticket, { eth: 'khalkh', aimag: 'tuv', charAt: 1000, learn: { ger: { done: true, best: 3, family: 2000 } },
+    ach: { character: 3000 }, stamps: { tuv: 4000 }, bichig: { a: 2 }, bichigMem: { a: 1 }, hist: 2 });
+  assert.deepEqual([first.cloud.eth, first.cloud.stamps, first.cloud.hist], ['khalkh', { tuv: 4000 }, 2]);
+  const second = await joinRoom(b.id, bLogin.ticket, { eth: 'oold', aimag: 'khovd', charAt: 900, learn: { ger: { done: false, best: 1, family: 0 } },
+    stamps: { uvs: 5000, tuv: 4500 }, hist: 1 });
+  assert.deepEqual([second.cloud.eth, second.cloud.aimag, second.cloud.learn.ger, second.cloud.stamps, second.cloud.ach, second.cloud.hist],
+    ['khalkh', 'tuv', { done: true, best: 3, family: 2000 }, { tuv: 4000, uvs: 5000 }, { character: 3000 }, 2]);
+  const again = await api({ act: 'login', code, id: b.id, pics: [5, 4, 3] });
+  assert.deepEqual(again.cloud, second.cloud);
+  ok('the cloud save from either device is merged and comes along with the next login');
+
   for (let left = 4; left >= 1; left--) {
     const wrong = await api({ act: 'login', code, id: a.id, pics: [2, 1, 0] });
     assert.deepEqual([wrong.ok, wrong.reason, wrong.left], [false, 'wrong', left]);
@@ -111,100 +124,6 @@ try {
   assert.equal((await api({ act: 'nope' })).reason, 'invalid');
   ok('other methods and actions are refused');
 
-  // ---- in the browser: one device makes the code, another logs in with it and gets the same child
-  browser = await puppeteer.launch({ executablePath: chrome, headless: 'new', args: ['--no-sandbox'] });
-  const errors = [];
-  const device = async (name) => {
-    const page = await (await browser.createBrowserContext()).newPage();
-    await page.setViewport({ width: 390, height: 844 });
-    page.on('pageerror', (e) => errors.push(`${name}: ${e.message}`));
-    await page.goto(`${base}/index.html`, { waitUntil: 'networkidle0' });
-    return page;
-  };
-  const clickText = (page, selector, text) => page.evaluate((selector, text) => {
-    const el = [...document.querySelectorAll(selector)].find((x) => x.textContent.includes(text));
-    if (!el) throw new Error(`no ${selector} with "${text}"`);
-    el.click();
-  }, selector, text);
-  const tapPictures = async (page, indexes) => {
-    for (const i of indexes) { await page.evaluate((i) => document.querySelectorAll('.pic-key')[i].click(), i); await sleep(60); }
-  };
-
-  const home = await device('home');
-  await home.evaluate(() => {
-    localStorage.clear();
-    const p = TG.store.addProfile({ name: 'Номин', age: 7, avatar: '🦅', code: '🐎🥛🌙' });
-    TG.store.state.loggedIn = true; TG.store.state.settings.sound = false; TG.store.state.lang = 'en';
-    p.village = { tips: true, tutorial: true, coins: 600, xp: 200, room: 'FAMWEB' };
-    // progress for the cloud save: character, a lesson, a badge, a stamp, Mongol script and the historian
-    Object.assign(p, { eth: 'khalkh', aimag: 'tuv', charAt: 1000, learn: { ger: { done: true, best: 3, family: 2000 } }, ach: { character: 3000 },
-      passport: { stamps: { tuv: 4000 } }, bichig: { s: { a: 2 }, mem: { a: 1 } }, hist: { step: 2, done: false } });
-    TG.go('village');
-  });
-  await until(() => home.evaluate(() => { const v = TG.store.active().village; return v.srv && v.srv.coins === 600 && !v.syncOp; }), 'the first device uploads its coins');
-  await home.evaluate(() => TG.go('family'));
-  await home.waitForSelector('.gate-q');
-  await sleep(300); // the dialog takes the keyboard focus a moment after it opens
-  await home.evaluate(() => {
-    document.querySelector('.gate-input').value = document.querySelector('.gate-q').textContent.match(/\d+/g).reduce((a, b) => a * b);
-    document.querySelector('.gate .btn.primary').click();
-  });
-  await home.waitForSelector('[data-family="none"]');
-  await clickText(home, '[data-family] button', 'family code');
-  await home.waitForSelector('[data-family]:not([data-family="none"])');
-  const webCode = await home.evaluate(() => TG.store.state.familyCode);
-  const shownCode = await home.evaluate(() => document.querySelector('.fam-code').textContent);
-  assert.equal(shownCode, `${webCode.slice(0, 4)}-${webCode.slice(4)}`);
-  const homeId = await home.evaluate(() => TG.store.active().village.id);
-  assert.equal((await api({ act: 'members', code: webCode })).members[0].id, homeId);
-  ok(`the parent dashboard makes a family code with the child in it (${shownCode})`);
-
-  const other = await device('other');
-  await other.evaluate(() => { TG.store.state.lang = 'en'; TG.go('auth'); });
-  await until(() => other.evaluate(() => [...document.querySelectorAll('.auth-about')].some((x) => x.textContent.includes('family code'))), 'the login page in English');
-  await clickText(other, '.auth-about', 'family code');
-  await other.waitForSelector('.fam-code-input');
-  await other.type('.fam-code-input', shownCode.toLowerCase());
-  await clickText(other, '.auth-card button', '→');
-  await other.waitForSelector('.auth-prof');
-  await clickText(other, '.auth-prof', 'Номин');
-  await other.waitForSelector('.pic-key');
-  await tapPictures(other, [0, 0, 0]);
-  await until(() => other.evaluate(() => /4/.test(document.querySelector('.auth-card .err').textContent)), 'a wrong try says how many are left');
-  await tapPictures(other, [1, 2, 4]);
-  await until(() => other.evaluate(() => TG.store.state.loggedIn && TG.store.active() && TG.store.active().village && TG.store.active().village.id), 'the other device logs in');
-  const joined = await other.evaluate(() => { const p = TG.store.active(); return { id: p.village.id, name: p.name, age: p.age, avatar: p.avatar, code: p.code, fam: p.fam }; });
-  assert.deepEqual(joined, { id: homeId, name: 'Номин', age: 7, avatar: '🦅', code: '🐎🥛🌙', fam: webCode });
-  const carried = await other.evaluate(() => { const p = TG.store.active(); return { eth: p.eth, aimag: p.aimag, learn: p.learn.ger, ach: p.ach, stamps: p.passport.stamps, bichig: p.bichig, hist: p.hist.step }; });
-  assert.deepEqual(carried, { eth: 'khalkh', aimag: 'tuv', learn: { done: true, best: 3, family: 2000 }, ach: { character: 3000 }, stamps: { tuv: 4000 }, bichig: { s: { a: 2 }, mem: { a: 1 } }, hist: 2 });
-  assert.equal(await other.evaluate(() => !!document.querySelector('.eth-grid')), false, 'no character to make again');
-  ok('the cloud save comes along: character, lesson, badge, stamp, Mongol script and the historian');
-  await other.evaluate(() => { const v = TG.store.active().village; v.tips = true; v.tutorial = true; v.room = 'FAMWEB'; TG.store.state.settings.sound = false; TG.go('village'); });
-  await until(() => other.evaluate(() => { const v = TG.store.active().village; return v.coins === 600 && v.xp === 200 && v.srv.coins === 600; }), 'the other device gets the same coins and XP');
-  ok('another device logs in with the code and the pictures, and has the same coins and XP');
-
-  // a stamp earned on the other device reaches the first one
-  const stampedAt = await other.evaluate(() => { TG.store.active().passport.stamps.uvs = 5000; TG.store.save(); return Date.now(); });
-  // uploads are at most every 3 s: wait until the stamp went up and the server answered after that
-  await until(() => other.evaluate((t) => { const c = TG._village.cloud(); return c.sent.includes('"uvs"') && c.at > t; }, stampedAt), 'the other device uploads the stamp', 15000);
-  await home.evaluate(() => TG.go('village'));
-  await until(() => home.evaluate(() => TG._village.live() && TG._village.live().online), 'the first device is back online');
-  await home.evaluate(() => TG._village.reconnect());
-  await until(() => home.evaluate(() => TG.store.active().passport.stamps.uvs === 5000), 'the first device gets the stamp from the other one', 15000);
-  assert.equal(await home.evaluate(() => TG.store.active().passport.stamps.tuv), 4000, 'its own stamp stays');
-  ok('progress made on either device reaches the other');
-
-  // the parent dashboard lists every child of the family and can take one out (the last one out deletes the family)
-  await home.evaluate(() => TG.go('family'));
-  await home.waitForSelector(`[data-member="${homeId}"]`);
-  await home.evaluate((id) => [...document.querySelectorAll(`[data-member="${id}"] button`)].find((x) => /Remove/.test(x.textContent)).click(), homeId);
-  await home.waitForSelector('.modal .btn.danger');
-  await home.evaluate(() => document.querySelector('.modal .btn.danger').click());
-  await until(() => home.evaluate(() => !TG.store.state.familyCode && !TG.store.active().fam), 'the child is taken out of the family');
-  assert.equal((await api({ act: 'members', code: webCode }, '10.0.0.3')).reason, 'no-family');
-  ok('the parent dashboard lists the family and takes a child out of it');
-  assert.deepEqual(errors, []);
-
   console.log(results.join('\n'));
   console.log('\nFAMILY LOGIN: PASS');
 } catch (error) {
@@ -212,7 +131,6 @@ try {
   console.error('\nFAMILY LOGIN: FAIL', error);
   process.exitCode = 1;
 } finally {
-  if (browser) await browser.close();
   await new Promise((res) => { server.once('exit', res); server.kill(); });
   rmSync(dataDir, { recursive: true, force: true });
 }

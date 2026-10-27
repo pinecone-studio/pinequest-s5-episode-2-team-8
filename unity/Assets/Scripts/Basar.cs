@@ -146,7 +146,7 @@ public sealed partial class Game
             var sf = Seasons.Current();
             Tx f = UnityEngine.Random.value < 0.5f ? new Tx("Мэдэх үү? " + Rules.Pick(sf.facts).mn, "Did you know? " + Rules.Pick(sf.facts).en) : Rules.Pick(Basar.FACTS);
             dogBubble = new DogBubble { fact = f, t0 = Time.time }; Sfx.Pop();
-            Toast(Loc.L("Басар: ", "Basar: ") + f);
+            Toast(f.ToString(), "basar");
         }
         if (dogBubble != null && Time.time - dogBubble.t0 > 12) dogBubble = null;
     }

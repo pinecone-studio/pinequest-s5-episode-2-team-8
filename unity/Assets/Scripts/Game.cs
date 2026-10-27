@@ -221,7 +221,7 @@ public sealed partial class Game : MonoBehaviour
         bool block = modal != null, counting = race != null && race.phase == "count";
         float ix = block || counting ? 0 : KeyX(), iy = block || counting ? 0 : KeyY(), mag = 1;
         bool wantRun = !block && race == null && (ShiftHeld || runLock) && (ix != 0 || iy != 0 || stickOn || path.Count > 0);
-        if (wantRun && V.energy <= 0 && !tiredSaid) { tiredSaid = true; Toast(Loc.L("Ядарчихлаа! Хоол идэж, ундаа уугаад хүчээ нөхөөрэй.", "Out of energy! Eat or drink to get it back.")); }
+        if (wantRun && V.energy <= 0 && !tiredSaid) { tiredSaid = true; Toast(Loc.L("Ядарчихлаа! Хоол идэж, ундаа уугаад хүчээ нөхөөрэй.", "Out of energy! Eat or drink to get it back."), "hungry"); }
         running = wantRun && V.energy > 0;
         float SP = riding ? (race != null ? RaceSpeed() : running ? 11 : 7.2f) : running ? RUN_SPEED : SPEED, tvx = 0, tvy = 0;
         float sm = stickOn ? stick.magnitude : 0;

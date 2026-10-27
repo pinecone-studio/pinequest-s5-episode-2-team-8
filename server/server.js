@@ -17,7 +17,8 @@ const WD = require('../web/js/village/world.js');
 const QR = require('../web/js/qr.js');
 
 const REPO = path.join(__dirname, '..'); // .env and data/ stay in the repo root
-const ROOT = path.join(REPO, 'web'); // only the app is served
+const UNITY_WEB = path.join(REPO, 'unity', 'Builds', 'WebGL'); // Unity's browser build (Naadamy → Build WebGL)
+const ROOT = fs.existsSync(path.join(UNITY_WEB, 'index.html')) ? UNITY_WEB : path.join(REPO, 'web'); // only the app is served
 const basar = require('./basar-ai.js')(REPO);
 const { createRoomStore } = require('./room-store');
 
@@ -30,7 +31,7 @@ const roomStore = createRoomStore({ dataDir: DATA_DIR });
 const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id) });
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
-  '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
+  '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.wasm': 'application/wasm', '.data': 'application/octet-stream' };
 
 // ---------------------------------------------------------------- static files
 function serveStatic(req, res) {
@@ -48,8 +49,14 @@ function serveStatic(req, res) {
   if (!file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404); return res.end('Not found'); }
-    const type = TYPES[path.extname(file)] || 'application/octet-stream';
+    // Unity's gzipped build files (game.wasm.gz…): the browser unpacks them itself
+    const gz = file.endsWith('.gz');
+    const type = TYPES[path.extname(gz ? file.slice(0, -3) : file)] || 'application/octet-stream';
     const cache = /\.(woff2|ttf|m4a|mp3|ogg|wav)$/.test(file) ? 'public, max-age=604800' : 'no-cache';
+    if (gz) {
+      res.writeHead(200, { 'content-type': type, 'content-encoding': 'gzip', 'content-length': st.size, 'cache-control': cache });
+      return fs.createReadStream(file).pipe(res);
+    }
     // byte ranges: Safari and iPhones refuse to play audio from servers without them
     const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
     if (m && (m[1] || m[2])) {
