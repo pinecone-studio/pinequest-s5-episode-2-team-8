@@ -1,7 +1,7 @@
 # Naadamy multiplayer protocol
 
 This is how a game client (the web game today, maybe a Unity client later) talks to `server/server.js`.
-It describes protocol **version 12** (`VERSION` in `js/village/rules.js`).
+It describes protocol **version 12** (`VERSION` in `web/js/village/rules.js`). Unity speaks the same protocol from `unity/Assets/Scripts/Net.cs`.
 
 - Transport: WebSocket at `ws://<host>/ws` (`wss://` on HTTPS).
 - Every message is one JSON text frame: an object with a `t` (type) field.
@@ -147,6 +147,6 @@ Good to know before building on this:
 ## Changing the protocol
 
 1. Change `server/server.js` and the client together.
-2. Bump `VERSION` in `js/village/rules.js`. The web client warns when `welcome.v` doesn't match.
+2. Bump `VERSION` in `web/js/village/rules.js`. The web and Unity clients warn when `welcome.v` doesn't match.
 3. Update this file.
 4. Run `node tests/multiplayer.mjs`.

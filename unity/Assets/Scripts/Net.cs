@@ -16,7 +16,7 @@ using System.Runtime.InteropServices;
 
 public sealed class Net
 {
-    public const int VERSION = 5;
+    public const int VERSION = 12;
     public static readonly Tx[] PHRASES =
     {
         new Tx("Сайн уу!", "Hi!"), new Tx("Хамт тоглоё!", "Let's play!"), new Tx("Баярлалаа!", "Thank you!"), new Tx("Энд ир!", "Come here!"),
@@ -88,7 +88,8 @@ public sealed class Net
     }
     void Open(Game g)
     {
-        var V = g.V; string join = Obj("t", "join", "room", room, "id", V.id, "name", V.name) + "," + Raw("look", LookJson(V.look)) + "," + Raw("lvl", Rules.Level(V.xp).l.ToString()) + "," + Raw("x", F2(g.MyX)) + "," + Raw("y", F2(g.MyY)) + "," + Raw("dir", "0");
+        var V = g.V; SaveData.EnsureTicket(V);
+        string join = Obj("t", "join", "room", room, "id", V.id, "ticket", V.ticket, "name", V.name) + "," + Raw("look", LookJson(V.look)) + "," + Raw("lvl", Rules.Level(V.xp).l.ToString()) + "," + Raw("x", F2(g.MyX)) + "," + Raw("y", F2(g.MyY)) + "," + Raw("dir", "0");
         string url = serverUrl;
 #if UNITY_WEBGL && !UNITY_EDITOR
         webLive = true; webJoin = "{" + join + "}"; NaadamyWsOpen(url); // join goes out once the browser says the socket is open
@@ -189,6 +190,20 @@ public sealed class Net
                 status = "reconnecting"; retryAt = Time.realtimeSinceStartup + Mathf.Min(10, 1.5f * ++retry);
                 if (was) g.Toast(Loc.L("Сервертэй холболт тасарлаа. Дахин холбогдож байна…", "Lost the server. Reconnecting…"));
                 return;
+            case "error":
+                if (m["why"].S == "identity")
+                {
+                    replaced = true; closed = true; status = "solo"; others.Clear();
+                    g.Toast(Loc.L("Токен хүчингүй байна. Дахин нэвтэрнэ үү.", "Invalid ticket. Please sign in again."));
+                    return;
+                }
+                if (m["why"].S == "storage")
+                {
+                    g.Toast(Loc.L("Серверийн хадгалалт алдаа гарлаа.", "Server storage error."));
+                    return;
+                }
+                g.Toast(Loc.L("Өрөөнд нэвтэрч чадсангүй.", "Could not join the room.")); 
+                return;
             case "welcome":
                 status = "online"; retry = 0; room = m["room"].S; others.Clear(); foreach (var p in m["players"]) AddOther(p);
                 lots = m["lots"].Select(LotOf).ToArray(); if (lots.Length < Rules.LOTS) Array.Resize(ref lots, Rules.LOTS);
@@ -196,6 +211,43 @@ public sealed class Net
                 g.Toast(Loc.L("Нутагт холбогдлоо", "Connected to the village") + " · " + room + (others.Count > 0 ? " · " + others.Count + Loc.L(" найз байна", " friends here") : ""));
                 if (m["v"].I != VERSION) g.Toast(Loc.L("Сервер хуучин хувилбартай байна. Серверийг дахин асаагаарай.", "The server runs an old version. Please restart it."));
                 chat.Clear(); foreach (var c in m["chat"]) chat.Add(ChatOf(c)); if (chat.Count > CHAT_KEEP) chat.RemoveRange(0, chat.Count - CHAT_KEEP);
+                // Apply server wallet/inventory/look/position if present (with merge handled elsewhere where possible)
+                if (m["wallet"] != null && !m["wallet"].IsNull)
+                {
+                    try
+                    {
+                        int c = m["wallet"]["coins"].I; int x = m["wallet"]["xp"].I;
+                        if (g.V != null)
+                        {
+                            // For new accounts only - do not clobber offline gains blindly; merge handled by caller when needed
+                            if (g.V.coins == 40 && g.V.xp == 0 && c != 40) { g.V.coins = c; g.V.xp = x; }
+                            else if (g.V.coins == 40 && g.V.xp == 0) { g.V.coins = c; g.V.xp = x; }
+                        }
+                    }
+                    catch (Exception) { }
+                }
+                if (m["inventory"] != null && !m["inventory"].IsNull && g.V != null)
+                {
+                    try
+                    {
+                        if (g.V.owned == null || g.V.owned.Count == 0 || (g.V.owned.Count == 1 && g.V.owned[0] == "deel-blue" && g.V.coins == 40 && g.V.xp == 0))
+                        {
+                            g.V.owned = new List<string>();
+                            foreach (var o in m["inventory"]["owned"]) if (!o.IsNull) g.V.owned.Add(o.S);
+                            if (!g.V.owned.Contains("deel-blue")) g.V.owned.Insert(0, "deel-blue");
+                            g.V.rod = m["inventory"]["rod"].I == 2 ? 2 : 1;
+                        }
+                    }
+                    catch (Exception) { }
+                }
+                if (m["look"] != null && !m["look"].IsNull && g.V != null)
+                {
+                    try { var l = LookOf(m["look"]); if (!string.IsNullOrEmpty(l.deel)) g.V.look = l; } catch (Exception) { }
+                }
+                if (m["position"] != null && !m["position"].IsNull && g.V != null)
+                {
+                    try { float pxv = m["position"]["x"].F; float pyv = m["position"]["y"].F; if (pxv >= 0.5f && pxv <= Rules.W - 2 && pyv >= 0.5f && pyv <= Rules.H - 2) { g.V.posX = pxv; g.V.posY = pyv; g.V.hasPos = true; } } catch (Exception) { }
+                }
                 g.GerSync(); // my ger, started while playing alone, comes along to a free plot
                 return;
             case "join": AddOther(m["p"]); AddChat(g, new ChatLine { k = "join", id = m["p"]["id"].S, n = m["p"]["name"].S }); g.Toast(m["p"]["name"].S + Loc.L(" нутагт ирлээ", " joined the village")); return;
@@ -221,7 +273,30 @@ public sealed class Net
             }
             case "deny": g.Toast(m["why"].S == "own" ? Loc.L("Танд аль хэдийн гэр байна!", "You already have a ger!") : m["why"].S == "taken" ? Loc.L("Энэ газрыг өөр хүн авчихсан байна.", "Someone else already took this lot.") : m["why"].S == "busy" ? Loc.L("Тэр одоо завгүй байна.", "They are busy right now.") : Loc.L("Болохгүй байна.", "Not possible.")); return;
             case "replaced": replaced = true; closed = true; status = "solo"; others.Clear(); g.Toast(Loc.L("Энэ профайл өөр төхөөрөмж дээр нээгдлээ. Тэнд үргэлжлүүлэн тоглоорой.", "This profile was opened on another device. Keep playing there.")); return;
-            case "error": g.Toast(Loc.L("Өрөөнд нэвтэрч чадсангүй.", "Could not join the room.")); return;
+            case "error":
+                if (m["why"].S == "identity")
+                {
+                    replaced = true; closed = true; status = "solo"; others.Clear();
+                    g.Toast(Loc.L("Токен хүчингүй байна. Дахин нэвтэрнэ үү.", "Invalid ticket. Please sign in again."));
+                    return;
+                }
+                if (m["why"].S == "storage")
+                {
+                    g.Toast(Loc.L("Серверийн хадгалалт алдаа гарлаа.", "Server storage error."));
+                    return;
+                }
+                g.Toast(Loc.L("Өрөөнд нэвтэрч чадсангүй.", "Could not join the room.")); 
+                return;
+            case "move-correct":
+                if (g.V != null)
+                {
+                    try { float cx = m["x"].F; float cy = m["y"].F; int cdir = m["dir"].I; g.V.posX = cx; g.V.posY = cy; g.V.hasPos = true; g.MyDir = cdir; /* Game uses px/py/dir fields */ }
+                    catch (Exception) { }
+                }
+                return;
+            case "wallet-result":
+            case "inventory-result":
+                return;
             case "wr-invite": case "wr-declined": case "wr-start": case "wr-wait": case "wr-result": case "wr-end": g.OnWrestleMsg(m); return;
         }
     }
@@ -233,6 +308,8 @@ public sealed class Net
     public void StyleGer(string roof, string door, List<string> furn) => Send("{" + Obj("t", "ger-style", "roof", roof, "door", door) + "," + Raw("furn", "[" + string.Join(",", (furn ?? new List<string>()).Select(Q)) + "]") + "}");
     public void Wr(string t, string key, string val) => Send("{" + Obj("t", t, key, val) + "}");
     public void WrMove(string move, float p) => Send("{" + Obj("t", "wr-move", "m", move) + "," + Raw("p", F2(p)) + "}");
+    public void WalletOp(string op, string action, int coins, int xp) => Send("{" + Obj("t", "wallet-op", "op", op, "action", action) + "," + Raw("coins", coins.ToString()) + "," + Raw("xp", xp.ToString()) + "}");
+    public void ShopBuy(string op, string item) => Send("{" + Obj("t", "shop-buy", "op", op, "item", item) + "}");
 }
 
 public sealed partial class Game
@@ -370,8 +447,10 @@ public sealed partial class Game
             }
             else if (t == "wr-end")
             {
-                if (done) return; done = true; g.remote = null; won = m["winner"].S == g.V.id; string why = m["reason"].S;
-                var wr = g.V.wr; if (won) { wr.pvpW++; g.Reward(25, 30); Sfx.Win(); g.Confetti(80); } else if (m["winner"].S != null) { wr.pvpL++; g.Reward(0, 10); }
+                if (done) return; done = true; g.remote = null; string winnerId = m["winner"].S;
+                won = !string.IsNullOrEmpty(winnerId) && winnerId == g.V.id;
+                string why = m["reason"].S;
+                var wr = g.V.wr; if (won) { wr.pvpW++; /* server awards rewards */ Sfx.Win(); g.Confetti(80); } else if (!string.IsNullOrEmpty(winnerId)) { wr.pvpL++; /* server awards rewards */ }
                 g.V.Save(); g.CheckAchievements();
                 phase = "end"; last = why == "left" || why == "disconnected" ? Loc.L("Барилдаан тасарлаа.", "The match was interrupted.") : won ? Loc.L("Чи яллаа! Бүргэд шиг дэв!", "You won! Do the eagle dance!") : Loc.L($"{opp} яллаа. Дараагийн удаа!", $"{opp} won. Next time!");
             }

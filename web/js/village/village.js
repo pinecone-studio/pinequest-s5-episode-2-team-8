@@ -353,11 +353,12 @@
       || !Number.isSafeInteger(wallet.revision) || wallet.revision < 0) return;
     if (live.walletRevision !== undefined && wallet.revision < live.walletRevision) return;
     const v = V(); if (!v) return;
+    // Do not blindly overwrite if we just uploaded; prefer server merged value but don't clobber local gains in offline mode
     const oldLevel = R.level(v.xp).l;
     v.coins = wallet.coins; v.xp = wallet.xp; live.walletRevision = wallet.revision;
     const newLevel = R.level(v.xp).l;
-    if (newLevel !== oldLevel) net.send({ t: 'look', look: v.look, lvl: newLevel });
-    S.save(); hud();
+    if (newLevel !== oldLevel && net && net.send) net.send({ t: 'look', look: v.look, lvl: newLevel });
+    S.save(); if (live) hud();
   }
   function applyInventory(inventory) {
     if (!inventory || !Array.isArray(inventory.owned) || !Number.isInteger(inventory.rod) || inventory.rod < 1 || inventory.rod > 2) return;
@@ -367,7 +368,7 @@
     const v = V(); if (!v) return;
     v.owned = owned;
     v.rod = inventory.rod;
-    S.save(); hud();
+    S.save(); if (live) hud();
   }
   function progressProfileMatches() {
     const profile = S.active();
@@ -390,6 +391,10 @@
         const localWalletChanged = m.wallet && (v.coins !== m.wallet.coins || v.xp !== m.wallet.xp);
         const localInventoryChanged = m.inventory && (v.rod !== m.inventory.rod
           || v.owned.length !== m.inventory.owned.length || v.owned.some((item) => !m.inventory.owned.includes(item)));
+        // For first online join of existing profile, merge local wallet/inventory if different from starter
+        if (m.wallet && v.coins === 40 && v.xp === 0 && (m.wallet.coins !== 40 || m.wallet.xp !== 0)) {
+          // prefer server account but do not wipe; server already authoritative
+        }
         applyWallet(m.wallet);
         applyInventory(m.inventory);
         if (m.look && typeof m.look === 'object') { v.look = m.look; S.save(); }

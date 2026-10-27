@@ -735,13 +735,17 @@ async function persistLotAction(conn, action, message) {
         if (action === 'claim') {
           if (lot) return { changed: false, deny: 'taken' };
           if (lots.some((owned) => owned && owned.by === p.id)) return { changed: false, deny: 'own' };
+          let stage = 1;
+          if (Number.isInteger(message.stage)) {
+            stage = Math.max(1, Math.min(R.GER_DONE, message.stage));
+          }
           lot = {
             by: p.id,
             n: p.name,
             roof: Object.hasOwn(R.ROOF, message.roof) ? message.roof : 'blue',
             door: Object.hasOwn(R.DOOR, message.door) ? message.door : 'red',
             furn: [],
-            stage: 1,
+            stage,
           };
           lots[i] = lot;
         } else {
