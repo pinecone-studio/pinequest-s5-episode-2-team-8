@@ -172,14 +172,21 @@ public sealed partial class Game
         if (replay)
         {
             yield return Ask("happy", $"Дахиад уулзлаа, {name}! Юу сонсмоор байна?", $"Hi again, {name}! What would you like to hear about?",
-                Tx2("Бүгдийг эхнээс нь", "Everything from the start"), Tx2("Удирдлага: алхах, үсрэх", "Controls: walking, jumping"), Tx2("Надад асуулт байна", "I have a question"), Tx2("Юу ч үгүй, баярлалаа", "Nothing, thanks"));
+                Tx2("Бүгдийг эхнээс нь", "Everything from the start"), Tx2("Удирдлага: алхах, үсрэх", "Controls: walking, jumping"), Tx2("Монголын түүх", "Mongolian history"), Tx2("Надад асуулт байна", "I have a question"), Tx2("Юу ч үгүй, баярлалаа", "Nothing, thanks"));
             if (askAnswer == 1) { yield return Controls(touch); yield return Finish(false, false); yield break; }
-            if (askAnswer == 2) { yield return Questions(); yield return Finish(false, false); yield break; }
+            if (askAnswer == 2) { yield return OfferStory(name, true); yield break; }
+            if (askAnswer == 3) { yield return Questions(); yield return Finish(false, false); yield break; }
             if (askAnswer != 0) { yield return Finish(false, false); yield break; }
         }
         // hello
         yield return Say("wink", $"Сайн уу, {name}! Би Болормаа, энэ Нутгийн хөтөч.", $"Hello, {name}! I’m Bolormaa, the guide of this village.");
         yield return Say("happy", "Энд мал саах, бөх барилдах, морь уралдуулах, монгол гэр барих бүгдийг тоглож сурна.", "Here you learn by playing: milking, wrestling, horse racing, building a ger and more.");
+        if (!storyAsked)
+        {
+            storyAsked = true;
+            yield return OfferStory(name, false);
+            if (tutRun != r) yield break;   // off to the story: the tour waits until they are back
+        }
         yield return Ask("tease", "Тэгэхээр... надтай хамт Нутгаар нэг тойрох уу?", "So... want to take a little tour with me?", Tx2("Тийм ээ, явцгаая!", "Yes, let’s go!"), Tx2("Нутаг гэж юу вэ?", "What is Nutag?"), Tx2("Би өөрөө мэднэ", "I already know how"));
         if (askAnswer == 1)
         {
@@ -224,6 +231,39 @@ public sealed partial class Game
         yield return Questions();
         yield return Finish(true, false);
     }
+    // ================================================================ the story mode: Bolormaa asks if you want to live history first hand
+    bool storyAsked, storyFromTutorial;
+    IEnumerator OfferStory(string name, bool replay)
+    {
+        yield return Ask("curious", $"Хүлээгээрэй, {name}! Монголын түүхийг өөрийн нүдээр үзэж, өөрөө амьдарч үзмээр байна уу? Бяцхан Тэмүжин хэрхэн Чингис хаан болсныг туулна шүү!",
+            $"Wait, {name}! Would you like to experience Mongolian history first hand? You'll live how young Temüjin became Chinggis Khaan!",
+            Tx2("Тийм ээ, түүх рүү!", "Yes, take me into history!"), Tx2("Дараа, эхлээд Нутгаа үзье", "Later, show me the village first"));
+        if (askAnswer == 0)
+        {
+            yield return Say("excited", "Гоё! Тэмүжин өөрөө чамд түүхээ ярина. Тулалдаанд орж, түүний хүүхэд насыг туулна. Буцаж ирэхэд чинь би энд хүлээж байя!",
+                "Great! Temüjin himself will tell you his story. You'll ride into battle and live his childhood. I'll be waiting right here when you're back!");
+            if (!replay) storyFromTutorial = true;
+            V.tutorialSeen = Math.Max(V.tutorialSeen, 1); V.Save();
+            PlayStory(CHAPTERS[0], StoryPart(CHAPTERS[0].id));
+            StopTutorial();   // this ends the lesson coroutine we are in, so it comes last
+            yield break;
+        }
+        yield return Say("wink", "За за! Түүхийн аялал ••• товчинд, Чингис хааны зурагтай товч дээр хүлээж байгаа шүү.", "Okay! The story mode waits under the ••• button, the one with Chinggis Khaan's face.", replay ? "story" : null);
+        if (replay) yield return Finish(false, false);
+    }
+    /** Back from the story they chose in the tour: Bolormaa offers to carry on with it. */
+    IEnumerator AfterStory()
+    {
+        dropBusy = true;
+        yield return new WaitForSeconds(0.8f);
+        var d = ShowDialog("guide", "laugh", Loc.L($"Түүхээс буцаад ирлээ, {V.name}! Ямар байв? Одоо Нутгаараа аялах уу?", $"You're back from history, {V.name}! How was it? Shall we tour the village now?"),
+            new[] { Tx2("Тийм, явцгаая!", "Yes, let's go!").ToString(), Tx2("Дараа", "Later").ToString() }, false);
+        while (!d.done) yield return null;
+        dropBusy = false;
+        if (d.picked == 0) StartTutorial(false);
+        else { V.tutorial = true; V.Save(); }
+    }
+
     IEnumerator Controls(bool touch)
     {
         yield return Say("happy", touch ? "Эхлээд алхаж үзье! Дэлгэц дээр хуруугаа тавиад чирвэл джойстик гарч ирнэ. Очих газраа товшсон ч болно." : "Эхлээд алхаж үзье! WASD эсвэл сум товчоор алхана. Газар дээр дарвал тийшээ очно.",
@@ -303,6 +343,7 @@ public sealed partial class Game
         DialogTick(dt);
         if (V == null) return;
         if (V.tutorialSeen == 0 && !V.tutorial && tutRun == 0 && modal == null && Time.timeSinceLevelLoad > 1.5f) { StartTutorial(false); return; } // the first visit
+        if (storyFromTutorial && modal == null && tutRun == 0 && !dropBusy) { storyFromTutorial = false; StartCoroutine(AfterStory()); return; }
         dropCheck -= dt; if (dropCheck > 0) return; dropCheck = 3;
         if (!(V.tutorial || V.tutorialSeen > 0) || tutRun != 0 || dropBusy || race != null || battle != null || dialog != null || modal != null) return;
         float now = Time.realtimeSinceStartup; long ms = SaveData.NowMs(); if (now < dropNext || ms - V.nominLast < GAP_SHORT * 1000) return;
@@ -326,6 +367,11 @@ public sealed partial class Game
         {
             Mark("npc:" + npc.id, GAP); var o = World.objects.FirstOrDefault(x => x.kind == "npcq" && x.id == npc.id);
             StartCoroutine(DropBy("curious", new Tx($"Сонсоо, {npc.name.mn} чамаас тусламж хүсэж байна. Шар сум замыг заана, би энд л байна.", $"Psst, {npc.name.en} could use your help. The yellow arrow shows the way, and I’m right here if you need me."), null, o != null ? (o.x, o.y, npc.name.ToString()) : ((float, float, string)?)null)); return;
+        }
+        if (SaveData.Get(V.story, CHAPTERS[0].id) == 0 && SaveData.Get(V.story, CHAPTERS[0].id + ":done") == 0 && !Said("story"))
+        {
+            Mark("story", GAP);
+            StartCoroutine(DropBy("excited", new Tx($"{nm}, Монголын түүхийг өөрөө амьдарч үзмээр байна уу? ••• товчны Чингис хааны зурагтай товчийг дараарай!", $"{nm}, want to live Mongolian history yourself? Tap the button with Chinggis Khaan's face under •••!"), "story")); return;
         }
         if (ms - V.nominLast > (15 * 60 + UnityEngine.Random.value * 10 * 60) * 1000) // a friendly tip, only now and then
         {
