@@ -109,7 +109,7 @@ public sealed partial class Game
     /** Phones and tablets get on-screen buttons and touch hints; a computer uses the keys Bolormaa teaches. */
     public static bool TouchUI => Application.isMobilePlatform;
     float builtFor = -1;
-    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt, sSel, sPixel, sTeach, sKicker, sNote, sSlot, sChipHi;
+    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt, sSel, sPixel, sTeach, sKicker, sNote, sSlot, sChipHi, sWhite, sNav, sNavOn, sTabOff, sField, sTile, sLogo;
     Texture2D white;
     readonly Dictionary<PxCanvas, Texture2D> texCache = new Dictionary<PxCanvas, Texture2D>();
     public Texture2D Tex(PxCanvas c) { if (!texCache.TryGetValue(c, out var t)) texCache[c] = t = c.ToTexture(); return t; }
@@ -175,6 +175,14 @@ public sealed partial class Game
         sTeach = Style(Frame("#fffaf0", Ring("#c99a5a", 2), 0, null, 0, u), null, bodyFont, T(15), ink, TextAnchor.UpperLeft, true); sTeach.padding = new RectOffset(T(12), T(12), T(8), T(8)); // what a person says, in a speech box
         sKicker = new GUIStyle(sLabel) { fontSize = T(12), normal = { textColor = Px.Col("#6b7280") } }; // the small grey line above a heading
         sChipHi = Style(Frame("#fff3c4", new[] { ("#e5a157", 2), ("#8a4b1f", 2) }, 4, "#5a2d10", 4, u), null, pixelFont, F(11), ink, TextAnchor.MiddleLeft); // Basar's button stands out (.v-basar)
+        // the app's own pages (the web version's shell): white chips and a white tab bar on a warm grey page
+        sWhite = Style(Frame("#ffffff", Ring("#e6e1d6", 1), 3, null, 0, u), Frame("#f3f1ec", Ring("#e6e1d6", 1), 3, null, 0, u), displayFont, T(16), Px.Col("#141b2d"), TextAnchor.MiddleCenter);
+        sNav = Style(Frame("#fdfcfa", Ring("#e6e1d6", 1), 8, null, 0, u), null, bodyFont, T(11), ink, TextAnchor.MiddleCenter);
+        sNavOn = Style(Frame("#eef3ff", new (string, int)[0], 6, null, 0, u), null, bodyFont, T(11), ink, TextAnchor.MiddleCenter);
+        sTabOff = Style(Frame("#c5dbe3", Ring("#b9c7c4", 2), 0, null, 0, u), null, displayFont, T(16), Px.Col("#7c8a8c"), TextAnchor.MiddleCenter); // the other tab on the sign-up screen
+        sField = Style(Frame("#fffaf0", Ring("#c99a5a", 2), 0, null, 0, u), null, bodyFont, T(20), ink, TextAnchor.MiddleCenter); // a text box
+        sTile = Style(Frame("#fde8c3", Ring("#c99a5a", 2), 0, null, 0, u), Frame("#f7dcb0", Ring("#c99a5a", 2), 0, null, 0, u), bodyFont, T(12), ink, TextAnchor.MiddleCenter); // a tile to pick in a grid
+        sLogo = Style(Frame("#2f6bff", new (string, int)[0], 6, null, 0, u), null, bodyFont, T(12), ink, TextAnchor.MiddleCenter);
         sSlot = Style(Frame("#e6c48a", Ring("#c99a5a", 2), 0, null, 0, u), null, pixelFont, F(11), ink, TextAnchor.MiddleCenter);
         sNote = new GUIStyle(sChip) { font = bodyFont, fontSize = T(14), wordWrap = true, alignment = TextAnchor.MiddleCenter }; // a parchment box over a scene: its title, a hint
     }
@@ -587,6 +595,23 @@ public sealed partial class Game
     public void Text(string t) => GUILayout.Label(t, sLabel);
     public void Small(string t) => GUILayout.Label(t, sSmall);
     public void Gap(float v = 8) => GUILayout.Space(U(v));
+    /** A text box like the web version's big input, with a grey hint while it is empty. */
+    public string Field(string v, int max, string hint)
+    {
+        var r = GUILayoutUtility.GetRect(U(100), U(56), GUILayout.ExpandWidth(true));
+        v = GUI.TextField(r, v, max, sField);
+        if (string.IsNullOrEmpty(v)) GUI.Label(r, hint, new GUIStyle(sField) { normal = { background = null, textColor = Px.Col("#a8957e") } });
+        return v;
+    }
+    /** The app's logo, as the web version's blue tile with the ger. */
+    public void Logo(Rect r) { GUI.Box(r, GUIContent.none, sLogo); GUI.DrawTexture(new Rect(r.x + r.width * 0.14f, r.y + r.height * 0.12f, r.width * 0.72f, r.height * 0.72f), Tex(Px.Icon("ui:logo")), ScaleMode.ScaleToFit); }
+    /** The step bar along the top of a card: green for the steps done. */
+    public void Steps(int step, int n)
+    {
+        var r = GUILayoutUtility.GetRect(U(100), U(6), GUILayout.ExpandWidth(true)); float gap = U(6), w = (r.width - gap * (n - 1)) / n;
+        for (int k = 0; k < n; k++) Box(new Rect(r.x + k * (w + gap), r.y, w, r.height), Px.Col(k <= step ? "#5c9a36" : "#e6c48a"));
+        Gap(12);
+    }
     public bool Btn(string t, bool primary = false, float h = 40, bool enabled = true)
     {
         bool was = GUI.enabled; GUI.enabled = enabled;
@@ -657,7 +682,7 @@ public sealed partial class Game
     public bool Swatch(Color c, bool on, float size = 36)
     {
         var r = GUILayoutUtility.GetRect(U(size), U(size), GUILayout.Width(U(size)), GUILayout.Height(U(size)));
-        bool hit = GUI.Button(r, "", on ? sSel : sBtn); Box(new Rect(r.x + U(5), r.y + U(5), r.width - U(10), r.height - U(8)), c); return hit;
+        bool hit = GUI.Button(r, "", on ? sSel : sTile); Box(new Rect(r.x + U(5), r.y + U(5), r.width - U(10), r.height - U(10)), c); GUILayout.Space(U(6)); return hit;
     }
 
     // ---------------------------------------------------------------- a picture redrawn every frame (mini-games, scenes)
