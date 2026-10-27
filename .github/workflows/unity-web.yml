@@ -1,0 +1,65 @@
+# Naadamy Unity web build
+# - On main, when unity/ changes (or by hand from the Actions tab): build the Unity game for the browser
+#   with game-ci and publish it to the naadamy-unity Vercel project (https://naadamy-unity.vercel.app).
+# - Vercel can't run Unity, so the build happens here and Vercel only serves the files.
+# - Needs repo secrets: UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD (a Unity Personal license works) and VERCEL_TOKEN.
+name: Unity web
+
+on:
+  push:
+    branches: [main]
+    paths: ['unity/**', '.github/workflows/unity-web.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_CKFYD9mzs1ZshB7mmgOs4U9C
+  VERCEL_PROJECT_ID: prj_QmnCaUqhifX4PD7N0jBCy0kJAGKA
+
+jobs:
+  deploy:
+    name: Build WebGL and publish to Vercel
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Free disk space (the Unity WebGL image is large)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - name: Reuse the imported Unity project
+        uses: actions/cache@v4
+        with:
+          path: unity/Library
+          key: unity-library-webgl-${{ hashFiles('unity/Assets/**', 'unity/Packages/**', 'unity/ProjectSettings/**') }}
+          restore-keys: unity-library-webgl-
+
+      - name: Build WebGL (Naadamy → Build WebGL, output unity/Builds/WebGL)
+        uses: game-ci/unity-builder@v6
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity
+          targetPlatform: WebGL
+          buildMethod: NaadamySetup.BuildWebGL
+          versioning: None
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Publish to Vercel
+        working-directory: unity/Builds/WebGL
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@65.3.1 deploy --prod --yes --token "$VERCEL_TOKEN"
