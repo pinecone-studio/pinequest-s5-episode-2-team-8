@@ -393,8 +393,8 @@ public sealed partial class Game
         foreach (var o in net.others.Values)
         {
             float jq = (t - o.jt) / JUMP_S, z = jq >= 0 && jq < 1 ? Mathf.Round(Mathf.Sin(jq * Mathf.PI) * 9) : 0; var look = o.look ?? new Look();
-            if (look.ride == "horse") Rider(look, o.dir == 1 ? 1 : 2, o.moving, o.px, o.py, o.py, z);
-            else { Shadow(o.px * T, o.py * T, o.py); var lk = look.Copy(); lk.pet = null; Spr(Px.Char(lk, o.dir, z != 0 ? 0 : Frame(o.moving, false)), o.px * T, o.py * T - 12 - z, false, o.py); }
+            if (look.ride == "horse") Rider(look, o.dir == 1 ? 1 : 2, o.moving, o.px, o.py, o.py, z, false, null, "net" + o.name);
+            else { Shadow(o.px * T, o.py * T, o.py); var lk = look.Copy(); lk.pet = null; Person(lk, o.dir, z != 0 ? 0 : Frame(o.moving, false), o.px, o.py, o.py, z, null, o.moving); }
         }
     }
     void NetLabels(float ts)

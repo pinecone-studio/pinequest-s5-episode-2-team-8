@@ -197,7 +197,7 @@ public sealed partial class Game
 
     void RaceDraw(float t)
     {
-        foreach (var n in race.npcs) Rider(n.look, n.face, race.phase == "go" && n.done == 0, n.px, n.py, n.py);
+        foreach (var n in race.npcs) Rider(n.look, n.face, race.phase == "go" && n.done == 0, n.px, n.py, n.py, 0, false, null, "race" + n.name);
         int fl = (int)(t * 4) % 2;
         for (int i = Mathf.Max(1, race.ci); i < Mathf.Min(race.P.Count, race.ci + 4); i++)
         {

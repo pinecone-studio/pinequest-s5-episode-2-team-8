@@ -60,6 +60,9 @@ public sealed partial class Game
             GUILayout.BeginHorizontal(); g.Text(Loc.L("Арын хөгжим", "Background music")); GUILayout.FlexibleSpace();
             if (GUILayout.Button(Music.On ? Loc.L("Асаалттай", "On") : Loc.L("Унтраалттай", "Off"), Music.On ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) Music.Toggle();
             GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal(); g.Text(Loc.L("Изометр харагдац", "Isometric view")); GUILayout.FlexibleSpace();
+            if (GUILayout.Button(!g.App.flatView ? Loc.L("Асаалттай", "On") : Loc.L("Унтраалттай", "Off"), !g.App.flatView ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) { g.App.flatView = !g.App.flatView; g.App.Save(); }
+            GUILayout.EndHorizontal();
             GUILayout.Label("<b>" + Loc.L("Басар AI (Claude)", "Basar AI (Claude)") + "</b>", g.sLabel);
             g.Small(Loc.L("Компьютер дээр “node server/server.js” ажиллуулж, түүний хаягийг энд бичвэл Басар AI ухаантай болно (ж: 192.168.1.10:8000). Хоосон бол офлайн мэдлэгээр ажиллана.", "Run “node server/server.js” on a computer and write its address here to give Basar AI smarts (e.g. 192.168.1.10:8000). Empty: offline knowledge."));
             GUILayout.BeginHorizontal();

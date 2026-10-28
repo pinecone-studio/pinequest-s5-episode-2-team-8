@@ -454,9 +454,15 @@ public static partial class Px
     static void Lot(PxCanvas x, WObj o)
     {
         int X = o.x * 16, Y = o.y * 16;
-        R(x, X + 2, Y + 6, 44, 40, "#c8a06a"); for (int i = 0; i < 40; i++) P(x, X + 3 + Math.Floor(Hash(o.i, i) * 42), Y + 7 + Math.Floor(Hash(i, o.i) * 38), i % 2 != 0 ? "#b38a55" : "#d8b47e");
+        LotPatch(x, o);
         foreach (var (cx, cy) in new[] { (2, 6), (44, 6), (2, 44), (44, 44) }) R(x, X + cx, Y + cy - 4, 2, 6, K.woodD);
         R(x, X + 21, Y + 22, 2, 12, K.woodD); R(x, X + 14, Y + 16, 16, 8, K.outl); R(x, X + 15, Y + 17, 14, 6, K.paper); Glyph(x, X + 20, Y + 17, ICON_COIN, COIN_MAP);
+    }
+    /** The lot's bare ground, without its stakes and sign. */
+    static void LotPatch(PxCanvas x, WObj o)
+    {
+        int X = o.x * 16, Y = o.y * 16;
+        R(x, X + 2, Y + 6, 44, 40, "#c8a06a"); for (int i = 0; i < 40; i++) P(x, X + 3 + Math.Floor(Hash(o.i, i) * 42), Y + 7 + Math.Floor(Hash(i, o.i) * 38), i % 2 != 0 ? "#b38a55" : "#d8b47e");
     }
     static void Bleachers(PxCanvas x, WObj o)
     {
@@ -555,6 +561,54 @@ public static partial class Px
     /** The whole village ground with its buildings and trees, as one 896×640 picture (like renderStatic in pixel.js). */
     public static PxCanvas RenderStatic()
     {
+        var x = RenderGround(false);
+        var draws = new List<(int y, Action f)>();
+        foreach (var t in World.trees) { var tt = t; draws.Add((tt.y, () => Tree(x, tt.x, tt.y, tt.pine))); }
+        foreach (var o in World.objects) { if (!StaticProp(o)) continue; var oo = o; draws.Add((o.y + o.h - 1, () => PROPS[oo.kind](x, oo))); }
+        foreach (var d in draws.OrderBy(d => d.y)) d.f(); // OrderBy is stable, like Array.sort
+        return x;
+    }
+
+    static readonly HashSet<string> NOT_STATIC = new HashSet<string> { "felt", "npc", "emee", "npcq", "cow", "goat", "general", "historian" };
+    /** Things that lie on the ground (an empty lot, the foals' rope line): flat in the isometric view too. */
+    static readonly HashSet<string> FLAT = new HashSet<string> { "lot", "zel", "ger", "bleachers", "archery", "shop", "ovoo", "statue", "academy", "uya", "board", "well", "lantern", "churn", "tulga", "rack" }; // (all but the first two are built in 3D by Bodies.cs, and so are the trees)
+    static readonly Dictionary<string, Action<PxCanvas, WObj>> PROPS = new Dictionary<string, Action<PxCanvas, WObj>>
+    {
+        ["ger"] = Ger, ["shop"] = Shop, ["board"] = Board, ["well"] = Well, ["lantern"] = Lantern, ["lot"] = Lot, ["bleachers"] = Bleachers, ["ovoo"] = Ovoo,
+        ["uya"] = Uya, ["archery"] = Archery, ["academy"] = Academy, ["zel"] = Zel, ["churn"] = Churn, ["tulga"] = Tulga, ["rack"] = Rack, ["statue"] = Statue,
+    };
+    static bool StaticProp(WObj o) => !NOT_STATIC.Contains(o.kind);
+
+    /** The isometric view's standing things: each tree and building cut out of the map on its own, with its feet
+     *  (the bottom middle of the picture) at tile (fx, fy). The flat ones stay in RenderGround(true). */
+    public static List<(PxCanvas art, float fx, float fy)> RenderProps()
+    {
+        var list = new List<(PxCanvas, float, float)>();
+        var scratch = new PxCanvas(World.W * 16, World.H * 16);
+        void Cut(Action draw, int x0, int y0, int x1, int y1)
+        {
+            x0 = Math.Max(0, x0 * 16); y0 = Math.Max(0, y0 * 16); x1 = Math.Min(scratch.W, x1 * 16); y1 = Math.Min(scratch.H, y1 * 16);
+            draw();
+            int bx0 = int.MaxValue, by0 = int.MaxValue, bx1 = -1, by1 = -1;
+            for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) if (scratch.Get(x, y).a != 0) { bx0 = Math.Min(bx0, x); by0 = Math.Min(by0, y); bx1 = Math.Max(bx1, x); by1 = Math.Max(by1, y); }
+            if (bx1 >= 0)
+            {
+                var c = new PxCanvas(bx1 - bx0 + 1, by1 - by0 + 1);
+                // see-through dark pixels are the shadow painted on the ground: standing up they'd be a grey wall, so they go
+                // (the isometric ground gets its own shadow under each prop, Game.ShowMap)
+                for (int y = by0; y <= by1; y++) for (int x = bx0; x <= bx1; x++) { var k = scratch.Get(x, y); if (k.a >= 110) c.Put(x - bx0, y - by0, k); }
+                list.Add((c, (bx0 + bx1 + 1) / 32f, (by1 + 1) / 16f));
+            }
+            scratch.ClearRect(x0, y0, x1 - x0, y1 - y0);
+        }
+        foreach (var o in World.objects) { if (!StaticProp(o) || FLAT.Contains(o.kind)) continue; var oo = o; Cut(() => PROPS[oo.kind](scratch, oo), o.x - 3, o.y - 6, o.x + o.w + 3, o.y + o.h + 2); }
+        return list;
+    }
+
+    /** The ground: tiles, flowers, fences, rocks, the dock and the arena's flags. flat (the isometric view): with the lots
+     *  and rope lines on it, and without the fences, rocks, dock and flags, which stand up as boxes there (Bodies.cs). */
+    public static PxCanvas RenderGround(bool flat)
+    {
         int w = World.W, h = World.H; var x = new PxCanvas(w * 16, h * 16);
         bool Grassy(char ch) => ch != '\0' && "gTrfB".IndexOf(ch) >= 0;
         for (int ty = 0; ty < h; ty++) for (int tx = 0; tx < w; tx++)
@@ -564,25 +618,40 @@ public static partial class Px
             bool inPlaza = tx >= 15 && tx <= 20 && ty >= 10 && ty <= 15;
             if (ch == 'p') Dirt(x, X, Y, tx, ty, nb4.Select(Grassy).ToArray());
             else if (ch == 's' || (ch == 'B' && inPlaza)) Plaza(x, X, Y, tx, ty);
-            else if (ch == 'w' || ch == 'd') { Water(x, X, Y, tx, ty, nb4.Select(n => n != '\0' && n != 'w' && n != 'd').ToArray()); if (ch == 'd') Dock(x, X, Y); }
+            else if (ch == 'w' || ch == 'd') { Water(x, X, Y, tx, ty, nb4.Select(n => n != '\0' && n != 'w' && n != 'd').ToArray()); if (ch == 'd' && !flat) Dock(x, X, Y); }
             else if (ch == 'k' || (ch == 'B' && tx >= 4 && tx <= 13 && ty >= 16 && ty <= 22)) Yard(x, X, Y, tx, ty, nb4.Select(n => n != 'k' && n != 'B').ToArray());
             else if (ch == 'a') Sand(x, X, Y, tx, ty, nb4.Select(n => n != 'a').ToArray());
-            else { Grass(x, X, Y, tx, ty); if (ch == 'f') Fence(x, X, Y, nb4.Select(n => n == 'f').ToArray()); if (ch == 'r') Rock(x, X, Y); }
+            else { Grass(x, X, Y, tx, ty); if (!flat && ch == 'f') Fence(x, X, Y, nb4.Select(n => n == 'f').ToArray()); if (!flat && ch == 'r') Rock(x, X, Y); } // flat: they stand up in Bodies.cs
         }
         string[] fcols = { K.pink, K.gold, K.white, K.purple };
         for (int ty = 2; ty < h - 1; ty++) for (int tx = 1; tx < w - 1; tx++)
             if (World.g[ty, tx] == 'g' && Hash(tx * 3, ty * 7) < 0.1) Flower(x, tx * 16 + 4 + (int)Math.Floor(Hash(tx, ty) * 8), ty * 16 + 5 + (int)Math.Floor(Hash(ty, tx) * 7), fcols[(int)Math.Floor(Hash(tx, ty * 5) * 4)]);
-        ArenaFlags(x);
-        var draws = new List<(int y, Action f)>();
-        foreach (var t in World.trees) { var tt = t; draws.Add((tt.y, () => Tree(x, tt.x, tt.y, tt.pine))); }
-        var skip = new HashSet<string> { "felt", "npc", "emee", "npcq", "cow", "goat", "general", "historian" };
-        var drawers = new Dictionary<string, Action<PxCanvas, WObj>>
+        if (!flat) ArenaFlags(x);
+        if (flat)
         {
-            ["ger"] = Ger, ["shop"] = Shop, ["board"] = Board, ["well"] = Well, ["lantern"] = Lantern, ["lot"] = Lot, ["bleachers"] = Bleachers, ["ovoo"] = Ovoo,
-            ["uya"] = Uya, ["archery"] = Archery, ["academy"] = Academy, ["zel"] = Zel, ["churn"] = Churn, ["tulga"] = Tulga, ["rack"] = Rack, ["statue"] = Statue,
-        };
-        foreach (var o in World.objects) { if (skip.Contains(o.kind)) continue; var oo = o; draws.Add((o.y + o.h - 1, () => drawers[oo.kind](x, oo))); }
-        foreach (var d in draws.OrderBy(d => d.y)) d.f(); // OrderBy is stable, like Array.sort
+            foreach (var o in World.objects.Where(o => o.kind == "lot")) LotPatch(x, o); // its stakes and sign stand up in Bodies.cs, like the rope line
+            foreach (var o in World.objects)
+            {
+                int X = o.x * 16, Y = o.y * 16;
+                if (o.kind == "archery") { R(x, X, Y + 6, o.w * 16, o.h * 16 - 10, K.dirtL); R(x, X, Y + 6, o.w * 16, 1, K.dirtD); R(x, X, Y + o.h * 16 - 5, o.w * 16, 1, K.dirtD); for (int i = 0; i < 9; i++) P(x, X + 6 + i * 13, Y + 18 + (i % 3) * 6, K.dirtD); }
+                else if (o.kind == "ger") Ell(x, X + 28, Y + 30, 23, 13, "rgba(20,30,10,.3)"); // the 3D ger's shadow
+                else if (o.kind == "bleachers") R(x, X + 4, Y + o.h * 16 - 2, o.w * 16, 5, "rgba(20,30,10,.3)");
+                else if (o.kind == "shop") R(x, X + 6, Y + 28, o.w * 16 - 4, 22, "rgba(20,30,10,.3)");
+                else if (o.kind == "ovoo") Ell(x, X + 19, Y + 23, 17, 9, "rgba(20,30,10,.3)");
+                else if (o.kind == "statue") R(x, X - 1, Y + 3, 22, 14, "rgba(20,30,10,.3)");
+                else if (o.kind == "academy") R(x, X + 4, Y + 30, o.w * 16, 22, "rgba(20,30,10,.3)");
+                else if (o.kind == "well" || o.kind == "churn" || o.kind == "tulga" || o.kind == "lantern") Ell(x, X + 10, Y + 13, o.kind == "lantern" ? 4 : 8, 3, "rgba(20,30,10,.3)");
+                else if (o.kind == "board" || o.kind == "rack") R(x, X + 4, Y + 11, o.w * 16, 5, "rgba(20,30,10,.3)");
+            }
+            foreach (var t in World.trees) Ell(x, t.x * 16 + 11, t.y * 16 + 12, t.pine ? 12 : 13, 6, "rgba(20,30,10,.3)"); // the 3D trees' shadows
+            // the boxes' shadows on the ground, falling away from the light at the screen's upper left
+            for (int ty = 0; ty < h; ty++) for (int tx = 0; tx < w; tx++)
+            {
+                char ch = World.g[ty, tx];
+                if (ch == 'f') Ell(x, tx * 16 + 10, ty * 16 + 10, 4, 2, "rgba(20,30,10,.28)");
+                else if (ch == 'r') Ell(x, tx * 16 + 10, ty * 16 + 12, 7, 3, "rgba(20,30,10,.3)");
+            }
+        }
         return x;
     }
 

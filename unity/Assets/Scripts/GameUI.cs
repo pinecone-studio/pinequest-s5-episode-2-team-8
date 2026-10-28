@@ -271,7 +271,13 @@ public sealed partial class Game
         return new Vector2(s.x, Screen.height - s.y);
     }
     /** Art pixel (X, Y) of the village to a screen point. */
-    Vector2 PxGui(float X, float Y) => ToGui(X / T, Y / T);
+    Vector2 PxGui(float X, float Y)
+    {
+        // labels sit above someone standing about 30 art pixels lower: up from those feet, so in the isometric view too
+        // they rise straight up the screen instead of sliding along the ground
+        var s = cam.WorldToScreenPoint(new Vector3(X / T, -(Y + 30) / T, 0) + cam.transform.up * (30f / T));
+        return new Vector2(s.x, Screen.height - s.y);
+    }
     float ArtPx => Screen.height / (2 * cam.orthographicSize) / T; // screen pixels per art pixel
 
     void WorldLabels()
@@ -434,6 +440,14 @@ public sealed partial class Game
         if ((int)(Time.time / 0.45f) % 2 == 1) Dot(px + 0.5f, py + 0.8f, Color.white, 3);
         Dot(px + 0.5f, py + 0.8f, Px.Col("#e14b3d"));
         float hh = cam.orthographicSize, hw = hh * cam.aspect, cx = cam.transform.position.x, cy = -cam.transform.position.y; var vr = new Rect(map.x + (cx - hw) * s, map.y + (cy - hh) * s, 2 * hw * s, 2 * hh * s);
+        if (IsoOn) // the ground the isometric camera sees, as a box around its four corners
+        {
+            float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
+            foreach (var sc in new[] { new Vector2(0, 0), new Vector2(Screen.width, 0), new Vector2(0, Screen.height), new Vector2(Screen.width, Screen.height) })
+            { var gp = Iso.Ground(cam, sc); if (gp == null) continue; x0 = Mathf.Min(x0, gp.Value.x); y0 = Mathf.Min(y0, gp.Value.y); x1 = Mathf.Max(x1, gp.Value.x); y1 = Mathf.Max(y1, gp.Value.y); }
+            x0 = Mathf.Max(0, x0); y0 = Mathf.Max(0, y0); x1 = Mathf.Min(World.W, x1); y1 = Mathf.Min(World.H, y1);
+            vr = new Rect(map.x + x0 * s, map.y + y0 * s, Mathf.Max(0, x1 - x0) * s, Mathf.Max(0, y1 - y0) * s);
+        }
         var wc = new Color(1, 1, 1, 0.85f); float t = Mathf.Max(1, U(1));
         Box(new Rect(vr.x, vr.y, vr.width, t), wc); Box(new Rect(vr.x, vr.yMax - t, vr.width, t), wc); Box(new Rect(vr.x, vr.y, t, vr.height), wc); Box(new Rect(vr.xMax - t, vr.y, t, vr.height), wc);
     }
