@@ -16,98 +16,112 @@ def rgb(h): h = h.lstrip('#'); return tuple(int(h[i:i + 2], 16) for i in (0, 2, 
 
 
 class Canvas2:
-    """Two pictures drawn together: the colours, and the linework alone (to make the pixel outlines crisp)."""
+    """Two pictures drawn together: the colour shapes, smooth at a high resolution, and the lines, drawn crisp at the
+    finished pixel size (1 or 2 pixels wide, like hand-placed pixel art). A shape drawn later covers the lines under it."""
     def __init__(self):
         self.col = Image.new('RGBA', (UW * K, UH * K), (0, 0, 0, 0)); self.c = ImageDraw.Draw(self.col)
-        self.ink = Image.new('L', (UW * K, UH * K), 0); self.i = ImageDraw.Draw(self.ink)
+        self.sm = Image.new('RGBA', (PW, PH), (0, 0, 0, 0)); self.s = ImageDraw.Draw(self.sm)
 
     def P(self, pts): return [(x * K, y * K) for x, y in pts]
 
+    def S(self, pts): return [(x * PW / UW - 0.5, y * PH / UH - 0.5) for x, y in pts]
+
+    def box(self, cx, cy, rx, ry):   # an ellipse's box in pixels, at least one pixel
+        f = PW / UW; x0, y0 = round((cx - rx) * f), round((cy - ry) * f)
+        return [x0, y0, max(x0, round((cx + rx) * f) - 1), max(y0, round((cy + ry) * f) - 1)]
+
+    def cover(self, draw):
+        """Lines under a new shape are hidden where the shape covers most of a pixel."""
+        m = Image.new('L', (PW * 4, PH * 4), 0); draw(ImageDraw.Draw(m), 4 * PW / UW)
+        a = np.asarray(self.sm).copy(); a[np.asarray(m.resize((PW, PH), Image.BOX)) > 150] = 0
+        self.sm = Image.fromarray(a, 'RGBA'); self.s = ImageDraw.Draw(self.sm)
+
     def poly(self, pts, fill):
         self.c.polygon(self.P(pts), fill=fill)
+        self.cover(lambda d, f: d.polygon([(x * f, y * f) for x, y in pts], fill=255))
 
     def ell(self, cx, cy, rx, ry, fill):
+        if min(rx, ry) < 2.6:   # small dots and beads: crisp pixels
+            b = self.box(cx, cy, rx, ry)   # PIL leaves out ellipses this small, so they are drawn as little blocks
+            (self.s.rectangle if b[2] - b[0] < 2 or b[3] - b[1] < 2 else self.s.ellipse)(b, fill=tuple(fill) + (255,)); return
         self.c.ellipse([(cx - rx) * K, (cy - ry) * K, (cx + rx) * K, (cy + ry) * K], fill=fill)
+        self.cover(lambda d, f: d.ellipse([(cx - rx) * f, (cy - ry) * f, (cx + rx) * f, (cy + ry) * f], fill=255))
 
     def line(self, pts, w=2.0, col=INK):
-        """A line of ink: drawn in the colours and kept as linework."""
-        self.c.line(self.P(pts), fill=col, width=int(w * K), joint='curve'); self.i.line(self.P(pts), fill=255, width=int(w * K), joint='curve')
+        self.s.line(self.S(pts), fill=tuple(col) + (255,), width=1 if w < 3 else 2)
 
     def oline(self, pts, w=2.0):   # an outline round a closed shape
         self.line(pts + [pts[0]], w)
 
     def oell(self, cx, cy, rx, ry, w=2.0):
-        box = [(cx - rx) * K, (cy - ry) * K, (cx + rx) * K, (cy + ry) * K]
-        self.c.ellipse(box, outline=INK, width=int(w * K)); self.i.ellipse(box, outline=255, width=int(w * K))
+        self.s.ellipse(self.box(cx, cy, rx, ry), outline=INK + (255,), width=1)
 
 
 def bez(p0, p1, p2, n=20):
     return [((1 - t) ** 2 * p0[0] + 2 * (1 - t) * t * p1[0] + t * t * p2[0], (1 - t) ** 2 * p0[1] + 2 * (1 - t) * t * p1[1] + t * t * p2[1]) for t in [i / n for i in range(n + 1)]]
 
 
-def finish(cv, colours=28):
-    """The reduction to pixel art: average down, a small palette, black pixels where the linework is, a black edge round it."""
+def finish(cv, colours=30):
+    """The reduction to pixel art: average the shapes down to a small palette, then lay the crisp lines on top."""
     small = cv.col.resize((PW, PH), Image.BOX)
-    a = np.asarray(small)[:, :, 3]
-    rgbim = small.convert('RGB').quantize(colors=colours, method=Image.MEDIANCUT, dither=Image.NONE).convert('RGB')
-    out = np.dstack([np.asarray(rgbim), np.where(a > 110, 255, 0).astype(np.uint8)])
-    ink = np.asarray(cv.ink.resize((PW, PH), Image.BOX)) > 70
-    out[ink & (out[:, :, 3] > 0)] = INK + (255,)
-    al = out[:, :, 3] > 0; grow = al.copy()
-    grow[1:, :] |= al[:-1, :]; grow[:-1, :] |= al[1:, :]; grow[:, 1:] |= al[:, :-1]; grow[:, :-1] |= al[:, 1:]
-    out[grow & ~al] = INK + (255,)
-    return Image.fromarray(out.astype(np.uint8), 'RGBA')
+    rgbim = small.convert('RGB').quantize(colors=colours, method=Image.MEDIANCUT, dither=Image.NONE).convert('RGBA')
+    rgbim.alpha_composite(cv.sm)
+    return rgbim
 
 
 # ---------------------------------------------------------------- the face
-def eyes(cv, c, kind, look=(0, 0)):
+EYE = {-1: (51, 66, 1.12), 1: (83, 64, 0.88)}   # each eye's centre and width: the far eye is a little narrower (the face is turned to our right)
+
+
+def eyes(cv, c, kind, look=(0, 0), only=None):
     iris = rgb(c['iris']); lx, ly = look
     for s in (-1, 1):
-        cx, cy = 56 + s * 17, 70
+        if only and s != only: continue
+        cx, cy, wf = EYE[s]
         if kind in ('open', 'wide', 'look', 'down'):
-            h = 6.5 if kind != 'wide' else 8.0
-            if kind == 'down': h = 5.0
-            cv.poly([(cx - 9, cy), (cx - 4, cy - h), (cx + 5, cy - h), (cx + 10, cy - 1), (cx + 5, cy + 4), (cx - 5, cy + 4)], (250, 246, 240))
-            cv.ell(cx + lx, cy - 1 + ly, 5.2, 5.8 if kind != 'down' else 4.6, iris)
-            cv.ell(cx + lx, cy - 1 + ly, 2.4, 2.8, (24, 12, 10))
-            cv.ell(cx - 2 + lx, cy - 3.5 + ly, 1.8, 1.8, (255, 255, 255))
-            cv.line([(cx - 10, cy + 1), (cx - 5, cy - h - 0.5), (cx + 5, cy - h - 0.5), (cx + 11, cy - 1)], 3.0)    # the lashes, thick
-            cv.line([(cx + s * 9, cy - 1), (cx + s * 12, cy - 3)], 2.0)
-            cv.line([(cx - 5, cy + 5), (cx + 5, cy + 5)], 1.2, (150, 90, 70))
+            h = 7.2 if kind != 'wide' else 8.6
+            if kind == 'down': h = 5.4
+            cv.poly([(cx - 10 * wf, cy + 1), (cx - 5 * wf, cy - h), (cx + 5 * wf, cy - h), (cx + 11 * wf, cy - 1), (cx + 6 * wf, cy + 4), (cx - 6 * wf, cy + 4)], (250, 246, 240))
+            cv.ell(cx + lx, cy - 0.5 + ly, 5.4 * wf, 6.6 if kind != 'down' else 5.0, iris)
+            cv.ell(cx + lx, cy - 0.5 + ly, 2.6 * wf, 3.0, (24, 12, 10))
+            cv.ell(cx - 2 * wf + lx, cy - 3 + ly, 1.9, 1.9, (255, 255, 255))
+            cv.line([(cx - 11 * wf, cy + 2), (cx - 5 * wf, cy - h - 1), (cx + 5 * wf, cy - h - 1), (cx + 12 * wf, cy - 1)], 3.4)   # heavy black lashes
+            cv.line([(cx + s * 11 * wf, cy - 1), (cx + s * 14 * wf, cy - 3)], 2.2)
         elif kind == 'happy':
-            cv.line(bez((cx - 9, cy + 1), (cx, cy - 8), (cx + 9, cy + 1)), 3.0)
+            cv.line(bez((cx - 10 * wf, cy + 1), (cx, cy - 8), (cx + 10 * wf, cy + 1)), 3.2)
         elif kind == 'shut':
-            cv.line(bez((cx - 9, cy - 1), (cx, cy + 4), (cx + 9, cy - 1)), 2.6)
+            cv.line(bez((cx - 10 * wf, cy - 1), (cx, cy + 4), (cx + 10 * wf, cy - 1)), 2.8)
         elif kind == 'half':
-            cv.poly([(cx - 9, cy), (cx + 10, cy - 1), (cx + 5, cy + 4), (cx - 5, cy + 4)], (250, 246, 240))
-            cv.ell(cx, cy + 0.5, 4.6, 3.4, iris); cv.ell(cx, cy + 0.5, 2.0, 2.0, (24, 12, 10))
-            cv.line([(cx - 10, cy), (cx + 11, cy - 1.5)], 3.0)
+            cv.poly([(cx - 10 * wf, cy + 1), (cx + 11 * wf, cy - 1), (cx + 6 * wf, cy + 4), (cx - 6 * wf, cy + 4)], (250, 246, 240))
+            cv.ell(cx, cy + 0.5, 4.8 * wf, 3.4, iris); cv.ell(cx, cy + 0.5, 2.2 * wf, 2.0, (24, 12, 10))
+            cv.line([(cx - 11 * wf, cy + 1), (cx + 12 * wf, cy - 1.5)], 3.4)
 
 
 def brows(cv, c, inner, outer):
+    """Thick brows: the near one long and nearly level, the far one shorter and rising outwards."""
     col = rgb(c['brow']) if 'brow' in c else INK
-    for s in (-1, 1):
-        cx = 56 + s * 17
-        cv.line([(cx - s * 9, 58 + inner), (cx, 55 + (inner + outer) / 2), (cx + s * 10, 57 + outer)], 3.2, col)
+    cv.line([(37, 57 + outer), (48, 55 + (inner + outer) / 2), (62, 55 + inner)], 3.6, col)
+    cv.line([(74, 55 + inner), (82, 52 + (inner + outer) / 2), (91, 49 + outer)], 3.6, col)
 
 
 def mouth(cv, c, kind, talk):
-    lip, lipl = rgb(c.get('lips', '#d77a68')), rgb(c.get('lipsl', '#f0a08c'))
-    cx, cy = 59, 95
+    lip, lipl = rgb(c.get('lips', '#d77a68')), rgb(c.get('lipsl', '#f2aa98'))
+    cx, cy = 69, 88
     if kind == 'grin' or talk == 2:
-        cv.poly(bez((cx - 10, cy - 1), (cx, cy + 12), (cx + 10, cy - 1)), (130, 40, 50)); cv.poly([(cx - 8, cy - 1), (cx + 8, cy - 1), (cx + 7, cy + 2), (cx - 7, cy + 2)], (255, 255, 255))
-        cv.line(bez((cx - 10, cy - 1), (cx, cy + 12), (cx + 10, cy - 1)) + [(cx - 10, cy - 1)], 1.8)
+        cv.poly(bez((cx - 11, cy - 1), (cx, cy + 12), (cx + 11, cy - 2)), (130, 40, 50)); cv.poly([(cx - 9, cy - 1), (cx + 9, cy - 2), (cx + 8, cy + 1), (cx - 8, cy + 2)], (255, 255, 255))
+        cv.line(bez((cx - 11, cy - 1), (cx, cy + 12), (cx + 11, cy - 2)) + [(cx - 11, cy - 1)], 1.8)
     elif talk == 1:
-        cv.ell(cx, cy + 1.5, 5, 3.6, (130, 40, 50)); cv.line([(cx - 5, cy), (cx + 5, cy)], 1.6); cv.ell(cx, cy + 3, 2.6, 1.2, (230, 120, 130))
-    elif kind in ('smile', 'smug'):
-        cv.poly([(cx - 10, cy), (cx + 10, cy - (2 if kind == 'smug' else 0)), (cx + 6, cy + 6), (cx - 6, cy + 6)], lip); cv.poly([(cx - 4, cy + 2.5), (cx + 4, cy + 2.5), (cx + 3, cy + 5), (cx - 3, cy + 5)], lipl)
-        cv.line([(cx - 10, cy - 1.5), (cx - 4, cy + 0.5), (cx + 4, cy + 0.5), (cx + 10, cy - (3.5 if kind == 'smug' else 1.5))], 1.8)
+        cv.ell(cx, cy + 1.5, 5.4, 3.8, (130, 40, 50)); cv.line([(cx - 6, cy), (cx + 6, cy - 0.5)], 1.6); cv.ell(cx, cy + 3, 2.8, 1.2, (230, 120, 130))
+    elif kind in ('smile', 'smug'):   # closed lips, pink with a light middle, the right corner turning up
+        cv.poly([(cx - 9, cy), (cx + 9, cy - 1), (cx + 6, cy + 6), (cx - 6, cy + 6)], lip); cv.poly([(cx - 3, cy + 2.5), (cx + 4, cy + 2.5), (cx + 3, cy + 5), (cx - 2, cy + 5)], lipl)
+        cv.line([(cx - 11, cy - 1.5), (cx - 4, cy + 0.5), (cx + 4, cy + 0.5), (cx + 10, cy - 1.5), (cx + 12, cy - (4.5 if kind == 'smug' else 3))], 1.8)
     elif kind == 'o':
-        cv.ell(cx, cy + 1, 3.6, 4.6, (130, 40, 50)); cv.oell(cx, cy + 1, 3.6, 4.6, 1.6)
+        cv.ell(cx, cy + 1, 3.8, 4.8, (130, 40, 50)); cv.oell(cx, cy + 1, 3.8, 4.8, 1.6)
     elif kind == 'sad':
-        cv.line(bez((cx - 7, cy + 3), (cx, cy - 2), (cx + 7, cy + 3)), 1.8)
-    else:   # neutral, flat
-        cv.poly([(cx - 8, cy), (cx + 8, cy), (cx + 5, cy + 5), (cx - 5, cy + 5)], lip); cv.poly([(cx - 3, cy + 2), (cx + 3, cy + 2), (cx + 2, cy + 4), (cx - 2, cy + 4)], lipl); cv.line([(cx - 9, cy), (cx + 9, cy)], 1.8)
+        cv.poly([(cx - 7, cy + 2), (cx + 7, cy + 2), (cx + 4, cy + 6), (cx - 4, cy + 6)], lip)
+        cv.line(bez((cx - 8, cy + 3), (cx, cy - 1), (cx + 8, cy + 3)), 1.8)
+    else:
+        cv.poly([(cx - 8, cy), (cx + 8, cy - 0.5), (cx + 5, cy + 5), (cx - 5, cy + 5)], lip); cv.poly([(cx - 3, cy + 2), (cx + 3, cy + 2), (cx + 2, cy + 4), (cx - 2, cy + 4)], lipl); cv.line([(cx - 10, cy), (cx + 10, cy - 0.5), (cx + 11, cy - 2)], 1.8)
 
 
 FACE = {'neutral': ('open', (0, 0), 'flat'), 'happy': ('open', (1, -1), 'smile'), 'laugh': ('happy', (-1, -2), 'grin'), 'wink': ('wink', (0, -2), 'smile'),
@@ -117,105 +131,110 @@ FACE = {'neutral': ('open', (0, 0), 'flat'), 'happy': ('open', (1, -1), 'smile')
 
 
 def bust(c, expr='happy', talk=0, blink=False):
-    """One portrait. c: skin, iris, hair (dark, mid, light), deel, panel, trim; hairdo braids | bun | bob | short;
-    hat mongol | loovuuz | cap | flower; beard, mustache, glasses, jewels (silver and turquoise), elder, fem."""
+    """One portrait, the face turned a little to our right. c: skin, iris, hair (dark, mid, light), deel, panel, trim;
+    hairdo braids | bun | bob | short; hat mongol | loovuuz | cap | flower; beard, mustache, glasses, jewels, elder, fem."""
     cv = Canvas2(); fem = c.get('fem', False)
     skin, skin_d = rgb(c['skin']), rgb(c['skin_d'])
     hair, hair_d, hair_l = rgb(c['hair'][1]), rgb(c['hair'][0]), rgb(c['hair'][2])
     deel, deel_d, panel, gold = rgb(c['deel']), rgb(c['deel_d']), rgb(c['panel']), rgb(c['trim'])
-    do = c.get('hairdo', 'short'); hat = c.get('hat')
-    # hair behind: long hair and braids, or a bun
-    if do in ('braids', 'bob', 'bun') and fem:
-        cv.poly([(18, 50), (28, 18), (56, 8), (86, 18), (98, 50), (100, 110 if do == 'braids' else 92), (90, 128 if do == 'braids' else 100), (24, 128 if do == 'braids' else 100), (14, 110 if do == 'braids' else 92)], hair_d)
-    if do == 'braids':
-        for s2 in (-1, 1):
-            x0 = 56 + s2 * 38; cv.poly([(x0 - 7, 84), (x0 + 7, 84), (x0 + 8, 144), (x0 - 8, 144)], hair)
-            for y in range(88, 144, 8): cv.poly([(x0 - 7, y), (x0 + 1, y + 2), (x0 + 7, y + 7), (x0 - 1, y + 5)], hair_l); cv.line([(x0 - 7, y), (x0 + 7, y + 7)], 1.6)
-            cv.line([(x0 - 8, 84), (x0 - 8, 144)], 2.0); cv.line([(x0 + 8, 84), (x0 + 8, 144)], 2.0)
+    do = c.get('hairdo', 'short'); hat = c.get('hat'); long_ = fem and do in ('braids', 'bob', 'long')
+    cv.poly([(0, 0), (UW, 0), (UW, UH), (0, UH)], rgb(c.get('bg', '#3c2d7a')))     # the indigo background
+    # hair behind the head: a full mass framing the face, down to the shoulders for the women
+    if fem:
+        back = [(14, 116 if long_ else 90), (12, 60), (18, 34), (30, 16), (50, 5), (72, 4), (90, 12), (102, 30), (106, 56), (106, 116 if long_ else 90)]
+        cv.poly(back, hair); cv.oline(back, 2.2)
     if do == 'bun':
-        cv.ell(56, 12, 16, 11, hair); cv.oell(56, 12, 16, 11, 2.2); cv.line([(46, 10), (60, 6)], 1.4, hair_l)
-    # the deel: shoulders, a panel of another colour, a high collar with trim and a knot button
+        cv.ell(64, 9, 16, 10, hair); cv.oell(64, 9, 16, 10, 2.2); cv.line([(52, 6), (66, 2)], 1.4, hair_l)
+    # the deel: a dark blue body with teal shoulders, a high mandarin collar edged in gold, a gold knot clasp
     bw = 4 if c.get('broad') else 0
-    body = [(2 - bw, 144), (8 - bw, 120), (34, 112), (78, 112), (104 + bw, 120), (110 + bw, 144)]
-    cv.poly(body, deel); cv.poly([(2 - bw, 144), (8 - bw, 120), (30, 114), (40, 144)], panel); cv.poly([(80, 144), (92, 116), (104 + bw, 120), (110 + bw, 144)], deel_d)
-    cv.oline(body, 2.4)
-    if c.get('fur'):   # a fur collar
-        fur = rgb(c['fur']); cv.poly([(28, 112), (84, 112), (90, 122), (60, 128), (22, 122)], fur); cv.oline([(28, 112), (84, 112), (90, 122), (60, 128), (22, 122)], 2.0)
+    body = [(0, 144), (0, 120), (30 - bw, 108), (92 + bw, 108), (112, 118), (112, 144)]
+    cv.poly(body, deel); cv.line(body[1:-1], 2.2)
+    for sh in ([(0, 144), (0, 122), (28 - bw, 112), (44, 126), (40, 144)], [(76, 144), (82, 128), (100 + bw, 116), (112, 122), (112, 144)]):
+        cv.poly(sh, panel); cv.line(sh[1:-1], 2.0)
+    cv.poly([(44, 126), (66, 128), (66, 144), (40, 144)], deel_d)
+    if c.get('medal'): cv.ell(26, 132, 4.5, 4.5, rgb('#ffcf3a')); cv.oell(26, 132, 4.5, 4.5, 1.6)
+    cv.poly([(44, 92), (72, 92), (72, 112), (44, 112)], skin); cv.poly([(44, 92), (72, 92), (72, 101), (44, 98)], skin_d)     # the neck
+    cv.line([(45, 90), (46, 108)], 2.0); cv.line([(72, 96), (72, 110)], 2.0)
+    if c.get('fur'):
+        fur = rgb(c['fur']); fc = [(30, 108), (94, 106), (98, 118), (66, 126), (28, 118)]; cv.poly(fc, fur); cv.oline(fc, 2.0)
     else:
-        collar = [(40, 108), (72, 108), (76, 124), (60, 132), (40, 124)]
-        cv.poly(collar, deel); cv.line([(40, 108), (40, 124), (60, 132), (76, 124), (72, 108)], 2.4); cv.line([(42, 110), (42, 122), (60, 129), (74, 122)], 2.0, gold)
-    cv.line([(60, 130), (62, 144)], 2.0); cv.line([(56, 137), (68, 137)], 3.0, gold); cv.line([(60, 133), (60, 143)], 2.2, gold)
-    if c.get('medal'): cv.ell(38, 132, 5, 5, rgb('#ffcf3a')); cv.oell(38, 132, 5, 5, 1.6)
-    # the neck and the face (a broader jaw for men)
-    jaw = 0 if fem else 4
-    cv.poly([(46 - jaw / 2, 96), (70 + jaw / 2, 96), (72 + jaw / 2, 112), (44 - jaw / 2, 112)], skin); cv.poly([(46, 98), (70, 98), (70, 104), (46, 104)], skin_d)
-    cv.line([(46 - jaw / 2, 100), (44 - jaw / 2, 112)], 2.0); cv.line([(70 + jaw / 2, 100), (72 + jaw / 2, 112)], 2.0)
-    face = [(26, 52), (30, 34), (56, 26), (84, 34), (88, 54), (88 + jaw / 2, 78), (78 + jaw, 98), (64, 108), (50, 108), (36 - jaw, 98), (26 - jaw / 2, 80)]
-    cv.poly(face, skin); cv.poly([(76, 60), (88, 54), (88 + jaw / 2, 78), (78 + jaw, 98), (66, 104), (74, 86)], skin_d)
-    cv.oline(face, 2.4)
-    for s2 in (-1, 1): cv.ell(56 + s2 * 31, 74, 4.5, 8, skin); cv.oell(56 + s2 * 31, 74, 4.5, 8, 2.0)
-    # the face itself
+        collar = [(36, 100), (68, 110), (86, 104), (88, 118), (68, 128), (38, 116)]
+        cv.poly(collar, deel); cv.poly([(68, 110), (86, 104), (88, 118), (68, 128)], deel_d); cv.oline(collar, 2.2)
+        cv.line([(37, 101), (68, 111), (86, 105)], 2.2, gold); cv.line([(68, 112), (68, 127)], 2.2, gold)
+    cv.line([(61, 126), (75, 126)], 2.2, gold); cv.line([(68, 122), (68, 138)], 2.2, gold)
+    # the face, turned a little to our right: the near cheek and the ear on the left, the far cheek in shade on the right
+    jaw = 0 if fem else 2
+    face = [(36, 50), (44, 36), (62, 28), (82, 32), (92, 44), (94, 58), (93 + jaw, 70), (90 + jaw, 84), (84 + jaw, 95), (74, 102), (66, 104), (56, 100), (44 - jaw, 92), (36 - jaw, 82), (34, 68)]
+    cv.poly(face, skin)
+    cv.poly([(88, 56), (94, 58), (93 + jaw, 70), (90 + jaw, 84), (84 + jaw, 95), (76, 100), (86, 84), (88, 70)], skin_d)
+    cv.oline(face, 2.2)
+    cv.ell(31, 76, 5, 8, skin); cv.ell(32, 77, 2.4, 4.5, skin_d); cv.oell(31, 76, 5, 8, 2.0)               # the ear we see
+    # the features
     ek, (bi, bo), mk = FACE[expr]
     brows(cv, c, bi + (0 if fem else 1), bo)
     if blink and ek in ('open', 'wide', 'look', 'down', 'half'): eyes(cv, c, 'shut')
-    elif ek == 'wink':
-        eyes(cv, c, 'open'); cv.poly([(65, 58), (85, 58), (85, 76), (65, 76)], skin); cv.line(bez((64, 71), (73, 63), (82, 71)), 3.0)
+    elif ek == 'wink': eyes(cv, c, 'open', only=-1); eyes(cv, c, 'happy', only=1)
     else: eyes(cv, c, ek, (2, -2) if ek == 'look' else (0, 1) if ek == 'down' else (0, 0))
-    if c.get('elder'):   # lines of age by the eyes and the mouth
-        for s2 in (-1, 1): cv.line([(56 + s2 * 28, 70), (56 + s2 * 30, 74)], 1.2, skin_d); cv.line([(56 + s2 * 10, 90), (56 + s2 * 13, 98)], 1.4, skin_d)
-    cv.line([(62, 76), (64, 84), (60, 86)], 1.8)
-    if c.get('mark'): cv.ell(40, 84, 1.6, 1.6, INK)
+    if c.get('elder'):
+        cv.line([(38, 70), (40, 74)], 1.2, skin_d); cv.line([(92, 66), (91, 70)], 1.2, skin_d); cv.line([(58, 82), (59, 90)], 1.2, skin_d); cv.line([(82, 80), (81, 88)], 1.2, skin_d)
+    cv.line([(72, 72), (73, 78), (70, 81)], 2.0); cv.ell(67.5, 80.5, 1.0, 1.0, INK)                          # the nose line and a nostril
+    if c.get('mark'): cv.ell(89, 72, 1.1, 1.1, INK)                                                         # the beauty mark under the far eye
     mouth(cv, c, mk, talk)
-    if expr in ('happy', 'laugh', 'shy', 'excited', 'wink'):
-        for s2 in (-1, 1): cv.ell(56 + s2 * 20, 86, 6, 3, (236, 140, 120))
+    if expr == 'shy': cv.ell(48, 80, 5, 2.5, (236, 140, 120)); cv.ell(86, 78, 4, 2.5, (236, 140, 120))
     if c.get('mustache') or c.get('beard'):
-        if c.get('beard'): cv.poly([(34, 92), (78, 92), (74, 112), (56, 120), (38, 112)], hair); cv.oline([(34, 92), (78, 92), (74, 112), (56, 120), (38, 112)], 2.0); cv.line([(50, 100), (52, 114)], 1.4, hair_l)
-        cv.poly([(42, 92), (54, 88), (64, 88), (76, 92), (72, 96), (64, 92), (54, 92), (46, 96)], hair); cv.oline([(42, 92), (54, 88), (64, 88), (76, 92), (72, 96), (64, 92), (54, 92), (46, 96)], 1.6)
+        if c.get('beard'): bd = [(46, 90), (92, 84), (86, 106), (70, 114), (52, 106)]; cv.poly(bd, hair); cv.oline(bd, 2.0); cv.line([(62, 98), (64, 110)], 1.4, hair_l)
+        mu = [(56, 87), (66, 83), (74, 83), (84, 85), (82, 89), (74, 87), (66, 87), (58, 91)]; cv.poly(mu, hair); cv.oline(mu, 1.6)
     if c.get('glasses'):
-        for s2 in (-1, 1): cv.oell(56 + s2 * 17, 69, 11, 9, 2.2)
-        cv.line([(50, 68), (62, 68)], 2.0)
-    # hair in front
+        cv.oell(51, 66, 12, 9.5, 2.2); cv.oell(83, 64, 9, 8.5, 2.2); cv.line([(63, 65), (74, 64)], 2.0); cv.line([(39, 66), (34, 70)], 2.0)
+    # hair in front: from a parting, locks sweep out over the forehead on both sides; long hair falls by the cheeks
     if fem:
-        cv.poly([(24, 56), (26, 30), (44, 14), (56, 12), (54, 26), (44, 40), (34, 56)], hair)
-        cv.poly([(56, 12), (72, 14), (90, 30), (92, 58), (82, 50), (76, 34), (60, 24)], hair)
-        cv.poly([(56, 18), (48, 30), (40, 44), (42, 52), (50, 38), (58, 26)], hair)
-        cv.poly([(60, 22), (70, 30), (78, 42), (74, 48), (66, 34), (60, 28)], hair)
-        for pts in ([(26, 30), (40, 18)], [(34, 42), (46, 24)], [(70, 18), (84, 34)], [(80, 46), (74, 30)], [(50, 30), (44, 44)], [(66, 28), (74, 42)]): cv.line(pts, 1.6)
-        side = 96 if do in ('braids', 'bob') else 70
-        cv.poly([(22, 56), (30, 54), (32, side), (24, side - 4)], hair); cv.poly([(94, 56), (86, 54), (84, side), (92, side - 4)], hair)
-        cv.line([(22, 56), (24, side - 4)], 2.0); cv.line([(94, 56), (92, side - 4)], 2.0)
-    else:   # short hair: a neat top with a side part
-        cv.poly([(24, 52), (26, 30), (40, 16), (60, 12), (80, 16), (92, 32), (92, 52), (84, 40), (64, 34), (44, 36), (32, 44)], hair)
-        for pts in ([(36, 24), (48, 34)], [(54, 16), (60, 32)], [(70, 18), (78, 36)]): cv.line(pts, 1.6)
-    cv.line([(46, 16), (66, 18), (88, 32)], 1.4, hair_l)
-    cv.line([(18 if fem else 24, 52), (28, 18), (56, 8), (86, 18), (98 if fem else 92, 52)], 2.4)
+        left = [(60, 6), (57, 20), (53, 33), (50, 44), (46, 37), (43, 48), (40, 43), (36, 56), (35, 72), (24, 76), (20, 52), (26, 28), (40, 12)]
+        right = [(62, 6), (66, 18), (72, 30), (80, 38), (86, 47), (88, 41), (92, 50), (94, 56), (95, 74), (96, 96), (104, 96), (106, 58), (100, 28), (84, 10)]
+        for part in (left, right): cv.poly(part, hair)
+        cv.line(left[:9], 2.2); cv.line(right[:11], 2.2)
+        for pts in ([(56, 8), (42, 20), (30, 40)], [(54, 16), (44, 30), (38, 48)], [(50, 6), (32, 14), (22, 34)], [(48, 26), (42, 42)],
+                    [(64, 8), (80, 16), (94, 36)], [(66, 16), (78, 28), (88, 42)], [(72, 6), (90, 12), (102, 32)], [(98, 44), (100, 88)],
+                    [(18, 50), (16, 92)], [(26, 58), (24, 82)]):
+            cv.line(bez(*pts) if len(pts) == 3 else pts, 1.6)
+        cv.line([(48, 10), (60, 6), (76, 8)], 1.4, hair_l)
+    else:   # men: short hair under the hat, or a side part
+        top = [(34, 56), (34, 30), (46, 14), (64, 8), (84, 14), (96, 32), (96, 58), (90, 44), (70, 36), (50, 36), (40, 46)]
+        cv.poly(top, hair); cv.oline(top, 2.2)
+        for pts in ([(42, 24), (54, 34)], [(62, 12), (66, 30)], [(76, 16), (86, 34)]): cv.line(pts, 1.6)
+        cv.line([(50, 14), (70, 12), (90, 28)], 1.4, hair_l)
+    if do == 'braids':   # two thick braids hanging in front of the shoulders
+        for x0, top, w in ((22, 84, 9), (98, 92, 7)):
+            for y in range(top, 146, 9):
+                lobe = [(x0 - w, y), (x0, y - 2), (x0 + w, y + 2), (x0 + w, y + 8), (x0, y + 10), (x0 - w, y + 6)]
+                cv.poly(lobe, hair); cv.line([(x0 - w, y + 6), (x0, y + 10), (x0 + w, y + 8)], 2.0); cv.line([(x0 - w + 2, y + 2), (x0 + 1, y + 1)], 1.4, hair_l)
+            cv.line([(x0 - w, top), (x0 - w, 144)], 2.0); cv.line([(x0 + w, top + 2), (x0 + w, 144)], 2.0)
     # hats
     if hat == 'mongol':
-        cv.poly([(36, 22), (46, 5), (66, 5), (76, 22)], rgb('#d83a2a')); cv.poly([(52, 5), (60, 5), (58, 22), (54, 22)], rgb('#ff7050')); cv.oline([(36, 22), (46, 5), (66, 5), (76, 22)], 2.2)
-        cv.poly([(18, 30), (94, 30), (88, 16), (24, 16)], rgb('#3a2820')); cv.oline([(18, 30), (94, 30), (88, 16), (24, 16)], 2.2); cv.ell(56, 5, 3.4, 3.4, rgb('#ffcf3a')); cv.oell(56, 5, 3.4, 3.4, 1.4)
+        cv.poly([(44, 22), (54, 4), (74, 4), (84, 22)], rgb('#d83a2a')); cv.poly([(60, 4), (68, 4), (66, 22), (62, 22)], rgb('#ff7050')); cv.oline([(44, 22), (54, 4), (74, 4), (84, 22)], 2.2)
+        cv.poly([(24, 34), (104, 34), (98, 18), (30, 18)], rgb('#3a2820')); cv.oline([(24, 34), (104, 34), (98, 18), (30, 18)], 2.2); cv.ell(64, 5, 3.4, 3.4, rgb('#ffcf3a')); cv.oell(64, 5, 3.4, 3.4, 1.4)
     elif hat == 'loovuuz':
-        cv.poly([(34, 18), (56, 2), (78, 18)], rgb('#2f6fdb')); cv.oline([(34, 18), (56, 2), (78, 18)], 2.2)
-        fur = rgb('#8a5a33'); cv.poly([(16, 34), (96, 34), (96, 16), (16, 16)], fur); cv.oline([(16, 34), (96, 34), (96, 16), (16, 16)], 2.2)
-        for s2 in (-1, 1): x = 56 + s2 * 38; cv.poly([(x - 6, 30), (x + 6, 30), (x + 6, 74), (x - 6, 74)], fur); cv.oline([(x - 6, 30), (x + 6, 30), (x + 6, 74), (x - 6, 74)], 2.0)
-        cv.line([(20, 22), (92, 22)], 1.6, rgb('#c49a6a'))
+        cv.poly([(42, 18), (64, 2), (86, 18)], rgb('#2f6fdb')); cv.oline([(42, 18), (64, 2), (86, 18)], 2.2)
+        fur = rgb('#8a5a33'); band = [(20, 36), (106, 36), (106, 16), (20, 16)]; cv.poly(band, fur); cv.oline(band, 2.2)
+        for x in (24, 102): fl = [(x - 6, 32), (x + 6, 32), (x + 6, 80), (x - 6, 80)]; cv.poly(fl, fur); cv.oline(fl, 2.0)
+        cv.line([(24, 22), (102, 22)], 1.6, rgb('#c49a6a'))
     elif hat == 'cap':
-        cv.poly([(22, 34), (30, 12), (56, 4), (82, 12), (92, 34)], rgb('#3a5a8a')); cv.oline([(22, 34), (30, 12), (56, 4), (82, 12), (92, 34)], 2.2)
-        cv.poly([(56, 30), (102, 30), (100, 38), (56, 36)], rgb('#2a3f66')); cv.oline([(56, 30), (102, 30), (100, 38), (56, 36)], 2.0)
+        cp = [(28, 38), (36, 12), (64, 4), (90, 12), (100, 38)]; cv.poly(cp, rgb('#3a5a8a')); cv.oline(cp, 2.2)
+        br = [(64, 34), (110, 34), (108, 42), (64, 40)]; cv.poly(br, rgb('#2a3f66')); cv.oline(br, 2.0)
     elif hat == 'flower':
-        cv.poly([(24, 30), (88, 30), (88, 36), (24, 36)], rgb('#ff6fa8')); cv.oline([(24, 30), (88, 30), (88, 36), (24, 36)], 1.8)
-        cv.ell(80, 28, 7, 7, rgb('#ffd34a')); cv.ell(80, 28, 3, 3, rgb('#ff8a1f')); cv.oell(80, 28, 7, 7, 1.6)
-    # silver and turquoise jewellery
+        hb = [(24, 24), (102, 24), (102, 30), (24, 30)]; cv.poly(hb, rgb('#ff6fa8')); cv.oline(hb, 1.8)
+        cv.ell(92, 24, 7, 7, rgb('#ffd34a')); cv.ell(92, 24, 3, 3, rgb('#ff8a1f')); cv.oell(92, 24, 7, 7, 1.6)
+    # silver and turquoise: a chain from the parting to a framed oval at the hairline with a drop below it, and on each
+    # side a square plate with long strands of silver and turquoise
     if c.get('jewels'):
-        silver, turq = rgb('#d6dde6'), rgb('#22b4c8')
-        cv.line([(50, 10), (56, 28)], 2.4, silver)
-        cv.ell(57, 30, 5, 4.4, silver); cv.ell(57, 30, 3.2, 2.8, turq); cv.oell(57, 30, 5, 4.4, 1.6)
-        cv.line([(57, 34), (57, 44)], 2.0, silver); cv.ell(57, 44, 2.2, 2.4, turq); cv.oell(57, 44, 2.2, 2.4, 1.2)
-        for s2 in (-1, 1):
-            x = 56 + s2 * 36
-            cv.poly([(x - 5, 56), (x + 5, 56), (x + 5, 66), (x - 5, 66)], silver); cv.poly([(x - 3, 58), (x + 3, 58), (x + 3, 64), (x - 3, 64)], turq)
-            cv.oline([(x - 5, 56), (x + 5, 56), (x + 5, 66), (x - 5, 66)], 1.4)
-            for dx in (-3, 0, 3):
-                cv.line([(x + dx * 1.3, 66), (x + dx * 1.3, 94)], 2.4, silver); cv.ell(x + dx * 1.3, 74, 2, 2, turq); cv.ell(x + dx * 1.3, 84, 2, 2, turq); cv.ell(x + dx * 1.3, 94, 1.8, 2.2, silver)
+        silver, turq, white = rgb('#d6dde6'), rgb('#22b4c8'), rgb('#ffffff')
+        cv.line([(55, 6), (62, 18)], 2.0, silver)
+        cv.ell(63, 24, 6.5, 6.5, silver); cv.ell(63, 24, 4.0, 4.4, turq); cv.ell(61.5, 22, 1.0, 1.0, white); cv.oell(63, 24, 6.5, 6.5, 1.6)
+        cv.line([(64, 31), (65, 39)], 2.0, silver); cv.ell(65, 42, 2.0, 2.2, turq); cv.ell(65, 46.5, 1.6, 1.8, white)
+        for x0, x1, bottom in ((14, 24, 84), (96, 104, 80)):
+            pl = [(x0, 44), (x1, 44), (x1, 54), (x0, 54)]
+            cv.poly(pl, silver); cv.poly([(x0 + 2.5, 46.5), (x1 - 2.5, 46.5), (x1 - 2.5, 51.5), (x0 + 2.5, 51.5)], turq); cv.oline(pl, 1.6)
+            for k, xx in enumerate((x0 + 2.5, x1 - 2.5)):
+                for y in range(55, bottom, 4): cv.line([(xx, y), (xx, y + 4)], 2.0, turq if (y // 4 + k) % 2 and y < 70 else silver)
     return finish(cv)
 
 
@@ -223,7 +242,7 @@ WARM, TAN, BROWN, LIGHT = ('#eaa77c', '#c9805a'), ('#d9986c', '#b87850'), ('#c08
 DARK, GREY = ('#2e170e', '#4a2818', '#6e3e26'), ('#8a8690', '#c4c0c8', '#ecebf0')
 BLACKH = ('#1c1014', '#2e1c22', '#4a3440')
 PEOPLE = {
-    'bolormaa': dict(skin=WARM[0], skin_d=WARM[1], iris='#6a3418', brow='#2a1610', hair=DARK, deel='#1f3c94', deel_d='#142a6a', panel='#1f8c90', trim='#d9a33c', hairdo='braids', fem=True, jewels=True, mark=True),
+    'bolormaa': dict(skin='#f0a77a', skin_d='#d7865c', iris='#5a2a12', brow='#1a1014', hair=('#2a140c', '#4a2616', '#6a3a22'), deel='#1d3a8f', deel_d='#132a66', panel='#1a8a8a', trim='#d4a23a', hairdo='braids', fem=True, jewels=True, mark=True),
     'emee': dict(skin=WARM[0], skin_d=WARM[1], iris='#5a3a2a', brow='#6a6470', hair=GREY, deel='#6a3fb0', deel_d='#4a2a80', panel='#8f5bd6', trim='#ffcf3a', hairdo='bun', fem=True, glasses=True, elder=True),
     'zasuul': dict(skin=TAN[0], skin_d=TAN[1], iris='#4a2a1a', hair=BLACKH, deel='#e8a812', deel_d='#b07a00', panel='#ffc94a', trim='#d83a2a', hat='mongol', mustache=True),
     'general': dict(skin=BROWN[0], skin_d=BROWN[1], iris='#3a2014', hair=BLACKH, deel='#2f7a3a', deel_d='#1f5428', panel='#3f9a4a', trim='#ffcf3a', hat='loovuuz', mustache=True, broad=True, medal=True),
