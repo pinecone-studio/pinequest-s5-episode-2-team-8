@@ -20,6 +20,7 @@ class FakePool {
     this.progress = new Map();
     this.deviceTickets = new Map();
     this.families = new Map();
+    this.erased = new Set();
   }
   on(event, handler) { this.handlers[event] = handler; }
 
@@ -51,7 +52,7 @@ class FakePool {
           return { rows: state ? [{ state }] : [] };
         }
         if (/^INSERT INTO naadamy_identities/.test(statement)) {
-          if (this.identities.has(values[0])) return { rows: [] };
+          if (this.identities.has(values[0]) || (/NOT EXISTS \(SELECT 1 FROM naadamy_erased/.test(statement) && this.erased.has(values[0]))) return { rows: [] };
           this.identities.set(values[0], values[1]);
           return { rows: [{ id: values[0] }] };
         }
@@ -74,16 +75,33 @@ class FakePool {
         }
         if (/^INSERT INTO naadamy_families/.test(statement)) {
           if (this.families.has(values[0])) return { rows: [] };
-          this.families.set(values[0], JSON.parse(values[1]));
+          this.families.set(values[0], { members: JSON.parse(values[1]), pin: JSON.parse(values[2]) });
           return { rows: [{ code: values[0] }] };
         }
-        if (/^SELECT members FROM naadamy_families WHERE code = \$1( FOR UPDATE)?$/.test(statement)) {
-          const members = this.families.get(values[0]);
-          return { rows: members ? [{ members: structuredClone(members) }] : [] };
+        if (/^SELECT members, pin FROM naadamy_families WHERE code = \$1( FOR UPDATE)?$/.test(statement)) {
+          const row = this.families.get(values[0]);
+          return { rows: row ? [structuredClone(row)] : [] };
         }
-        if (/^UPDATE naadamy_families SET members =/.test(statement)) {
-          this.families.set(values[0], JSON.parse(values[1]));
+        if (/^UPDATE naadamy_families SET members = \$2::jsonb, pin = \$3::jsonb/.test(statement)) {
+          this.families.set(values[0], { members: JSON.parse(values[1]), pin: JSON.parse(values[2]) });
           return { rows: [] };
+        }
+        if (/^DELETE FROM naadamy_families WHERE code = \$1$/.test(statement)) {
+          this.families.delete(values[0]);
+          return { rows: [] };
+        }
+        const erased = /^DELETE FROM (naadamy_\w+) WHERE (?:player_)?id = ANY\(\$1::text\[\]\)$/.exec(statement);
+        if (erased) {
+          const ids = new Set(values[0]);
+          const maps = { naadamy_wallets: this.wallets, naadamy_player_progress: this.progress, naadamy_player_tickets: this.deviceTickets, naadamy_identities: this.identities, naadamy_players: new Map() };
+          if (erased[1] === 'naadamy_wallet_ops') { for (const key of [...this.walletOperations.keys()]) if (ids.has(key.slice(0, key.lastIndexOf(':')).split(':')[0])) this.walletOperations.delete(key); }
+          else for (const id of ids) maps[erased[1]].delete(id);
+          return { rows: [] };
+        }
+        if (/^DELETE FROM naadamy_erased WHERE erased_at </.test(statement)) return { rows: [] };
+        if (/^INSERT INTO naadamy_erased \(id\) SELECT unnest/.test(statement)) { for (const id of values[0]) this.erased.add(id); return { rows: [] }; }
+        if (/^SELECT code, state FROM naadamy_rooms ORDER BY code FOR UPDATE$/.test(statement)) {
+          return { rows: [...this.state].sort(([x], [y]) => (x < y ? -1 : 1)).map(([code, state]) => ({ code, state: structuredClone(state) })) };
         }
         if (/^INSERT INTO naadamy_wallets/.test(statement)) {
           if (!this.wallets.has(values[0])) this.wallets.set(values[0], {
@@ -279,6 +297,39 @@ try {
   assert.deepEqual(dbState.get('BAT25'), persisted.BAT25, 'new and updated room chat is upserted');
   assert.deepEqual(dbState.get('NUTAG').lots, ['atomic update'], 'chat snapshots do not overwrite shared lot state');
   assert.ok(pool.calls.some((sql) => sql === 'COMMIT'), 'database writes are committed');
+
+  // erasing a family: every table, its gers and chat lines, in one transaction
+  const pin = { pinHash: 'a'.repeat(64), pinSalt: 'b'.repeat(32), pinFails: 0, pinUntil: 0, pinLocks: 1, recoveryHash: 'c'.repeat(64), recoverySalt: 'd'.repeat(32) };
+  assert.equal(await store.createFamily('ERAS2345', { ...familyMember, id: 'erase-one' }, pin), true);
+  assert.equal((await store.getFamily('ERAS2345')).recoveryHash, pin.recoveryHash, 'PostgreSQL keeps the PIN and recovery code with the family');
+  await store.mutateFamily('ERAS2345', (family) => { family.members.push({ ...familyMember, id: 'erase-two' }); family.pinFails = 2; return { changed: true, result: null }; });
+  assert.equal((await store.getFamily('ERAS2345')).pinFails, 2, 'a PIN change is saved with the family');
+  for (const id of ['erase-one', 'erase-two']) {
+    await store.authenticatePlayer(id, 'e'.repeat(64)); await store.addDeviceTicket(id, 'f'.repeat(64));
+    await store.getAccount(id); await store.mutateWallet(id, '9'.repeat(32), () => ({ changed: false, result: { accepted: false } })); await store.getProgress(id, {});
+  }
+  await store.mutateRoom('ERASE', { lots: [], chat: [] }, (state) => {
+    state.lots = [{ by: 'erase-one', n: 'A' }, { by: 'someone', n: 'B' }, { by: 'erase-two', n: 'C' }];
+    state.chat = [{ k: 'p', id: 'erase-two', n: 'C', i: 0 }, { k: 'p', id: 'someone', n: 'B', i: 1 }];
+    return { changed: true };
+  });
+  assert.equal(await store.eraseFamily('ERAS2345', () => ({ erase: false, result: 'kept' })), 'kept');
+  assert.ok(pool.families.has('ERAS2345'), 'a refused erase keeps the family');
+  const callsBefore = pool.calls.length;
+  assert.deepEqual(await store.eraseFamily('ERAS2345', (family) => ({ erase: true, result: family.members.length })), 2);
+  const eraseCalls = pool.calls.slice(callsBefore);
+  assert.equal(eraseCalls[0], 'BEGIN'); assert.equal(eraseCalls.at(-1), 'COMMIT');
+  assert.equal(eraseCalls.filter((sql) => sql === 'BEGIN').length, 1, 'the erase is one transaction');
+  assert.ok(!pool.families.has('ERAS2345'));
+  for (const map of [pool.identities, pool.wallets, pool.progress, pool.deviceTickets]) assert.ok(!map.has('erase-one') && !map.has('erase-two'));
+  assert.ok(![...pool.walletOperations.keys()].some((key) => key.startsWith('erase-')), 'wallet operations are erased');
+  assert.ok(pool.identities.has('identity-player') && pool.wallets.has('identity-player'), 'other players are kept');
+  assert.deepEqual(dbState.get('ERASE').lots, [null, { by: 'someone', n: 'B' }, null], 'their gers are freed');
+  assert.deepEqual(dbState.get('ERASE').chat, [{ k: 'p', id: 'someone', n: 'B', i: 1 }], 'their chat lines are dropped');
+  assert.equal(await store.eraseFamily('ERAS2345', (family) => ({ erase: false, result: family })), null, 'a second erase finds no family');
+  assert.deepEqual(pool.notifications.at(-1).payload, { t: 'family-erased', ids: ['erase-one', 'erase-two'] }, 'every instance is told which children were erased');
+  assert.equal(await store.authenticatePlayer('erase-one', 'e'.repeat(64)), false, 'an erased id is not taken again with its old ticket');
+  assert.equal(await store.authenticatePlayer('erase-two', '9'.repeat(64)), false, 'nor with a new one');
   await store.close();
 
   const failingPool = new FakePool({ state: new Map(), failOnUpsert: true });

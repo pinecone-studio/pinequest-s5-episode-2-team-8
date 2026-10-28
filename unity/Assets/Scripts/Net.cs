@@ -205,7 +205,13 @@ public sealed class Net
                 if (was) g.Toast(Loc.L("Сервертэй холболт тасарлаа. Дахин холбогдож байна…", "Lost the server. Reconnecting…"));
                 return;
             case "error":
-                if (m["why"].S == "identity")
+                if (m["why"].S == "erased") // this child's family was erased on the server: forget it here
+                {
+                    replaced = true; closed = true; status = "solo"; others.Clear();
+                    if (g.V != null) Family.Gone(g, g.V);
+                    return;
+                }
+                if (m["why"].S == "identity") // a wrong ticket, or this device's dropped out of the last 8: the family stays
                 {
                     replaced = true; closed = true; status = "solo"; others.Clear();
                     g.Toast(Loc.L("Токен хүчингүй байна. Дахин нэвтэрнэ үү.", "Invalid ticket. Please sign in again."));

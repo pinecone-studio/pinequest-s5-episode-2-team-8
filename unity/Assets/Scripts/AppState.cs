@@ -18,6 +18,9 @@ public sealed class AppState
     public string activeId = "";
     public string server = "", familyCode = "";   // the server this device last used, and its family code (Family.cs)
     public string playMode = "";                   // "solo": play alone, never connect · "multi": connect and play with others (ModeModal)
+    // the device's grown-up PIN (DevicePin in Family.cs): only PBKDF2 hashes with their salts, the wrong tries and the lock
+    public string pinHash = "", pinSalt = "", recHash = "", recSalt = "";
+    public int pinFails, pinLocks; public long pinUntil;
     public List<string> profiles = new List<string>();
     public List<FamilyMember> family = new List<FamilyMember>
     {
@@ -32,7 +35,7 @@ public sealed class AppState
 
     public static AppState Load()
     {
-        try { string raw = PlayerPrefs.GetString(KEY, ""); if (raw != "") { var s = JsonUtility.FromJson<AppState>(raw); if (s != null) { s.server ??= ""; s.familyCode ??= ""; return s; } } }
+        try { string raw = PlayerPrefs.GetString(KEY, ""); if (raw != "") { var s = JsonUtility.FromJson<AppState>(raw); if (s != null) { s.server ??= ""; s.familyCode ??= ""; s.pinHash ??= ""; s.pinSalt ??= ""; s.recHash ??= ""; s.recSalt ??= ""; return s; } } }
         catch (Exception e) { Debug.LogWarning("Naadamy: could not read the app state. " + e.Message); }
         return new AppState();
     }

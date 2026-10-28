@@ -11,6 +11,7 @@ const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-shared-presence-'));
 class FakePool {
   constructor() {
     this.players = new Map();
+    this.families = new Map();
     this.listeners = [];
     this.handlers = {};
   }
@@ -42,6 +43,12 @@ class FakePool {
       for (const listener of this.listeners) listener.emit('notification', notification);
       return { rows: [] };
     }
+    if (/^SELECT members, pin FROM naadamy_families WHERE code = \$1 FOR UPDATE$/.test(statement)) {
+      const row = this.families.get(values[0]);
+      return { rows: row ? [structuredClone(row)] : [] };
+    }
+    if (/^DELETE FROM naadamy_families WHERE code/.test(statement)) { this.families.delete(values[0]); return { rows: [] }; }
+    if (/^DELETE FROM naadamy_\w+ WHERE (player_)?id = ANY|^DELETE FROM naadamy_erased|^INSERT INTO naadamy_erased/.test(statement)) return { rows: [] };
     if (/^SELECT instance_id FROM naadamy_players/.test(statement)) {
       const player = this.players.get(values[0]);
       return { rows: player ? [{ instance_id: player.instance_id }] : [] };
@@ -136,8 +143,14 @@ try {
   assert.deepEqual(await storeA.refreshPresence('instance-a'), [{ id: 'stale-player', room_code: 'ABC12' }],
     'heartbeat cleanup reports expired players for leave broadcasts');
   assert.equal(pool.players.has('stale-player'), false, 'heartbeat removes expired presence rows');
+  // an erase on one instance reaches every instance, so each can close those children's sockets and drop their chat
+  pool.families.set('ERAS2345', { members: [{ id: 'kid-one' }, { id: 'kid-two' }], pin: {} });
+  eventsA.length = 0; eventsB.length = 0;
+  assert.equal(await storeA.eraseFamily('ERAS2345', () => ({ erase: true, result: 'erased' })), 'erased');
+  assert.deepEqual(eventsB, [{ t: 'family-erased', ids: ['kid-one', 'kid-two'] }], 'the other instance hears which children were erased');
+  assert.deepEqual(eventsA, eventsB, 'the erasing instance hears it too (dropping them twice is harmless)');
   await storeA.close();
-  console.log('Shared presence: instance discovery, replacement safety, updates and event fanout passed.');
+  console.log('Shared presence: instance discovery, replacement safety, updates, event fanout and family erase fanout passed.');
 } finally {
   rmSync(dataDir, { recursive: true, force: true });
 }

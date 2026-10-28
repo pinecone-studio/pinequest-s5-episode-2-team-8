@@ -74,14 +74,22 @@ public sealed partial class Game
 
     // ================================================================ family / parent dashboard
     float parentUntil = -1;
-    public void OpenFamily() { if (Time.realtimeSinceStartup < parentUntil) Open(new FamilyPage()); else Open(new ParentGate(() => { parentUntil = Time.realtimeSinceStartup + 600; Open(new FamilyPage()); })); }
+    /** The parents' menu stays open 10 minutes after the gate, with the typed PIN in memory; then both are forgotten. */
+    public void OpenFamily()
+    {
+        if (Time.realtimeSinceStartup < parentUntil) { Open(new FamilyPage()); return; }
+        Family.pin = "";
+        Open(new ParentGate(() => { parentUntil = Time.realtimeSinceStartup + 600; Open(new FamilyPage()); }, true));
+    }
     sealed class FamilyPage : Page
     {
         protected override string Tab => "family";
         string childId; string famName = ""; int famFace;
         protected override string Title => Loc.L("Эцэг эхийн самбар", "Parent dashboard");
+        public override void Closed(Game g) => Family.pin = ""; // the PIN never outlives the parents' menu
         protected override void Body(Game g)
         {
+            if (Time.realtimeSinceStartup >= g.parentUntil) Family.pin = ""; // the 10 minutes are over: the next family action asks again
             var app = g.App; var kids = app.profiles.Select(SaveData.Load).ToList();
             var child = kids.FirstOrDefault(k => k.id == childId) ?? (kids.FirstOrDefault(k => k.id == g.V.id) ?? g.V);
             if (child.id == g.V.id) child = g.V;
@@ -143,7 +151,7 @@ public sealed partial class Game
             if (g.Btn(Loc.L("Бүх өгөгдлийг устгах", "Erase all data"), false, 34)) g.Later(() => g.Open(new ConfirmModal(Loc.L("Бүх өгөгдлийг устгах уу?", "Erase all data?"), Loc.L("Профайл, ахиц, тохиргоо устна.", "Profiles, progress and settings will be erased."), () => { PlayerPrefs.DeleteAll(); PlayerPrefs.Save(); g.App = new AppState(); g.V = null; g.CloseAll(); })));
         }
         // the family code: made here, then each child is added with their 3 pictures so they can log in on other devices
-        bool busy; string joinCode = "", famErr = "", membersCode; List<J> members;
+        bool busy, needsPin; string joinCode = "", famErr = "", membersCode; List<J> members;
         void FamilyCard(Game g, List<SaveData> kids)
         {
             var app = g.App;
@@ -152,6 +160,7 @@ public sealed partial class Game
             if (string.IsNullOrEmpty(app.familyCode))
             {
                 g.Text(Loc.L("Код үүсгэвэл хүүхдүүд өөр утас, компьютер дээр нууц зургаараа нэвтэрч, ахицаа үргэлжлүүлнэ.", "With a family code, your children can log in on another phone or computer with their secret pictures and keep their progress."));
+                g.Small(Loc.L("Таны том хүний ПИН код гэр бүлийн ПИН код болно: хүүхэд нэмэх, хасах, зураг солиход хэрэгтэй.", "Your grown-up PIN becomes the family PIN: it is needed to add or take out a child or give new pictures."));
                 if (g.Btn(busy ? "…" : Loc.L("Гэр бүлийн код үүсгэх", "Make a family code"), true, 44, !busy)) g.Later(() => AddChild(g, kids.FirstOrDefault(k => k.code != "") ?? g.V));
                 g.Small(Loc.L("Өөр төхөөрөмж дээр код үүсгэсэн бол:", "Made a code on another device already?"));
                 GUILayout.BeginHorizontal();
@@ -166,6 +175,10 @@ public sealed partial class Game
                         busy = false;
                         if (!r["ok"].B) { famErr = Family.Why(r); return; }
                         app.familyCode = code; app.server = Family.ServerOf(g, g.V).Trim(); app.Save();
+                        // the family's own PIN, for adding this device's children; it becomes this device's PIN once it works.
+                        // Not this device's PIN: cancelled, the next "Add to family" asks again
+                        Family.pin = "";
+                        if (!r["needsPin"].B) g.Later(() => g.Open(new PinModal(Loc.L("Гэр бүлийн ПИН код", "Family PIN"), Loc.L("Энэ гэр бүлийн том хүний ПИН кодыг оруулаарай:", "Enter this family's grown-up PIN:"), pin => Family.pin = pin)));
                     }));
                 });
                 GUILayout.EndHorizontal();
@@ -178,9 +191,22 @@ public sealed partial class Game
                 if (membersCode != app.familyCode)
                 {
                     string c = membersCode = app.familyCode; members = null;
-                    g.StartCoroutine(Family.Post(Family.ServerOf(g, g.V), "{\"act\":\"members\",\"code\":" + J.Quote(c) + "}", r => { if (membersCode == c) members = r["ok"].B ? r["members"].ToList() : new List<J>(); }));
+                    g.StartCoroutine(Family.Post(Family.ServerOf(g, g.V), "{\"act\":\"members\",\"code\":" + J.Quote(c) + "}", r =>
+                    {
+                        if (membersCode != c) return;
+                        if (r["reason"].S == "no-family" && c == app.familyCode) { Family.Gone(g, null); membersCode = null; return; } // erased, or its last child taken out
+                        members = r["ok"].B ? r["members"].ToList() : new List<J>(); needsPin = r["needsPin"].B;
+                    }));
                 }
                 if (members == null) g.Small(Loc.L("Ачаалж байна…", "Loading…"));
+                else if (needsPin) // a family made before the PIN: anyone with the code could still change it
+                {
+                    GUILayout.BeginVertical(g.sBtn);
+                    GUILayout.Label("<b>" + Loc.L("Том хүний ПИН код тавих", "Set a grown-up PIN") + "</b>", g.sLabel);
+                    g.Small(Loc.L("Энэ гэр бүлд ПИН код алга. Тавьвал зөвхөн том хүн хүүхэд нэмж, хасаж, зураг сольж чадна. Таны том хүний ПИН код гэр бүлийн ПИН код болно.", "This family has no PIN yet. With one, only a grown-up can add or take out children or give new pictures. Your grown-up PIN becomes the family PIN."));
+                    if (g.SmallBtn(Loc.L("ПИН код тавих", "Set the PIN"), true, 140, !busy)) g.Later(() => WithPin(g, pin => { string rec = DevicePin.NewRecovery(); Run(g, Family.SetPin(g, pin, null, rec, r => Done(g, r, Loc.L("Гэр бүлд ПИН код тавилаа", "The family has a PIN now"), rec))); }));
+                    GUILayout.EndVertical();
+                }
                 foreach (var m in members ?? new List<J>())
                 {
                     string mid = m["id"].S, mname = m["name"].S; int mav = m["avatar"].I; var kid = kids.FirstOrDefault(k => k.id == mid);
@@ -188,11 +214,11 @@ public sealed partial class Game
                     if (g.SmallBtn(Loc.L("Шинэ зураг", "New pictures"), false, 110, !busy)) g.Later(() =>
                     {
                         if (kid != null) { var p = kid.id == g.V.id ? g.V : kid; g.Open(new PicturesModal(p.name, p.avatar, code => { p.code = code; p.Save(); AddChild(g, p); })); } // its own device changes them
-                        else g.Open(new PicturesModal(mname, mav, code => Manage(g, "pictures", mid, code, Loc.L($"{mname}-ийн зураг солигдлоо", $"{mname} has new pictures"))));
+                        else g.Open(new PicturesModal(mname, mav, code => WithPin(g, _ => Manage(g, "pictures", mid, code, Loc.L($"{mname}-ийн зураг солигдлоо", $"{mname} has new pictures")))));
                     });
                     if (g.SmallBtn(Loc.L("Хасах", "Remove"), false, 80, !busy)) g.Later(() => g.Open(new ConfirmModal(Loc.L($"{mname}-г гэр бүлээс хасах уу?", $"Take {mname} out of the family?"),
                         Loc.L("Өөр төхөөрөмж дээр гэр бүлийн кодоор нэвтэрч чадахгүй болно. Ахиц нь устахгүй.", "They can no longer log in with the family code on another device. Their progress is not erased."),
-                        () => Manage(g, "remove", mid, null, Loc.L($"{mname} гэр бүлээс гарлаа", $"{mname} left the family")))));
+                        () => WithPin(g, _ => Manage(g, "remove", mid, null, Loc.L($"{mname} гэр бүлээс гарлаа", $"{mname} left the family"))))));
                     g.EndRow();
                 }
                 foreach (var k in kids.Where(k => members != null && !members.Any(m => m["id"].S == k.id)))
@@ -205,22 +231,106 @@ public sealed partial class Game
             }
             if (famErr != "") GUILayout.Label($"<color=#e14b3d>{famErr}</color>", g.sLabel);
             GUILayout.EndVertical();
+            PinCard(g);
         }
-        void Manage(Game g, string act, string id, string pics, string done)
+        /** The grown-up PIN: change it (here and for the family), and delete everything the family has on the server. */
+        void PinCard(Game g)
         {
-            busy = true; famErr = "";
-            g.StartCoroutine(Family.Manage(g, act, id, pics, r => { busy = false; membersCode = null; if (r["ok"].B) g.Toast(done); else famErr = Family.Why(r); }));
+            var app = g.App; bool fam = !string.IsNullOrEmpty(app.familyCode);
+            GUILayout.BeginVertical(g.sPanel);
+            GUILayout.Label("<b>" + Loc.L("Том хүний ПИН код", "Grown-up PIN") + "</b>", g.sTitle);
+            g.Small(fam ? Loc.L("Нэг ПИН код: энэ төхөөрөмжийн том хүний хэсэг болон гэр бүлийнх.", "One PIN: for the grown-ups' part of this device and for the family.") : Loc.L("Том хүний хэсэг, худалдан авалтыг хамгаална.", "It guards the grown-ups' part and purchases."));
+            // the old PIN is always typed again, never taken from memory
+            if (g.Btn(Loc.L("ПИН код солих", "Change PIN"), false, 36, !busy)) g.Later(() => g.Open(new PinModal(Loc.L("Одоогийн ПИН код", "Current PIN"), Loc.L("Одоогийн ПИН кодоо оруулаарай:", "Enter the current PIN:"), old =>
+                g.Open(new PinModal(Loc.L("Шинэ ПИН код", "New PIN"), Loc.L("Шинэ ПИН код сонгоорой (4-6 тоо):", "Choose a new PIN (4-6 digits):"), next =>
+                {
+                    pinAct = null;
+                    if (fam && !needsPin) Run(g, Family.SetPin(g, next, old, null, r => Done(g, r, Loc.L("ПИН код солигдлоо", "The PIN is changed"))));
+                    else Run(g, ChangeHere(g, old, next));
+                }, true)))));
+            if (fam)
+            {
+                g.Gap(6);
+                GUILayout.Label("<b>" + Loc.L("Гэр бүлийн бүх өгөгдлийг устгах", "Delete all family data") + "</b>", g.sLabel);
+                g.Small(Loc.L("Сервер дээрх гэр бүлийн код болон хүүхэд бүрийн зоос, XP, хувцас, хадгалсан ахиц, бусад төхөөрөмжийн нэвтрэх эрх, Нутаг дахь гэр, чатын мөрийг устгана. Буцаах боломжгүй. Энэ төхөөрөмж дээрх профайлууд үлдэнэ.", "Deletes the family code from the server and, for every child, the coins, XP, clothes, cloud save, other devices' logins, their ger in Nutag and their chat lines. This can't be undone. The profiles on this device stay."));
+                if (g.Btn(Loc.L("Гэр бүлийн бүх өгөгдлийг устгах", "Delete all family data"), false, 36, !busy)) g.Later(() => g.Open(new EraseModal(this)));
+            }
+            GUILayout.EndVertical();
         }
+        /** Deleting the family: the code typed again, then the PIN (always asked here), then the server. */
+        sealed class EraseModal : Modal
+        {
+            readonly FamilyPage page; string typed = "", err = "";
+            public EraseModal(FamilyPage page) { this.page = page; }
+            public override void Press(Game g) { }
+            public override void Draw(Game g)
+            {
+                g.Title(Loc.L("Гэр бүлийн бүх өгөгдлийг устгах уу?", "Delete all family data?"));
+                g.Small(Loc.L("Буцаах боломжгүй. Хүүхэд бүрийн сервер дээрх зоос, XP, хувцас, хадгалсан ахиц, нэвтрэх эрх, гэр, чат устна. Бусад төхөөрөмж гэр бүлийн кодоор нэвтэрч чадахгүй болно.", "This can't be undone. Every child's coins, XP, clothes, cloud save, logins, ger and chat on the server are deleted. Other devices can no longer log in with the family code."));
+                g.Small(Loc.L($"Баталгаажуулахын тулд гэр бүлийн кодоо бичээрэй: {Family.Show(g.App.familyCode)}", $"To confirm, type the family code: {Family.Show(g.App.familyCode)}"));
+                typed = g.Field(typed, 9, "ABCD-2345");
+                if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", g.sLabel);
+                GUILayout.BeginHorizontal();
+                if (g.Btn(Loc.L("Болих", "Cancel"))) g.Later(g.Close);
+                if (g.Btn(Loc.L("Устгах", "Delete"), true)) g.Later(() =>
+                {
+                    if (Family.Clean(typed) != g.App.familyCode) { err = Family.Why(J.Parse("{\"reason\":\"confirm\"}")); return; }
+                    string confirm = typed; g.Close();
+                    g.Open(new PinModal(Loc.L("Том хүний ПИН код", "Grown-up PIN"), Loc.L("Устгахын тулд ПИН кодоо оруулаарай:", "Enter the PIN to delete:"),
+                        pin => { page.pinAct = null; page.Run(g, Family.Erase(g, pin, confirm, r => { page.members = null; page.Done(g, r, Loc.L("Гэр бүлийн бүх өгөгдлийг устгалаа", "All family data is deleted")); })); }));
+                });
+                GUILayout.EndHorizontal();
+            }
+        }
+        /** A PIN change on a device without a family PIN: the old PIN checked here, then the new one saved (a frame apart). */
+        System.Collections.IEnumerator ChangeHere(Game g, string old, string next)
+        {
+            yield return null;
+            if (!DevicePin.Match(g.App, old)) { DevicePin.Wrong(g.App); busy = false; famErr = DevicePin.Wait(g.App) > 0 ? DevicePin.Locked(g.App) : Loc.L($"ПИН код таарсангүй. {DevicePin.Left(g.App)} оролдлого үлдлээ.", $"That PIN didn't match. {DevicePin.Left(g.App)} tries left."); yield break; }
+            yield return null;
+            DevicePin.Set(g.App, next); Family.pin = next; busy = false;
+            g.Toast(Loc.L("ПИН код солигдлоо", "The PIN is changed"));
+        }
+        // the last action that needed the PIN, and the PIN typed for it here (not the gate's): asked again if the server refused it
+        Action<string> pinAct; string typedPin;
+        /** Runs `act` with the grown-up PIN: the one typed at the gate, or (after a refused one) asked again. */
+        void WithPin(Game g, Action<string> act)
+        {
+            pinAct = act;
+            if (Family.pin != "") { typedPin = null; act(Family.pin); return; }
+            AskPin(g, Loc.L("Гэр бүлийн ПИН кодоо оруулаарай:", "Enter the family PIN:"));
+        }
+        void AskPin(Game g, string text) => g.Open(new PinModal(Loc.L("Том хүний ПИН код", "Grown-up PIN"), text, pin => { Family.pin = typedPin = pin; pinAct?.Invoke(pin); }));
+        void Run(Game g, System.Collections.IEnumerator request) { busy = true; famErr = ""; g.StartCoroutine(request); }
+        /** A family request answered: a toast, or why not; a new recovery code is shown once. A refused PIN (this device's may be
+         *  out of date: changed on another device) is asked again; with `keepPin`, a re-typed one that worked becomes this
+         *  device's PIN. */
+        void Done(Game g, J r, string ok, string recovery = null, bool keepPin = false)
+        {
+            busy = false; membersCode = null; // fetch the family again
+            if (!r["ok"].B)
+            {
+                famErr = Family.Why(r);
+                if (r["reason"].S == "pin" && pinAct != null) g.Later(() => AskPin(g, Family.Why(r)));
+                return;
+            }
+            if (keepPin && typedPin != null) { string pin = typedPin; g.StartCoroutine(KeepPin(g, pin)); }
+            typedPin = null; pinAct = null;
+            g.Toast(ok);
+            if (recovery != null) g.Later(() => g.Open(new RecoveryModal(recovery)));
+        }
+        static System.Collections.IEnumerator KeepPin(Game g, string pin) { yield return null; DevicePin.Set(g.App, pin); }
+        void Manage(Game g, string act, string id, string pics, string done) => Run(g, Family.Manage(g, act, id, pics, r => Done(g, r, done, null, true)));
         void AddChild(Game g, SaveData k)
         {
             var p = k.id == g.V.id ? g.V : k;
             if (Family.PicsJson(p.code) == null) { g.Open(new PicturesModal(p.name, p.avatar, code => { p.code = code; p.Save(); AddChild(g, p); })); return; }
-            busy = true; famErr = "";
-            g.StartCoroutine(Family.Link(g, p, r =>
-            {
-                busy = false; membersCode = null; // fetch the family again
-                if (r["ok"].B) g.Toast(Loc.L($"{p.name} гэр бүлд нэмэгдлээ", $"{p.name} is in the family")); else famErr = Family.Why(r);
-            }));
+            bool create = string.IsNullOrEmpty(g.App.familyCode), member = members != null && members.Any(m => m["id"].S == p.id);
+            // making the family, or a new child joining one with a PIN, needs the PIN; a child changing their own pictures doesn't
+            bool withPin = create || (!member && !needsPin);
+            if (withPin && Family.pin == "") { WithPin(g, _ => AddChild(g, p)); return; }
+            string rec = create ? DevicePin.NewRecovery() : null;
+            Run(g, Family.Link(g, p, r => Done(g, r, Loc.L($"{p.name} гэр бүлд нэмэгдлээ", $"{p.name} is in the family"), rec), rec, withPin));
         }
         /** A child's 3 secret pictures, chosen by a grown-up for the family code. */
         sealed class PicturesModal : Modal
