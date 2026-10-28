@@ -14,12 +14,15 @@ class FakePool {
     this.calls = [];
     this.notifications = [];
     this.identities = new Map();
+    this.handlers = {};
     this.wallets = new Map();
     this.walletOperations = new Map();
     this.progress = new Map();
     this.deviceTickets = new Map();
     this.families = new Map();
   }
+  on(event, handler) { this.handlers[event] = handler; }
+
   async query(sql, values) {
     return (await this.connect()).query(sql, values);
   }
@@ -287,6 +290,8 @@ try {
   await assert.rejects(brokenStore.save({ NUTAG: { lots: [], chat: [] } }), /Could not save room data to PostgreSQL/);
   assert.ok(failingPool.calls.includes('ROLLBACK'), 'failed database writes are rolled back');
   await brokenStore.close();
+  assert.equal(typeof failingPool.handlers.error, 'function', 'the pool has an error listener so an idle-client error cannot crash the server');
+  assert.doesNotThrow(() => failingPool.handlers.error(new Error('idle client lost')), 'a pool error is logged, not thrown');
 
   const jsonStore = createRoomStore({ dataDir, databaseUrl: '' });
   assert.deepEqual(await jsonStore.load(), legacyRooms, 'local JSON storage remains backward-compatible');

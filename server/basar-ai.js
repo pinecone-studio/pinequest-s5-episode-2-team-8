@@ -6,6 +6,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const clientIp = require('./client-ip.js');
 
 function readEnvFile(root) {
   const out = {};
@@ -129,8 +130,7 @@ module.exports = function createBasar(root) {
     req.on('data', (d) => { raw += d; if (raw.length > 16000) req.destroy(); });
     req.on('end', async () => {
       let p; try { p = JSON.parse(raw); } catch { return send(400, { ok: false, reason: 'bad-request' }); }
-      const ip = (req.socket && req.socket.remoteAddress) || '?';
-      if (!allow(ip)) return send(200, { ok: false, reason: 'busy' });
+      if (!allow(clientIp(req))) return send(200, { ok: false, reason: 'busy' });
       try { send(200, p.mode === 'quiz' ? await quiz(p) : await chat(p)); }
       catch (e) { console.error('  Basar:', e.message); send(200, { ok: false, reason: e.name === 'AbortError' ? 'timeout' : 'error' }); }
     });

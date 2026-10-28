@@ -10,13 +10,13 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-family-'));
-const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
+const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, RENDER: 'true' }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
 const port = await new Promise((res, rej) => { server.on('message', (m) => m.port && res(m.port)); server.on('exit', (c) => rej(new Error('server exited ' + c))); setTimeout(() => rej(new Error('server did not start')), 8000); });
 const base = `http://localhost:${port}`;
 const results = [];
 const ok = (label) => results.push('✓ ' + label);
 
-// `from`: the address the request seems to come from (behind a proxy), each with its own limit of requests a minute
+// `from`: the address the request seems to come from (behind a proxy, as RENDER says), each with its own limit of requests a minute
 const api = async (body, from) => (await fetch(`${base}/api/family`, { method: 'POST', body: JSON.stringify(body), headers: from ? { 'x-forwarded-for': from } : {} })).json();
 const ticket = () => crypto.randomBytes(32).toString('hex');
 /** Joins a room over the WebSocket and resolves with the server's first answer: welcome or error. With `cloud`, it then

@@ -12,7 +12,10 @@ class FakePool {
   constructor() {
     this.players = new Map();
     this.listeners = [];
+    this.handlers = {};
   }
+
+  on(event, handler) { this.handlers[event] = handler; }
 
   async connect() {
     const client = new EventEmitter();

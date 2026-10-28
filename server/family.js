@@ -4,6 +4,7 @@
    child's player id, so the device plays as the same child: same coins, XP and clothes. See docs/PROTOCOL.md. */
 
 const crypto = require('node:crypto');
+const clientIp = require('./client-ip.js');
 
 const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 letters, so a random byte % 32 is fair; no I/O/0/1 to mix up
 const FAMILY_CODE = /^[A-HJ-NP-Z2-9]{8}$/;
@@ -153,10 +154,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     req.on('end', async () => {
       let message; try { message = JSON.parse(raw); } catch { return send(400, { ok: false, reason: 'invalid' }); }
       if (!message || typeof message !== 'object') return send(400, { ok: false, reason: 'invalid' });
-      // behind Render's proxy the socket is the proxy; the proxy appends the real address last
-      const forwarded = String(req.headers['x-forwarded-for'] || '').split(',').map((part) => part.trim()).filter(Boolean);
-      const ip = forwarded.length ? forwarded[forwarded.length - 1] : (req.socket && req.socket.remoteAddress) || '?';
-      if (!allow(ip)) return send(429, { ok: false, reason: 'busy' });
+      if (!allow(clientIp(req))) return send(429, { ok: false, reason: 'busy' });
       try {
         if (message.act === 'create') return send(200, await add(message, true));
         if (message.act === 'join') return send(200, await add(message, false));
