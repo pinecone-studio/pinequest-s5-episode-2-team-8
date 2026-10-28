@@ -58,6 +58,19 @@ try {
   const r = await post(b.base, { mode: 'chat', messages: [{ role: 'user', content: 'hi' }] });
   ok(info.ai === false && r.reason === 'nokey', 'without a key Basar falls back to offline mode');
 } finally { b.child.kill(); }
+// behind Render's proxy both AI limits (10 a minute and 30 a quarter hour) count the player's real address: Cloudflare's
+// cf-connecting-ip, else the last forwarded one. Faking the first forwarded address doesn't help.
+const c = await start({ RENDER: 'true', ANTHROPIC_API_KEY: 'secret-test-key', ANTHROPIC_BASE_URL: `http://127.0.0.1:${fake.address().port}` });
+try {
+  const ask = async (headers) => { const r = await fetch(c.base + '/api/basar', { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify({ mode: 'chat', messages: [{ role: 'user', content: 'hi' }] }) }); return r.status === 200 ? (await r.json()).reason || 'ok' : r.status; };
+  mode = 'normal';
+  const got = [];
+  for (let i = 0; i < 31; i++) got.push(await ask({ 'x-forwarded-for': `1.2.3.${i}, 9.9.9.9` }));
+  ok(got.slice(0, 10).every((x) => x === 'ok') && got.slice(10, 30).every((x) => x === 'busy') && got[30] === 429, 'a faked first forwarded address gets around neither AI limit');
+  ok(await ask({ 'x-forwarded-for': '9.9.9.9, 8.8.8.8' }) === 'ok', 'another real address still gets answers');
+  ok(await ask({ 'x-forwarded-for': '9.9.9.9', 'cf-connecting-ip': '5.5.5.5' }) === 'ok', "Cloudflare's address counts before the forwarded one");
+} finally { c.child.kill(); }
+
 fake.close();
 if (fails.length) { console.error(`Basar API test failed: ${fails.length}`); process.exit(1); }
 console.log('Basar API test passed.');
