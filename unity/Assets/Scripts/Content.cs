@@ -177,7 +177,8 @@ public static partial class Rules
     };
     // each technique is performed with its own skill: footwork combos, rapid power, hold-and-release, balance, or timing
     public static readonly Dictionary<string, string> SKILL = new Dictionary<string, string> { ["push"] = "timing", ["hip"] = "timing", ["tahim"] = "timing", ["pull"] = "hold", ["leg"] = "hold", ["suga"] = "hold", ["hook"] = "combo", ["inhook"] = "combo", ["havirah"] = "combo", ["lift"] = "mash", ["humruh"] = "mash", ["toigdoh"] = "balance", ["hongodoh"] = "balance" };
-    public static readonly string[] OPP_TITLE = { "", "", "", "", "nachin", "khartsaga", "zaan", "garid", "arslan", "arslan" };
+    public static readonly string[] OPP_TITLE = { "", "", "", "", "nachin", "khartsaga", "zaan", "garid", "avarga", "arslan" }; // round 8: Avarga Setsen
+    public const string SETSEN = "Сэцэн";
 
     // ---------------------------------------------------------------- horses
     public static readonly Dictionary<string, Tx> COAT_NAMES = new Dictionary<string, Tx> { ["bay"] = new Tx("Хээр", "Bay"), ["black"] = new Tx("Хар", "Black"), ["white"] = new Tx("Цагаан", "White"), ["chestnut"] = new Tx("Зээрд", "Chestnut"), ["gray"] = new Tx("Саарал", "Gray") };

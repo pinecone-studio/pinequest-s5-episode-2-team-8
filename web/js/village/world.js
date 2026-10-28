@@ -82,7 +82,7 @@
     { id: 'archer', kind: 'npcq', x: 44, y: 32, w: 1, h: 1, door: { x: 44, y: 31 } },
     { id: 'lantern4', kind: 'lantern', x: 40, y: 11, w: 1, h: 1 },
     { id: 'lantern5', kind: 'lantern', x: 40, y: 14, w: 1, h: 1 },
-    { id: 'setsen', kind: 'statue', x: 53, y: 9, w: 1, h: 1, door: { x: 53, y: 10 } }, // the stone statue of Setsen by the wrestling ground
+    { id: 'setsen', kind: 'statue', x: 54, y: 6, w: 1, h: 1, door: { x: 54, y: 7 } }, // the stone statue of Setsen, right of the stands by the wrestling ground
     ...LOT_X.map((x, i) => ({ id: 'lot' + i, kind: 'lot', i, x, y: 28, w: 3, h: 3, door: { x: x + 1, y: 31 } })),
   ];
   const lots = objects.filter((o) => o.kind === 'lot');
