@@ -3,6 +3,7 @@
 using System;
 using System.Collections;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using UnityEngine.Networking;
 
@@ -15,6 +16,16 @@ public static class Family
 #endif
     static string Url(string server) { string s = (server ?? "").Trim().TrimEnd('/'); if (s == "") return null; if (!s.StartsWith("http")) s = SCHEME + s; return s + "/api/family"; }
     static J Fail(string reason) => J.Parse("{\"ok\":false,\"reason\":" + J.Quote(reason) + "}");
+    /** The grown-up PIN as typed at the parent gate or the PIN pad: in memory only, never saved (the device keeps its hash). */
+    public static string pin = "";
+    static string PinField(string key, string v) => string.IsNullOrEmpty(v) ? "" : ",\"" + key + "\":" + J.Quote(v);
+    /** A child of this device's family that this device plays as (its ticket speaks for the grown-up), or null. */
+    public static SaveData Member(Game g)
+    {
+        string code = g.App.familyCode ?? ""; if (code == "") return null;
+        SaveData Kid(string pid) => g.V != null && pid == g.V.id ? g.V : SaveData.Load(pid);
+        return g.App.profiles.Select(Kid).FirstOrDefault(p => p.fam == code && !string.IsNullOrEmpty(p.ticket));
+    }
 
     /** POST /api/family. done always gets an object: the server's answer, or { ok: false, reason: "offline" | "no-server" }. */
     public static IEnumerator Post(string server, string body, Action<J> done)
@@ -64,30 +75,107 @@ public static class Family
             case "locked": { int min = Math.Max(1, (r["wait"].I + 59) / 60); return Loc.L($"Олон удаа буруу дарлаа. {min} минутын дараа дахин оролдоорой.", $"Too many wrong tries. Try again in {min} minutes."); }
             case "busy": return Loc.L("Хэт олон оролдлого. Түр хүлээгээрэй.", "Too many tries. Wait a moment.");
             case "no-member": return Loc.L("Энэ хүүхэд гэр бүлд байхгүй байна.", "This child is not in the family.");
+            case "erased": return Loc.L("Энэ хүүхдийн гэр бүлийг серверээс устгасан байна.", "This child's family was deleted from the server.");
             case "identity": return Loc.L("Энэ профайлыг сервер танисангүй.", "The server did not recognise this profile.");
+            case "pin": return Loc.L($"Том хүний ПИН код таарсангүй. {r["left"].I} оролдлого үлдлээ.", $"That grown-up PIN didn't match. {r["left"].I} tries left.");
+            case "recovery": return Loc.L($"Сэргээх код таарсангүй. {r["left"].I} оролдлого үлдлээ.", $"That recovery code didn't match. {r["left"].I} tries left.");
+            case "pin-locked": return Loc.L($"Олон удаа буруу орууллаа. {Wait(r["wait"].I)} дараа дахин оролдоорой.", $"Too many wrong tries. Please try again in {Wait(r["wait"].I)}.");
+            case "needs-pin": return Loc.L("Эхлээд гэр бүлдээ том хүний ПИН код тавиарай.", "Please set a grown-up PIN for the family first.");
+            case "not-first": return Loc.L("Анхны ПИН кодыг гэр бүлд хамгийн түрүүнд нэмэгдсэн хүүхдийн төхөөрөмж дээр тавина.", "The first PIN is set on the device of the child who joined the family first.");
+            case "no-recovery": return Loc.L("Энэ гэр бүлд сэргээх код алга.", "This family has no recovery code.");
+            case "too-soon": { int d = Math.Max(1, (r["wait"].I + 3599) / 3600); return Loc.L($"ПИН код саяхан тавигдсан тул гэр бүлийг {d} цагийн дараа устгаж болно. Энэ хооронд бусад том хүн үүнийг анзаарах боломжтой.", $"The PIN was set only recently, so the family can be deleted in {d} h. Until then, the other grown-ups have time to notice."); }
+            case "join-locked": return Loc.L($"Нэгдэх гэж олон удаа буруу ПИН код орууллаа. {Wait(r["wait"].I)} дараа дахин оролдоорой.", $"Too many wrong PINs when joining. Please try again in {Wait(r["wait"].I)}.");
+            case "recovery-locked": return Loc.L($"Сэргээх код олон удаа буруу орууллаа. {Wait(r["wait"].I)} дараа дахин оролдоорой.", $"Too many wrong recovery codes. Please try again in {Wait(r["wait"].I)}.");
+            case "confirm": return Loc.L("Гэр бүлийн код таарсангүй. Яг адилхан бичээрэй.", "The family code didn't match. Type it exactly.");
             default: return Loc.L("Алдаа гарлаа. Дахин оролдоорой.", "Something went wrong. Try again.");
         }
     }
 
-    /** Adds a profile (that has its 3 pictures) to this device's family, or makes the family with it. */
-    public static IEnumerator Link(Game g, SaveData p, Action<J> done)
+    static string Wait(int s) => s >= 3600 ? Loc.L($"{(s + 3599) / 3600} цагийн", $"{(s + 3599) / 3600} h") : Loc.L($"{Math.Max(1, (s + 59) / 60)} минутын", $"{Math.Max(1, (s + 59) / 60)} min");
+    /** A PIN refused by the server is forgotten here, so the next try asks for it again. A family the server no longer has
+     *  (erased, or its last child taken out) is forgotten on this device. */
+    static void Forget(Game g, J r, string code)
+    {
+        if (!r["ok"].B && (r["reason"].S == "pin" || r["reason"].S == "pin-locked")) pin = "";
+        if (!r["ok"].B && r["reason"].S == "no-family" && code != "" && code == g.App.familyCode) Gone(g, null);
+    }
+    /** This device leaves its family: no profile here is in it any more (the server no longer has it). With `p`, the server
+     *  said that child was erased with the family, so its ticket goes too: it is no use, and the child plays here alone. */
+    public static void Gone(Game g, SaveData p)
+    {
+        string code = g.App.familyCode ?? "";
+        foreach (var pid in g.App.profiles) { var k = g.V != null && pid == g.V.id ? g.V : SaveData.Load(pid); if (code != "" && k.fam == code) { k.fam = ""; k.Save(); } }
+        if (p != null) { p.fam = ""; p.ticket = ""; p.Save(); }
+        g.App.familyCode = ""; g.App.Save(); pin = "";
+        g.Toast(p != null ? Loc.L("Таны гэр бүлийг серверээс устгасан байна. Гэр бүлийн кодоор дахин нэвтрэх эсвэл шинэ гэр бүл үүсгээрэй.", "Your family was deleted from the server. Log in again with a family code, or make a new family.")
+            : Loc.L("Энэ гэр бүл сервер дээр байхгүй болжээ. Гэр бүлийн кодоор дахин нэвтрэх эсвэл шинэ гэр бүл үүсгээрэй.", "This family is no longer on the server. Log in again with a family code, or make a new family."));
+    }
+
+    /** Adds a profile (that has its 3 pictures) to this device's family, or makes the family with it (with the PIN and a
+     *  new `recovery` code). A new child joining needs the PIN (`withPin`); once the server took it, it is this device's PIN too. */
+    public static IEnumerator Link(Game g, SaveData p, Action<J> done, string recovery = null, bool withPin = true)
     {
         string pics = PicsJson(p.code);
         if (pics == null) { done(Fail("pictures")); yield break; }
         SaveData.EnsureTicket(p); p.Save();
-        string server = ServerOf(g, p), code = g.App.familyCode ?? "";
+        string server = ServerOf(g, p), code = g.App.familyCode ?? "", used = withPin ? pin : "";
         string body = "{\"act\":" + J.Quote(code == "" ? "create" : "join") + ",\"code\":" + J.Quote(code) + ",\"id\":" + J.Quote(p.id) + ",\"ticket\":" + J.Quote(p.ticket)
-            + ",\"name\":" + J.Quote(p.name) + ",\"age\":" + p.age + ",\"avatar\":" + p.avatar + ",\"pics\":" + pics + "}";
-        yield return Post(server, body, r =>
+            + ",\"name\":" + J.Quote(p.name) + ",\"age\":" + p.age + ",\"avatar\":" + p.avatar + ",\"pics\":" + pics + PinField("pin", used) + PinField("recovery", recovery) + "}";
+        J answer = null;
+        yield return Post(server, body, r => answer = r);
+        Forget(g, answer, code);
+        if (!answer["ok"].B && answer["reason"].S == "erased") Gone(g, p); // a child of an erased family
+        if (answer["ok"].B)
         {
-            if (r["ok"].B) { g.App.familyCode = r["code"].S; g.App.server = server.Trim(); g.App.Save(); p.fam = r["code"].S; p.Save(); }
-            done(r);
-        });
+            g.App.familyCode = answer["code"].S; g.App.server = server.Trim(); p.fam = answer["code"].S; p.Save(); g.App.Save();
+            yield return DevicePin.Store(g.App, used != "" ? used : null, recovery); // one PIN for the grown-up: the family's
+        }
+        done(answer);
     }
 
+    /** A request from a grown-up on this device: `by` and `ticket` are its family child's, `extra` the rest of the fields. */
+    static IEnumerator Ask(Game g, string act, string extra, Action<J> done)
+    {
+        var me = Member(g); string code = g.App.familyCode ?? "";
+        if (me == null) { done(Fail("identity")); yield break; }
+        string body = "{\"act\":" + J.Quote(act) + ",\"code\":" + J.Quote(code) + ",\"by\":" + J.Quote(me.id) + ",\"ticket\":" + J.Quote(me.ticket) + extra + "}";
+        yield return Post(ServerOf(g, me), body, r => { Forget(g, r, code); done(r); });
+    }
+    /** Is `typed` the family's PIN? For a gate whose own copy is out of date (the PIN was changed on another device). */
+    public static IEnumerator CheckPin(Game g, string typed, Action<J> done) => Ask(g, "check-pin", PinField("pin", typed), done);
+    /** Sets the family PIN to `next` (with the `old` one; a family without a PIN gets its first one with a `recovery` code).
+     *  This device's PIN becomes the same. */
+    public static IEnumerator SetPin(Game g, string next, string old, string recovery, Action<J> done)
+    {
+        J answer = null;
+        yield return Ask(g, "pin", PinField("pin", next) + PinField("old", old) + PinField("recovery", recovery), r => answer = r);
+        if (answer["ok"].B) { pin = next; yield return DevicePin.Store(g.App, next, recovery); }
+        done(answer);
+    }
+    /** A forgotten family PIN: the recovery code sets `next`, and `newRecovery` replaces the code. No ticket is needed. The
+     *  caller stores the new PIN on this device. */
+    public static IEnumerator Recover(Game g, string recovery, string next, string newRecovery, Action<J> done)
+    {
+        string code = g.App.familyCode ?? "";
+        string body = "{\"act\":\"recover\",\"code\":" + J.Quote(code) + PinField("recovery", recovery) + PinField("pin", next) + PinField("newRecovery", newRecovery) + "}";
+        yield return Post(ServerOf(g, Member(g)), body, r => { Forget(g, r, code); if (r["ok"].B) pin = next; done(r); });
+    }
+    /** Deletes the whole family on the server: every child's account there, their gers and chat. Then this device leaves it. */
+    public static IEnumerator Erase(Game g, string typedPin, string confirm, Action<J> done) =>
+        Ask(g, "erase", PinField("pin", typedPin) + PinField("confirm", Clean(confirm)), r =>
+        {
+            if (r["ok"].B)
+            {
+                string code = g.App.familyCode;
+                foreach (var pid in g.App.profiles) { var p = g.V != null && pid == g.V.id ? g.V : SaveData.Load(pid); if (p.fam == code) { p.fam = ""; p.Save(); } }
+                g.App.familyCode = ""; g.App.Save();
+            }
+            done(r);
+        });
+
     /** A grown-up's change to any child of the family, from this device (which plays as one of its children): new pictures
-     *  ("pictures", for a child who forgot them) or taking a child out ("remove"). This device leaves the family when none of
-     *  its children are in it any more. */
+     *  ("pictures", for a child who forgot them) or taking a child out ("remove"), both with the PIN. This device leaves the
+     *  family when none of its children are in it any more. */
     public static IEnumerator Manage(Game g, string act, string id, string picsCode, Action<J> done)
     {
         string code = g.App.familyCode ?? "";
@@ -95,9 +183,10 @@ public static class Family
         var me = g.App.profiles.Select(Kid).FirstOrDefault(p => p.fam == code && !string.IsNullOrEmpty(p.ticket));
         if (me == null) { done(Fail("identity")); yield break; }
         string body = "{\"act\":" + J.Quote(act) + ",\"code\":" + J.Quote(code) + ",\"by\":" + J.Quote(me.id) + ",\"ticket\":" + J.Quote(me.ticket) + ",\"id\":" + J.Quote(id)
-            + (picsCode != null ? ",\"pics\":" + PicsJson(picsCode) : "") + "}";
+            + (picsCode != null ? ",\"pics\":" + PicsJson(picsCode) : "") + PinField("pin", pin) + "}";
         yield return Post(ServerOf(g, me), body, r =>
         {
+            Forget(g, r, code);
             if (r["ok"].B && act == "remove")
             {
                 foreach (var pid in g.App.profiles) { var p = Kid(pid); if (p.id == id && p.fam != "") { p.fam = ""; p.Save(); } }
@@ -127,4 +216,48 @@ public static class Family
             done(r, p);
         });
     }
+}
+
+/** The device's grown-up PIN, for the parent gate: only a salted PBKDF2 hash (SHA256, 20,000 rounds: one takes a moment on
+ *  a slow phone, so never two in one frame) is kept (AppState), with its recovery code's hash. 5 wrong tries lock it for 5 minutes, then 10, 20… (at most a day). */
+public static class DevicePin
+{
+    const int ITERATIONS = 20000, TRIES = 5; const long LOCK_MS = 5 * 60 * 1000, LOCK_MAX = 24 * 60 * 60 * 1000;
+    const string LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // as the family code: no I/O/0/1 to mix up
+    static byte[] Random(int n) { var b = new byte[n]; using (var r = RandomNumberGenerator.Create()) r.GetBytes(b); return b; }
+    static string Hash(string text, string salt) { using (var k = new Rfc2898DeriveBytes(text, Convert.FromBase64String(salt), ITERATIONS, HashAlgorithmName.SHA256)) return Convert.ToBase64String(k.GetBytes(32)); }
+    static bool Same(string hash, string text, string salt)
+    {
+        if (string.IsNullOrEmpty(hash) || string.IsNullOrEmpty(salt)) return false;
+        byte[] a = Convert.FromBase64String(hash), b = Convert.FromBase64String(Hash(text, salt)); int diff = a.Length ^ b.Length;
+        for (int i = 0; i < Math.Min(a.Length, b.Length); i++) diff |= a[i] ^ b[i]; // every byte, so the time says nothing
+        return diff == 0;
+    }
+    public static bool Valid(string pin) => pin != null && pin.Length >= 4 && pin.Length <= 6 && pin.All(c => c >= '0' && c <= '9');
+    public static bool Has(AppState a) => !string.IsNullOrEmpty(a.pinHash);
+    public static void Set(AppState a, string pin) { a.pinSalt = Convert.ToBase64String(Random(16)); a.pinHash = Hash(pin, a.pinSalt); a.pinFails = 0; a.pinUntil = 0; a.Save(); }
+    /** Saves a new PIN and recovery code (either may be null): one PBKDF2 a frame, so the screen never stalls for two. */
+    public static IEnumerator Store(AppState a, string pin, string recovery)
+    {
+        if (pin != null) Set(a, pin);
+        if (pin != null && recovery != null) yield return null;
+        if (recovery != null) SetRecovery(a, recovery);
+    }
+    public static void SetRecovery(AppState a, string code) { a.recSalt = Convert.ToBase64String(Random(16)); a.recHash = Hash(Family.Clean(code), a.recSalt); a.Save(); }
+    /** Seconds until the lock ends, or 0. */
+    public static int Wait(AppState a) => (int)Math.Max(0, (a.pinUntil - SaveData.NowMs() + 999) / 1000);
+    public static int Left(AppState a) => TRIES - a.pinFails;
+    /** A right PIN (or recovery code) starts the tries again; checking never counts a wrong one, Wrong does. */
+    public static bool Match(AppState a, string pin) { if (Wait(a) > 0 || !Same(a.pinHash, pin, a.pinSalt)) return false; a.pinFails = 0; a.Save(); return true; }
+    public static bool MatchRecovery(AppState a, string code) { if (Wait(a) > 0 || !Same(a.recHash, Family.Clean(code), a.recSalt)) return false; a.pinFails = 0; a.Save(); return true; }
+    public static void Wrong(AppState a)
+    {
+        if (++a.pinFails >= TRIES) { a.pinFails = 0; a.pinLocks++; a.pinUntil = SaveData.NowMs() + Math.Min(LOCK_MAX, LOCK_MS << Math.Min(20, a.pinLocks - 1)); }
+        a.Save();
+    }
+    /** A new recovery code: 10 letters, shown once as "ABCDE-FGH23". */
+    public static string NewRecovery() => new string(Random(10).Select(b => LETTERS[b % 32]).ToArray());
+    public static string Show(string code) => code.Length == 10 ? code.Substring(0, 5) + "-" + code.Substring(5) : code;
+    /** How long the gate is locked, in words. */
+    public static string Locked(AppState a) { int s = Wait(a), m = Math.Max(1, (s + 59) / 60); return Loc.L($"Олон удаа буруу орууллаа. {m} минутын дараа дахин оролдоорой.", $"Too many wrong tries. Please try again in {m} min."); }
 }

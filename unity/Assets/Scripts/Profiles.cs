@@ -18,6 +18,24 @@ public static partial class Px
     public static PxCanvas Portrait(Look l) { var x = new PxCanvas(16, 18); x.Blit(Char(l, 0, 0), 0, -2); return x; }
 }
 
+/** A number from 1000 to 99999 in words, for the parent gate: Mongolian (a number before another takes its -н form:
+ *  "гурван зуун", "дөчин таван мянга") and English. */
+public static class Words
+{
+    static readonly string[] MN1 = { "", "нэг", "хоёр", "гурав", "дөрөв", "тав", "зургаа", "долоо", "найм", "ес" };
+    static readonly string[] MN1N = { "", "нэг", "хоёр", "гурван", "дөрвөн", "таван", "зургаан", "долоон", "найман", "есөн" };
+    static readonly string[] MN10 = { "", "арав", "хорь", "гуч", "дөч", "тавь", "жар", "дал", "ная", "ер" };
+    static readonly string[] MN10N = { "", "арван", "хорин", "гучин", "дөчин", "тавин", "жаран", "далан", "наян", "ерэн" };
+    static string Mn99(int n, bool before) { int t = n / 10, o = n % 10; return o == 0 ? (before ? MN10N : MN10)[t] : (t > 0 ? MN10N[t] + " " : "") + (before ? MN1N : MN1)[o]; }
+    static string Mn999(int n, bool before) { int h = n / 100, r = n % 100; return h == 0 ? Mn99(r, before) : MN1N[h] + (r > 0 || before ? " зуун" : " зуу") + (r > 0 ? " " + Mn99(r, before) : ""); }
+    public static string Mn(int n) => Mn999(n / 1000, true) + " мянга" + (n % 1000 > 0 ? " " + Mn999(n % 1000, false) : "");
+    static readonly string[] EN1 = { "", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen" };
+    static readonly string[] EN10 = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
+    static string En99(int n) => n < 20 ? EN1[n] : EN10[n / 10] + (n % 10 > 0 ? "-" + EN1[n % 10] : "");
+    static string En999(int n) => n >= 100 ? EN1[n / 100] + " hundred" + (n % 100 > 0 ? " " + En99(n % 100) : "") : En99(n);
+    public static string En(int n) => En999(n / 1000) + " thousand" + (n % 1000 > 0 ? " " + En999(n % 1000) : "");
+}
+
 public static class Profiles
 {
     public sealed class Mascot { public Tx name, fact; }
@@ -57,26 +75,187 @@ public sealed partial class Game
         if (!V.tips && V.tutorialSeen > 0) Open(new TipsModal());
         Open(new ModeModal());   // singleplayer or multiplayer, on top
     }
-    public void LogOut() { net.Close(); if (V != null) { SavePos(); V.Save(); } App.loggedIn = false; App.Save(); CloseAll(); V = null; Open(new AuthPage()); }
+    public void LogOut() { Family.pin = ""; net.Close(); if (V != null) { SavePos(); V.Save(); } App.loggedIn = false; App.Save(); CloseAll(); V = null; Open(new AuthPage()); }
 
-    /** Grown-ups only: solve a times table question to continue. */
+    /** Grown-ups only: the device's grown-up PIN. Before there is one, a family device asks for the family's PIN (check-pin);
+     *  any other device (or one that can't reach the server) has a grown-up type a number written in words (hard for a little
+     *  one), choose the PIN twice and see its recovery code once. "Forgot PIN?" takes the recovery code. On a family device
+     *  whose PIN was changed elsewhere, a PIN this device doesn't know is asked of the server. `family`: the parents' menu,
+     *  which keeps the typed PIN in memory for its 10 minutes (Family.pin); other gates forget it. */
     public sealed class ParentGate : Modal
     {
-        readonly int a = UnityEngine.Random.Range(4, 10), b = UnityEngine.Random.Range(4, 10); readonly Action onPass; string input = "", err = "";
-        public ParentGate(Action onPass) { this.onPass = onPass; }
+        // pin: the PIN · words: the number in words · new, again: choosing a PIN · rec: the recovery code · show: the new recovery code
+        readonly Action onPass; readonly bool family; string step, input = "", first = "", rec = "", shown = "", err = ""; bool busy, recovering, locked;
+        readonly int number = UnityEngine.Random.Range(1000, 100000);
+        public ParentGate(Action onPass, bool family = false) { this.onPass = onPass; this.family = family; step = DevicePin.Has(I.App) || Family.Member(I) != null ? "pin" : "words"; }
+        public override void Press(Game g) { }
+        /** Only while this gate is still the open window: cancelled during "Checking…", a late answer opens nothing. */
+        void Pass(Game g, string pin) { if (g.modal != this) return; if (family) Family.pin = pin; g.Close(); onPass(); }
+        public override void Draw(Game g)
+        {
+            var app = g.App; var center = new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = true };
+            // the clock moves between IMGUI's layout and repaint passes: read it once, on layout
+            if (Event.current.type == EventType.Layout) locked = DevicePin.Wait(app) > 0 && (step == "pin" || step == "rec");
+            g.Picture(Px.Icon("ui:lock"), 48);
+            GUILayout.Label(Loc.L("Том хүний хэсэг", "Grown-ups only"), new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleCenter });
+            if (step == "pin")
+            {
+                GUILayout.Label(DevicePin.Has(app) ? Loc.L("Том хүний ПИН кодоо оруулаарай:", "Enter the grown-up PIN:") : Loc.L("Гэр бүлийн том хүний ПИН кодоо оруулаарай:", "Enter the family's grown-up PIN:"), center);
+                input = g.NumPad(input, 6, true);
+            }
+            else if (step == "words")
+            {
+                GUILayout.Label(Loc.L("Энэ тоог цифрээр бичээрэй:", "Type this number in digits:"), center);
+                GUILayout.Label("<b>" + Loc.L(Words.Mn(number), Words.En(number)) + "</b>", center);
+                input = g.NumPad(input, 5);
+            }
+            else if (step == "new" || step == "again")
+            {
+                GUILayout.Label(step == "new" ? Loc.L("Том хүний ПИН код сонгоорой (4-6 тоо). Хүүхдүүддээ битгий хэлээрэй.", "Choose a grown-up PIN (4-6 digits). Keep it from the children.") : Loc.L("ПИН кодоо дахин оруулаарай:", "Enter the PIN once more:"), center);
+                input = g.NumPad(input, 6, true);
+            }
+            else if (step == "rec")
+            {
+                GUILayout.Label(Loc.L("Бичиж авсан сэргээх кодоо оруулаарай:", "Type the recovery code you wrote down:"), center);
+                rec = g.Field(rec, 11, "ABCDE-FGH23");
+            }
+            else
+            {
+                RecoveryCard(g, shown);
+                if (g.Btn(Loc.L("Бичиж авлаа", "I wrote it down"), true, 44)) g.Later(() => Pass(g, first));
+                return;
+            }
+            if (locked) GUILayout.Label($"<color=#e14b3d>{DevicePin.Locked(app)}</color>", center);
+            else if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", center);
+            GUILayout.BeginHorizontal();
+            if (g.Btn(Loc.L("Болих", "Cancel"), false, 40, !busy)) g.Later(g.Close);
+            if (g.Btn(busy ? Loc.L("Шалгаж байна…", "Checking…") : step == "pin" ? Loc.L("Нэвтрэх", "Enter") : Loc.L("Цааш →", "Next →"), true, 40, !busy && !locked)) g.Later(() => Next(g));
+            GUILayout.EndHorizontal();
+            if (step == "pin" && g.Btn(Loc.L("ПИН кодоо мартсан уу?", "Forgot the PIN?"), false, 32, !busy)) g.Later(() => { step = "rec"; rec = ""; err = ""; });
+        }
+        void Next(Game g)
+        {
+            string typed = input; input = ""; err = "";
+            switch (step)
+            {
+                case "pin": busy = true; g.StartCoroutine(CheckPin(g, typed)); return;
+                case "words":
+                    if (typed == number.ToString()) step = "new"; else { err = Loc.L("Тоо таарсангүй. Дахин оролдоорой.", "That number doesn't match. Try again."); Sfx.Bad(); }
+                    return;
+                case "new":
+                    if (DevicePin.Valid(typed)) { first = typed; step = "again"; } else err = Loc.L("4-6 тоо оруулаарай.", "Use 4 to 6 digits.");
+                    return;
+                case "again":
+                    if (typed != first) { err = Loc.L("Хоёр ПИН код зөрлөө. Дахин сонгоорой.", "The two PINs differ. Choose again."); step = "new"; Sfx.Bad(); return; }
+                    busy = true; g.StartCoroutine(Done(g));
+                    return;
+                case "rec":
+                    if (Family.Clean(rec).Length != 10) { err = Loc.L("10 үсэг, тоотой кодоо бичээрэй.", "Write the 10-letter code."); return; }
+                    recovering = true; step = "new";
+                    return;
+            }
+        }
+        static bool Unreached(J r) => r["reason"].S == "offline" || r["reason"].S == "no-server" || r["reason"].S == "busy" || r["reason"].S == "storage";
+        static string UNREACHED => Loc.L("Сервертэй холбогдож чадсангүй. Интернэтээ шалгаад дахин оролдоорой.", "Couldn't reach the server. Check the internet and try again.");
+        /** The local hash first (a frame later, so "Checking…" shows); a family device then asks the server. */
+        System.Collections.IEnumerator CheckPin(Game g, string typed)
+        {
+            var app = g.App; yield return null;
+            bool has = DevicePin.Has(app);
+            if (has && DevicePin.Match(app, typed)) { busy = false; Pass(g, typed); yield break; }
+            if (Family.Member(g) == null) { busy = false; Wrong(g); yield break; }
+            J answer = null;
+            yield return Family.CheckPin(g, typed, r => answer = r);
+            if (answer["ok"].B) { yield return null; DevicePin.Set(app, typed); busy = false; Pass(g, typed); yield break; } // one PIN: the family's
+            busy = false;
+            string why = answer["reason"].S;
+            if (!has && (why == "needs-pin" || Unreached(answer))) { step = "words"; err = why == "needs-pin" ? "" : UNREACHED; yield break; } // no PIN anywhere this device can see
+            if (Unreached(answer)) // the local check really failed: counted, so Wi-Fi off can't mean endless guesses
+            {
+                DevicePin.Wrong(g.App); Sfx.Bad();
+                err = DevicePin.Wait(g.App) > 0 ? "" : Loc.L("Сервертэй холбогдож чадсангүй, мөн энэ ПИН код энэ төхөөрөмж дээр хадгалсантай таарахгүй байна.", "Couldn't reach the server, and this PIN doesn't match the one saved on this device.");
+            }
+            else if (why == "pin-locked") err = Family.Why(answer);
+            else Wrong(g);
+        }
+        void Wrong(Game g) { DevicePin.Wrong(g.App); Sfx.Bad(); err = DevicePin.Wait(g.App) > 0 ? "" : Loc.L($"ПИН код таарсангүй. {DevicePin.Left(g.App)} оролдлого үлдлээ.", $"That PIN didn't match. {DevicePin.Left(g.App)} tries left."); }
+        /** The new PIN is chosen: saved with a new recovery code; after "Forgot?", only once the recovery code is right. One
+         *  PBKDF2 a frame, so the screen keeps moving. */
+        System.Collections.IEnumerator Done(Game g)
+        {
+            var app = g.App; string next = DevicePin.NewRecovery();
+            yield return null;
+            if (recovering && Family.Member(g) != null)
+            {
+                // a family device: the family's recovery code resets the family PIN, and this device's with it
+                J answer = null;
+                yield return Family.Recover(g, rec, first, next, r => answer = r);
+                if (answer["ok"].B) { yield return DevicePin.Store(app, first, next); busy = false; shown = next; step = "show"; yield break; }
+                busy = false; Sfx.Bad(); step = "rec";
+                if (Unreached(answer)) { err = UNREACHED; yield break; }
+                yield return null;
+                // this device's own old code: it must not leave the device and the family with different PINs
+                err = DevicePin.MatchRecovery(app, rec) ? Loc.L("Энэ бол энэ төхөөрөмжийн хуучин код. Гэр бүлийн ПИН код өөрчлөгдөөгүй. Гэр бүлийн сэргээх кодыг оруулаарай.", "That is this device's old code. The family PIN is unchanged: please use the family's recovery code.") : Family.Why(answer);
+                yield break;
+            }
+            if (recovering && !DevicePin.MatchRecovery(app, rec))
+            {
+                DevicePin.Wrong(app); busy = false; Sfx.Bad(); step = "rec";
+                err = DevicePin.Wait(app) > 0 ? "" : Loc.L($"Сэргээх код таарсангүй. {DevicePin.Left(app)} оролдлого үлдлээ.", $"That recovery code didn't match. {DevicePin.Left(app)} tries left.");
+                yield break;
+            }
+            if (recovering) yield return null;
+            yield return DevicePin.Store(app, first, next);
+            busy = false; shown = next; step = "show";
+        }
+    }
+    /** A recovery code, shown once: the only way to reset a forgotten PIN. */
+    public static void RecoveryCard(Game g, string code)
+    {
+        var center = new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = true };
+        GUILayout.Label(Loc.L("Таны сэргээх код:", "Your recovery code:"), center);
+        GUILayout.Label(DevicePin.Show(code), new GUIStyle(g.sBig) { alignment = TextAnchor.MiddleCenter });
+        GUILayout.Label(Loc.L("Үүнийг бичиж аваарай, эсвэл зургийг нь дараарай. ПИН кодоо мартвал зөвхөн энэ кодоор шинэчилнэ. Дахин харагдахгүй.", "Write this down or take a photo: it's the only way to reset the PIN. It won't be shown again."), center);
+    }
+    /** The grown-up PIN on big digit buttons, for a family action (joining, new pictures, taking a child out, erasing). With
+     *  `twice` a new PIN is chosen: typed again to be sure. */
+    public sealed class PinModal : Modal
+    {
+        readonly string title, text; readonly Action<string> done; readonly bool twice; string input = "", first, err = "";
+        public PinModal(string title, string text, Action<string> done, bool twice = false) { this.title = title; this.text = text; this.done = done; this.twice = twice; }
         public override void Press(Game g) { }
         public override void Draw(Game g)
         {
-            g.Picture(Px.Icon("ui:lock"), 48);
-            GUILayout.Label(Loc.L("Том хүний хэсэг", "Grown-ups only"), new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleCenter });
-            GUILayout.Label(Loc.L("Үргэлжлүүлэхийн тулд бодоорой:", "Solve this to continue:"), new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter });
-            GUILayout.Label($"{a} × {b} = ?", new GUIStyle(g.sBig) { });
-            input = g.NumPad(input);
-            if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter });
+            var center = new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = true };
+            g.Picture(Px.Icon("ui:lock"), 40);
+            GUILayout.Label(title, new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleCenter });
+            GUILayout.Label(first == null ? text : Loc.L("ПИН кодоо дахин оруулаарай:", "Enter the PIN once more:"), center);
+            input = g.NumPad(input, 6, true);
+            if (err != "") GUILayout.Label($"<color=#e14b3d>{err}</color>", center);
             GUILayout.BeginHorizontal();
             if (g.Btn(Loc.L("Болих", "Cancel"))) g.Later(g.Close);
-            if (g.Btn(Loc.L("Нэвтрэх", "Enter"), true)) g.Later(() => { if (int.TryParse(input, out var n) && n == a * b) { g.Close(); onPass(); } else { err = Loc.L("Буруу байна. Дахин оролдоорой.", "Not quite. Try again."); input = ""; Sfx.Bad(); } });
+            if (g.Btn(Loc.L("Болсон", "OK"), true)) g.Later(() =>
+            {
+                string typed = input; input = ""; err = "";
+                if (!DevicePin.Valid(typed)) { err = Loc.L("4-6 тоо оруулаарай.", "Use 4 to 6 digits."); return; }
+                if (twice && first == null) { first = typed; return; }
+                if (twice && typed != first) { first = null; err = Loc.L("Хоёр ПИН код зөрлөө. Дахин сонгоорой.", "The two PINs differ. Choose again."); Sfx.Bad(); return; }
+                g.Close(); done(typed);
+            });
             GUILayout.EndHorizontal();
+        }
+    }
+    /** A recovery code to write down, shown once, then `next`. */
+    public sealed class RecoveryModal : Modal
+    {
+        readonly string code; readonly Action next;
+        public RecoveryModal(string code, Action next = null) { this.code = code; this.next = next; }
+        public override void Press(Game g) { }
+        public override void Draw(Game g)
+        {
+            g.Picture(Px.Icon("ui:lock"), 40);
+            RecoveryCard(g, code);
+            if (g.Btn(Loc.L("Бичиж авлаа", "I wrote it down"), true, 44)) g.Later(() => { g.Close(); next?.Invoke(); });
         }
     }
     /** The 3×3 secret pictures: tapped ones fill the 3 dots; the third calls onPick with the code ("0-4-2"). */
@@ -97,15 +276,15 @@ public sealed partial class Game
             GUILayout.EndHorizontal();
         }
     }
-    /** Big number buttons (easier than the phone keyboard for little ones). */
-    public string NumPad(string v)
+    /** Big number buttons (easier than the phone keyboard for little ones), up to `max` digits; `hide` shows a PIN as stars. */
+    public string NumPad(string v, int max = 3, bool hide = false)
     {
-        GUILayout.Label(v == "" ? " " : v, new GUIStyle(sBtn) { fontSize = Ts(22), fontStyle = FontStyle.Bold }, GUILayout.MinHeight(U(44)));
+        GUILayout.Label(v == "" ? " " : hide ? new string('*', v.Length) : v, new GUIStyle(sBtn) { fontSize = Ts(22), fontStyle = FontStyle.Bold }, GUILayout.MinHeight(U(44)));
         string[] keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "←", "0", "OK" };
         for (int r = 0; r < 4; r++)
         {
             GUILayout.BeginHorizontal();
-            for (int c = 0; c < 3; c++) { string k = keys[r * 3 + c]; if (k == "OK") { GUILayout.Label("", GUILayout.MinHeight(U(40))); continue; } if (GUILayout.Button(k, sBtn, GUILayout.MinHeight(U(40)))) { Sfx.Tap(); v = k == "←" ? (v.Length > 0 ? v.Substring(0, v.Length - 1) : "") : v.Length < 3 ? v + k : v; } }
+            for (int c = 0; c < 3; c++) { string k = keys[r * 3 + c]; if (k == "OK") { GUILayout.Label("", GUILayout.MinHeight(U(40))); continue; } if (GUILayout.Button(k, sBtn, GUILayout.MinHeight(U(40)))) { Sfx.Tap(); v = k == "←" ? (v.Length > 0 ? v.Substring(0, v.Length - 1) : "") : v.Length < max ? v + k : v; } }
             GUILayout.EndHorizontal();
         }
         return v;

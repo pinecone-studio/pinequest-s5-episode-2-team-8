@@ -51,7 +51,7 @@ function aiAllowed(ip) {
   return true;
 }
 const basar = require('./basar-ai.js')(REPO);
-const { createRoomStore } = require('./room-store');
+const { createRoomStore, scrubRoom } = require('./room-store');
 
 const INSTANCE_ID = crypto.randomUUID();
 const PORT = Number(process.env.PORT || process.argv[2] || 8000);
@@ -59,7 +59,7 @@ const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter((i) => 
 let actualPort = PORT;
 const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
 const roomStore = createRoomStore({ dataDir: DATA_DIR });
-const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id) });
+const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id), onErase: (ids) => eraseLive(ids) });
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
   '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.wasm': 'application/wasm', '.data': 'application/octet-stream' };
@@ -312,6 +312,10 @@ function broadcast(r, msg, except) {
   }
 }
 function handleRealtime(event) {
+  if (event && event.t === 'family-erased') { // a family was erased on another instance (or this one: it is safe twice)
+    if (Array.isArray(event.ids)) eraseLive(event.ids.filter((id) => typeof id === 'string')).catch((error) => console.error('Could not drop erased players:', error.message));
+    return;
+  }
   if (!event || !R.ROOM_RE.test(event.room || '') || !event.message || typeof event.message.t !== 'string') return;
   const { room: code, message } = event;
   if (message.t === 'wrestle') {
@@ -351,7 +355,7 @@ function handleRealtime(event) {
     const max = kind === 'e' ? R.EMOTES.length : R.PHRASES.length;
     if (message.i >= 0 && message.i < max) logChat(r, { k: kind, id: message.id, n: cleanName(message.n), i: message.i });
   } else if (message.t === 'lot' && Number.isInteger(message.i) && message.i >= 0 && message.i < R.LOTS
-    && ['claim', 'stage', 'style'].includes(message.act)) {
+    && ['claim', 'stage', 'style', 'free'].includes(message.act)) {
     r.lots[message.i] = message.lot || null;
     saved[code] = { ...(saved[code] || {}), lots: r.lots };
   }
@@ -970,9 +974,10 @@ function onMessage(conn, text) {
     const code = String(m.room || '').toUpperCase();
     const id = String(m.id || '').slice(0, 24);
     if (!R.ROOM_RE.test(code) || !/^[\w-]{4,24}$/.test(id)) return conn.send({ t: 'error', why: 'bad-join' });
-    roomStore.authenticatePlayer(id, m.ticket).then((authenticated) => {
+    roomStore.authenticatePlayer(id, m.ticket).then(async (authenticated) => {
       if (!authenticated) {
-        conn.send({ t: 'error', why: 'identity' });
+        // 'erased': the family was erased (the device forgets it); 'identity': a wrong or evicted ticket
+        conn.send({ t: 'error', why: (await roomStore.isErased(id)) ? 'erased' : 'identity' });
         setTimeout(() => conn.socket.destroy(), 50);
         return;
       }
@@ -1150,6 +1155,25 @@ function leave(conn) {
   broadcast(r, { t: 'leave', id: p.id });
   census();
   return Promise.all([removed, endedWrestling]);
+}
+
+/** A family was erased (family.js): its children leave every room here and lose their gers and chat lines in memory too,
+ *  so the next save does not write them back. Their sockets get `erased` (the client stops retrying and forgets the family) and close. */
+async function eraseLive(ids) {
+  const gone = new Set(ids);
+  for (const connection of [...conns]) {
+    if (!connection.player || !gone.has(connection.player.id)) continue;
+    await leave(connection);
+    connection.send({ t: 'error', why: 'erased' });
+    setTimeout(() => connection.socket.destroy(), 50);
+  }
+  for (const r of rooms.values()) {
+    for (const id of gone) if (r.remotePlayers.delete(id)) broadcastLocal(r, { t: 'leave', id });
+    for (const i of scrubRoom(r, gone).freed) broadcast(r, { t: 'lot', act: 'free', i, lot: null });
+  }
+  for (const state of Object.values(saved)) if (state && typeof state === 'object') scrubRoom(state, gone);
+  markDirty();
+  void persist();
 }
 
 // ---------------------------------------------------------------- start

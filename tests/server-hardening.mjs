@@ -166,7 +166,7 @@ async function playOut(A, B) {
   A.ws.close(); B.ws.close();
 }
 
-server.kill();
+await new Promise((r) => { if (server.exitCode !== null) return r(); server.once('exit', r); server.kill(); }); // it saves on the way out: wait before removing its folder
 rmSync(dataDir, { recursive: true, force: true });
 if (fails.length) { console.error(`Server hardening test failed: ${fails.length}`); process.exit(1); }
 console.log('Server hardening test passed.');

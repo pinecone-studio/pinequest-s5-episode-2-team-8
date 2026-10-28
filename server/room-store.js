@@ -73,10 +73,37 @@ function writeIdentityFile(file, identities) {
   fs.renameSync(temporaryFile, file);
 }
 
-/** A family as stored: its children, each with a hashed picture password and the count of wrong tries. */
+/** A family as stored: its children, each with a hashed picture password and the count of wrong tries, and the grown-up
+ *  PIN (scrypt hash and salt) with its recovery code (hash and salt), and their counters (PIN_COUNTS).
+ *  A family made before the PIN has neither. */
 function cleanFamily(family) {
   if (!isRecord(family) || !Array.isArray(family.members)) throw new Error('Invalid stored family');
-  return { members: family.members.filter((member) => isRecord(member) && PLAYER_ID.test(member.id || '')) };
+  const count = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
+  const pin = /^[a-f0-9]{64}$/.test(family.pinHash || '') && /^[a-f0-9]{32}$/.test(family.pinSalt || '');
+  const recovery = /^[a-f0-9]{64}$/.test(family.recoveryHash || '') && /^[a-f0-9]{32}$/.test(family.recoverySalt || '');
+  return {
+    members: family.members.filter((member) => isRecord(member) && PLAYER_ID.test(member.id || '')),
+    pinHash: pin ? family.pinHash : '', pinSalt: pin ? family.pinSalt : '',
+    recoveryHash: recovery ? family.recoveryHash : '', recoverySalt: recovery ? family.recoverySalt : '',
+    ...Object.fromEntries(PIN_COUNTS.map((key) => [key, count(family[key])])),
+  };
+}
+// the wrong tries, lock end, lock count and last wrong try of the PIN, of joining with it and of the recovery code; when
+// the first PIN was set on a family made before the PIN
+const PIN_COUNTS = ['pin', 'join', 'rec'].flatMap((c) => [c + 'Fails', c + 'Until', c + 'Locks', c + 'WrongAt']).concat('pinSetAt');
+const pinOf = (family) => ({ pinHash: family.pinHash, pinSalt: family.pinSalt, recoveryHash: family.recoveryHash, recoverySalt: family.recoverySalt,
+  ...Object.fromEntries(PIN_COUNTS.map((key) => [key, family[key]])) });
+const ERASED_KEEP_MS = 30 * 24 * 60 * 60 * 1000; // an erased child's id can't be taken again for 30 days: an old device can't bring it back
+
+/** Takes erased players out of a room's state ({ lots, chat }, changed in place): their ger lots are freed and the chat
+ *  lines they wrote (each line carries the writer's id) are dropped. Returns the freed lot indexes and whether anything changed. */
+function scrubRoom(state, ids) {
+  const freed = [];
+  if (Array.isArray(state.lots)) state.lots.forEach((lot, i) => { if (lot && ids.has(lot.by)) { state.lots[i] = null; freed.push(i); } });
+  const chat = Array.isArray(state.chat) ? state.chat.filter((line) => !(line && ids.has(line.id))) : null;
+  const dropped = chat ? state.chat.length - chat.length : 0;
+  if (chat) state.chat = chat;
+  return { freed, changed: freed.length > 0 || dropped > 0 };
 }
 
 function cleanWallet(wallet) {
@@ -137,6 +164,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
   const progressFile = path.join(dataDir, 'progress.json');
   const familyFile = path.join(dataDir, 'families.json');
   const deviceTicketFile = path.join(dataDir, 'device-tickets.json');
+  const erasedFile = path.join(dataDir, 'erased.json');
 
   if (!databaseUrl) {
     return {
@@ -161,9 +189,16 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           const devices = readLegacyFile(deviceTicketFile, 'device tickets');
           return Object.hasOwn(devices, id) && Array.isArray(devices[id]) && devices[id].some((hash) => sameTicketHash(hash, ticket));
         }
+        const erased = readLegacyFile(erasedFile, 'erased players');
+        if (Object.hasOwn(erased, id) && Date.now() - erased[id] < ERASED_KEEP_MS) return false;
         Object.defineProperty(identities, id, { value: digest, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(identityFile, identities);
         return true;
+      },
+      /** Was this id erased with its family lately (so authenticatePlayer refuses it)? For the reason given to the device. */
+      async isErased(id) {
+        const erased = readLegacyFile(erasedFile, 'erased players');
+        return PLAYER_ID.test(id || '') && Object.hasOwn(erased, id) && Date.now() - erased[id] < ERASED_KEEP_MS;
       },
       async addDeviceTicket(id, ticket) {
         if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) throw new Error('Invalid device ticket');
@@ -173,11 +208,11 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         Object.defineProperty(devices, id, { value: hashes.slice(-DEVICE_TICKETS_MAX), writable: true, configurable: true, enumerable: true });
         writeIdentityFile(deviceTicketFile, devices);
       },
-      async createFamily(code, member) {
+      async createFamily(code, member, pin = {}) {
         if (!FAMILY_CODE.test(code || '')) throw new Error('Invalid family code');
         const families = readLegacyFile(familyFile, 'families');
         if (Object.hasOwn(families, code)) return false;
-        Object.defineProperty(families, code, { value: { members: [member] }, writable: true, configurable: true, enumerable: true });
+        Object.defineProperty(families, code, { value: { members: [member], ...pin }, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(familyFile, families);
         return true;
       },
@@ -197,6 +232,36 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           else delete families[code]; // the last child left
           writeIdentityFile(familyFile, families);
         }
+        return outcome.result;
+      },
+      /** decide(family or null) returns { erase, result }. Erasing removes the family and, for each of its children, the
+       *  wallet (with its operations), cloud save, identity, device tickets, ger lots and chat lines. Every file is read
+       *  before any is written, and the family goes last, so a failed write can be finished by asking again. */
+      async eraseFamily(code, decide) {
+        if (!FAMILY_CODE.test(code || '')) return decide(null).result;
+        const families = readLegacyFile(familyFile, 'families');
+        const family = Object.hasOwn(families, code) ? cleanFamily(families[code]) : null;
+        const outcome = decide(family);
+        if (!family || !outcome.erase) return outcome.result;
+        const ids = new Set(family.members.map((member) => member.id));
+        const wallets = readLegacyFile(walletFile, 'player wallets'), progress = readLegacyFile(progressFile, 'player progress');
+        const identities = readIdentityFile(identityFile), devices = readLegacyFile(deviceTicketFile, 'device tickets'), rooms = readLegacyFile(dataFile);
+        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now();
+        for (const [id, when] of Object.entries(erased)) if (!(at - when < ERASED_KEEP_MS)) delete erased[id];
+        for (const id of ids) Object.defineProperty(erased, id, { value: at, writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(erasedFile, erased); // first: no device can take an erased id again, even if a later write fails
+        for (const records of [wallets, progress, identities, devices]) for (const id of ids) delete records[id];
+        let roomsChanged = false;
+        for (const state of Object.values(rooms)) if (isRecord(state) && scrubRoom(state, ids).changed) roomsChanged = true;
+        writeIdentityFile(walletFile, wallets); writeIdentityFile(progressFile, progress);
+        writeIdentityFile(identityFile, identities); writeIdentityFile(deviceTicketFile, devices);
+        if (roomsChanged) {
+          const temporaryFile = `${dataFile}.tmp`;
+          fs.writeFileSync(temporaryFile, JSON.stringify(rooms));
+          fs.renameSync(temporaryFile, dataFile);
+        }
+        delete families[code];
+        writeIdentityFile(familyFile, families);
         return outcome.result;
       },
       async getAccount(id, initial = {}, inventorySeed = {}) {
@@ -373,11 +438,18 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             updated_at timestamptz NOT NULL DEFAULT now()
           )
         `);
+        await client.query(`ALTER TABLE naadamy_families ADD COLUMN IF NOT EXISTS pin jsonb NOT NULL DEFAULT '{}'::jsonb`); // the grown-up PIN
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_erased (
+            id text PRIMARY KEY,
+            erased_at timestamptz NOT NULL DEFAULT now()
+          )
+        `);
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_players_room_idx ON naadamy_players (room_code)');
         // Supabase serves every public table over its REST API to anyone with the project's anon key. Row level security with
         // no policies closes that door; the server connects as the tables' owner, which RLS does not apply to.
         for (const table of ['naadamy_rooms', 'naadamy_players', 'naadamy_identities', 'naadamy_wallets', 'naadamy_wallet_ops', 'naadamy_player_progress',
-          'naadamy_player_tickets', 'naadamy_families']) {
+          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased']) {
           await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
         }
         for (const [code, state] of Object.entries(legacy)) {
@@ -429,8 +501,11 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       const digest = ticketHash(ticket);
       const client = await pool.connect();
       try {
+        // an erased child's id is not taken again on first sight (an old device must not bring the account back)
         const inserted = await client.query(
-          'INSERT INTO naadamy_identities (id, ticket_hash) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING RETURNING id',
+          `INSERT INTO naadamy_identities (id, ticket_hash) SELECT $1, $2
+           WHERE NOT EXISTS (SELECT 1 FROM naadamy_erased WHERE id = $1 AND erased_at > now() - interval '30 days')
+           ON CONFLICT (id) DO NOTHING RETURNING id`,
           [id, digest],
         );
         if (inserted.rows.length) return true;
@@ -445,6 +520,11 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       } finally {
         client.release();
       }
+    },
+    async isErased(id) {
+      if (!PLAYER_ID.test(id || '')) return false;
+      const result = await pool.query("SELECT 1 FROM naadamy_erased WHERE id = $1 AND erased_at > now() - interval '30 days'", [id]);
+      return result.rows.length > 0;
     },
     async addDeviceTicket(id, ticket) {
       if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) throw new Error('Invalid device ticket');
@@ -465,29 +545,30 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         client.release();
       }
     },
-    async createFamily(code, member) {
+    async createFamily(code, member, pin = {}) {
       if (!FAMILY_CODE.test(code || '')) throw new Error('Invalid family code');
       const result = await pool.query(
-        'INSERT INTO naadamy_families (code, members) VALUES ($1, $2::jsonb) ON CONFLICT (code) DO NOTHING RETURNING code',
-        [code, JSON.stringify([member])],
+        'INSERT INTO naadamy_families (code, members, pin) VALUES ($1, $2::jsonb, $3::jsonb) ON CONFLICT (code) DO NOTHING RETURNING code',
+        [code, JSON.stringify([member]), JSON.stringify(pin)],
       );
       return result.rows.length > 0;
     },
     async getFamily(code) {
       if (!FAMILY_CODE.test(code || '')) return null;
-      const result = await pool.query('SELECT members FROM naadamy_families WHERE code = $1', [code]);
-      return result.rows[0] ? cleanFamily(result.rows[0]) : null;
+      const result = await pool.query('SELECT members, pin FROM naadamy_families WHERE code = $1', [code]);
+      return result.rows[0] ? cleanFamily({ ...result.rows[0].pin, members: result.rows[0].members }) : null;
     },
     async mutateFamily(code, mutate) {
       if (!FAMILY_CODE.test(code || '')) return mutate(null).result;
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        const row = await client.query('SELECT members FROM naadamy_families WHERE code = $1 FOR UPDATE', [code]);
-        const family = row.rows[0] ? cleanFamily(row.rows[0]) : null;
+        const row = await client.query('SELECT members, pin FROM naadamy_families WHERE code = $1 FOR UPDATE', [code]);
+        const family = row.rows[0] ? cleanFamily({ ...row.rows[0].pin, members: row.rows[0].members }) : null;
         const outcome = mutate(family);
         if (family && outcome.changed && family.members.length) {
-          await client.query('UPDATE naadamy_families SET members = $2::jsonb, updated_at = now() WHERE code = $1', [code, JSON.stringify(family.members)]);
+          await client.query('UPDATE naadamy_families SET members = $2::jsonb, pin = $3::jsonb, updated_at = now() WHERE code = $1',
+            [code, JSON.stringify(family.members), JSON.stringify(pinOf(family))]);
         } else if (family && outcome.changed) {
           await client.query('DELETE FROM naadamy_families WHERE code = $1', [code]); // the last child left
         }
@@ -496,6 +577,48 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       } catch (error) {
         try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back family change:', rollbackError.message); }
         throw new Error(`Could not save family: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    /** As in JSON mode, in one transaction: all of it goes, or nothing does. */
+    async eraseFamily(code, decide) {
+      if (!FAMILY_CODE.test(code || '')) return decide(null).result;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const row = await client.query('SELECT members, pin FROM naadamy_families WHERE code = $1 FOR UPDATE', [code]);
+        const family = row.rows[0] ? cleanFamily({ ...row.rows[0].pin, members: row.rows[0].members }) : null;
+        const outcome = decide(family);
+        if (!family || !outcome.erase) {
+          await client.query('COMMIT');
+          return outcome.result;
+        }
+        const ids = family.members.map((member) => member.id), gone = new Set(ids);
+        await client.query('DELETE FROM naadamy_families WHERE code = $1', [code]);
+        await client.query('DELETE FROM naadamy_wallet_ops WHERE player_id = ANY($1::text[])', [ids]);
+        await client.query('DELETE FROM naadamy_wallets WHERE id = ANY($1::text[])', [ids]);
+        await client.query('DELETE FROM naadamy_player_progress WHERE player_id = ANY($1::text[])', [ids]);
+        await client.query('DELETE FROM naadamy_player_tickets WHERE player_id = ANY($1::text[])', [ids]);
+        await client.query('DELETE FROM naadamy_identities WHERE id = ANY($1::text[])', [ids]);
+        await client.query('DELETE FROM naadamy_players WHERE id = ANY($1::text[])', [ids]);
+        await client.query("DELETE FROM naadamy_erased WHERE erased_at < now() - interval '30 days'");
+        await client.query(
+          'INSERT INTO naadamy_erased (id) SELECT unnest($1::text[]) ON CONFLICT (id) DO UPDATE SET erased_at = now()', [ids]);
+        // rooms in code order, as save() locks them, so the two never wait on each other
+        const rooms = await client.query('SELECT code, state FROM naadamy_rooms ORDER BY code FOR UPDATE');
+        for (const { code: room, state } of rooms.rows) {
+          if (isRecord(state) && scrubRoom(state, gone).changed) {
+            await client.query('UPDATE naadamy_rooms SET state = $2::jsonb, updated_at = now() WHERE code = $1', [room, JSON.stringify(state)]);
+          }
+        }
+        // every server instance closes these children's sockets and drops them from its rooms (sent when this commits)
+        await client.query('SELECT pg_notify($1, $2)', [REALTIME_CHANNEL, JSON.stringify({ t: 'family-erased', ids })]);
+        await client.query('COMMIT');
+        return outcome.result;
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back family erase:', rollbackError.message); }
+        throw new Error(`Could not erase family: ${error.message}`, { cause: error });
       } finally {
         client.release();
       }
@@ -767,4 +890,4 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
   };
 }
 
-module.exports = { createRoomStore };
+module.exports = { createRoomStore, scrubRoom };
