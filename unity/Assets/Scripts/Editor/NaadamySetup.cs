@@ -3,6 +3,7 @@
 using System.IO;
 using UnityEditor;
 using UnityEditor.Build;
+using UnityEditor.Compilation;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
@@ -11,7 +12,13 @@ public static class NaadamySetup
 {
     const string SCENE = "Assets/Scenes/Nutag.unity";
 
-    static NaadamySetup() { EditorApplication.delayCall += () => { if (!File.Exists(SCENE)) Setup(); }; }
+    static NaadamySetup()
+    {
+        EditorApplication.delayCall += () => { if (!File.Exists(SCENE)) Setup(); };
+        // the game can't carry on after a script reload mid-play (Game.I and everything Awake built are gone): stop playing
+        // first. For this project only; the editor's own "Script Changes While Playing" preference is left alone.
+        CompilationPipeline.compilationStarted += _ => { if (EditorApplication.isPlaying) EditorApplication.isPlaying = false; };
+    }
 
     [MenuItem("Naadamy/Set up project")]
     public static void Setup()
