@@ -141,7 +141,10 @@ public sealed partial class Game
         }
         /** A practice bout at the wrestling school: the slowest round, a gentle coach, the move explained as you pick it, nothing to win or lose. */
         public static WrestleModal Practice(Game g) => new WrestleModal(g, 1, Loc.L("Багш", "Coach"), 0.06f, Rules.SKINS[2], true);
-        public static WrestleModal Tournament(Game g, int round) => new WrestleModal(g, round, Rules.WR_NAMES[(round * 5 + Random.Range(0, 4)) % Rules.WR_NAMES.Length], 0.12f + round * 0.07f, Rules.Pick(Rules.SKINS));
+        /** A Naadam round. Round 8 is always Avarga Setsen, the titan whose statue stands by the stands: a little stronger than the rest. */
+        public static WrestleModal Tournament(Game g, int round) => round == 8
+            ? new WrestleModal(g, round, Rules.SETSEN, 0.12f + round * 0.07f + 0.06f, Rules.SKINS[Rules.SKINS.Length - 1])
+            : new WrestleModal(g, round, Rules.WR_NAMES[(round * 5 + Random.Range(0, 4)) % Rules.WR_NAMES.Length], 0.12f + round * 0.07f, Rules.Pick(Rules.SKINS));
         public override float Width => 560;
 
         bool OnBeat() { float q = ((Time.time - intro) % DEVEE_BEAT) / DEVEE_BEAT; return q < 0.2f || q > 0.84f; }
@@ -313,7 +316,7 @@ public sealed partial class Game
             var safe = Screen.safeArea; float U = g.UiScale, top = Screen.height - safe.yMax + U * 8;
             // the top bar: the round, both names and their falls, and what the herald calls out
             string info = (practice ? Loc.L("Бөхийн сургууль · Дасгал", "Wrestling school · Practice") : $"{Loc.L("Наадам", "Naadam")} · {Loc.L("Даваа", "Round")} {round}/9 · {need} {Loc.L("унагаалт", "falls")}")
-                + $"\n<color=#d8342b><b>{g.MyName}</b></color> {new string('●', a)}{new string('○', Mathf.Max(0, need - a))}   ·   {new string('●', b)}{new string('○', Mathf.Max(0, need - b))} <color=#2b5bd8><b>{oppName}</b></color>"
+                + $"\n<color=#d8342b><b>{g.MyName}</b></color> {new string('●', a)}{new string('○', Mathf.Max(0, need - a))}   ·   {new string('●', b)}{new string('○', Mathf.Max(0, need - b))} <color=#2b5bd8><b>{(Rules.TitleById(Rules.OPP_TITLE[Mathf.Clamp(round, 0, Rules.OPP_TITLE.Length - 1)]) is Rules.Title ot ? ot.name + " " : "")}{oppName}</b></color>"
                 + (heraldOn ? $"\n<b>{Loc.L("Засуул", "Herald")}:</b> {herald}" : "");
             var ist = new GUIStyle(g.sNote) { fontSize = g.Ts(12), wordWrap = true }; float iw = Mathf.Min(Screen.width - U * 120, U * 640), ih = ist.CalcHeight(new GUIContent(info), iw) + U * 6;
             GUI.Box(new Rect((Screen.width - iw) / 2, top, iw, ih), info, ist);
