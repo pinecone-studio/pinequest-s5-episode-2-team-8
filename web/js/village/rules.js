@@ -229,7 +229,7 @@
   /** How far a lot's ger is built; gers saved before hands-on building have no stage and count as finished. */
   // ---------------------------------------------------------------- cloud save
   // A child's progress outside the wallet, in one shape for the web and Unity, kept by the server so it follows the child to
-  // another device: character, lessons, badges, passport stamps, Mongol script and the historian's quest. Merging only ever
+  // another device: character, lessons, badges, passport stamps, Mongol script, the historian's quest and story mode. Merging only ever
   // adds (done stays done, best scores and steps go up, the earliest date of a badge or stamp stays), so no device can erase
   // what another one earned. The character is the exception: the most recent choice (charAt) wins.
   const CLOUD_ID = /^[\w:.-]{1,48}$/, CLOUD_KEYS = 200, CLOUD_TIME = 4102444800000; // ids, keys per list, dates before 2100
@@ -251,23 +251,24 @@
       }),
       ach: map(o.ach, (t) => int(t, CLOUD_TIME)), stamps: map(o.stamps, (t) => int(t, CLOUD_TIME)),
       bichig: map(o.bichig, (n) => int(n, 1000)), bichigMem: map(o.bichigMem, (v) => (v ? 1 : 0)),
-      hist: int(o.hist, 1000),
-      story: map(o.story, (n) => int(n, 1000)), // story mode: chapter → the furthest part reached ("ch1:done": finished)
+      hist: int(o.hist, 1000), story: map(o.story, (n) => int(n, 1000)),
     };
   }
   function mergeCloud(a, b) {
     a = cleanCloud(a); b = cleanCloud(b);
-    const each = (x, y, f) => Object.fromEntries([...new Set([...Object.keys(x), ...Object.keys(y)])].map((k) => [k, f(x[k], y[k])]));
+    const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined); // not Object.prototype's: a key may be "constructor"
+    const each = (x, y, f) => Object.fromEntries([...new Set([...Object.keys(x), ...Object.keys(y)])].map((k) => [k, f(own(x, k), own(y, k))]));
     const earliest = (x, y) => (x && y ? Math.min(x, y) : x || y);
     const max = (x, y) => Math.max(x || 0, y || 0);
     const who = b.charAt > a.charAt || (!a.eth && !a.aimag) ? b : a; // the most recent character, else the one that has one
+    const story = each(a.story, b.story, max); // chapter id → part reached, "<id>:done" once finished
+    for (const k of Object.keys(story)) if (k.endsWith(':done')) delete story[k.slice(0, -5)]; // a finished chapter replays from the start
     return {
       eth: who.eth || a.eth, aimag: who.aimag || a.aimag, charAt: max(a.charAt, b.charAt),
       learn: each(a.learn, b.learn, (x = {}, y = {}) => ({ done: !!(x.done || y.done), best: max(x.best, y.best), family: max(x.family, y.family) })),
       ach: each(a.ach, b.ach, earliest), stamps: each(a.stamps, b.stamps, earliest),
       bichig: each(a.bichig, b.bichig, max), bichigMem: each(a.bichigMem, b.bichigMem, () => 1),
-      hist: max(a.hist, b.hist),
-      story: each(a.story, b.story, max),
+      hist: max(a.hist, b.hist), story,
     };
   }
 

@@ -76,12 +76,12 @@ try {
 
   // the cloud save: each device adds what it earned, nothing is lost, and the newest character choice wins
   const first = await joinRoom(b.id, b.ticket, { eth: 'khalkh', aimag: 'tuv', charAt: 1000, learn: { ger: { done: true, best: 3, family: 2000 } },
-    ach: { character: 3000 }, stamps: { tuv: 4000 }, bichig: { a: 2 }, bichigMem: { a: 1 }, hist: 2, story: { ch1: 4 } });
+    ach: { character: 3000 }, stamps: { tuv: 4000 }, bichig: { a: 2 }, bichigMem: { a: 1 }, hist: 2, story: { ch1: 2 } });
   assert.deepEqual([first.cloud.eth, first.cloud.stamps, first.cloud.hist], ['khalkh', { tuv: 4000 }, 2]);
   const second = await joinRoom(b.id, bLogin.ticket, { eth: 'oold', aimag: 'khovd', charAt: 900, learn: { ger: { done: false, best: 1, family: 0 } },
-    stamps: { uvs: 5000, tuv: 4500 }, hist: 1, story: { ch1: 2, 'ch1:done': 1 } });
+    stamps: { uvs: 5000, tuv: 4500 }, hist: 1, story: { ch1: 1, 'ch2:done': 1, ch2: 3 } });
   assert.deepEqual([second.cloud.eth, second.cloud.aimag, second.cloud.learn.ger, second.cloud.stamps, second.cloud.ach, second.cloud.hist, second.cloud.story],
-    ['khalkh', 'tuv', { done: true, best: 3, family: 2000 }, { tuv: 4000, uvs: 5000 }, { character: 3000 }, 2, { ch1: 4, 'ch1:done': 1 }]);   // the story: the furthest part, and finished
+    ['khalkh', 'tuv', { done: true, best: 3, family: 2000 }, { tuv: 4000, uvs: 5000 }, { character: 3000 }, 2, { ch1: 2, 'ch2:done': 1 }]);
   const again = await api({ act: 'login', code, id: b.id, pics: [5, 4, 3] });
   assert.deepEqual(again.cloud, second.cloud);
   ok('the cloud save from either device is merged and comes along with the next login');
