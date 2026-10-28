@@ -292,6 +292,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
 
   const Pool = PoolOverride || require('pg').Pool;
   const pool = new Pool({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 5000 });
+  pool.on('error', (error) => console.error('PostgreSQL pool error:', error.message)); // an idle client dropping must not crash the server
   let subscriber = null;
 
   return {

@@ -5,7 +5,7 @@ It describes protocol **version 13** (`VERSION` in `web/js/village/rules.js`). U
 
 - Transport: WebSocket at `ws://<host>/ws` (`wss://` on HTTPS).
 - Every message is one JSON text frame: an object with a `t` (type) field.
-- Max frame size: 16 KB. Binary frames are ignored.
+- Max message size: 16 KB in total, also when split over fragments. Binary frames, unknown opcodes, a continuation frame with no open message and a new message inside an unfinished one close the connection.
 - Rate limit: about 20 messages per second per connection (a burst of 30 is allowed). Messages over the limit are dropped silently.
 - The server pings every 20 s. A client that misses a ping is disconnected.
 - Bad messages (unknown `t`, broken JSON, out-of-range values) are ignored, or clamped where noted.
@@ -143,7 +143,7 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 | `wr-accept` | `from` | Accept an invitation you got from `from`. Starts the match. |
 | `wr-decline` | `from` | Say no. |
 | `wr-move` | `m, p` | Your move for this round: `m` = a `MOVES` id, `p` = power `0 … 1` (from the timing bar). One per round. |
-| `wr-quit` | (none) | Give up. The other player wins. |
+| `wr-quit` | (none) | Give up. The other player wins, but if no round had been played yet nobody is paid. |
 
 ## Server → client
 
@@ -169,7 +169,7 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 | `wr-start` | `id, a, b` | Match started. `a`, `b` = `{ id, name, look }`; `a` is the one who invited. |
 | `wr-wait` | (none) | The other player has chosen; waiting for you. |
 | `wr-result` | `ma, pa, mb, pb, r, score` | Round result. `r` = `1` a wins, `-1` b wins, `0` draw. `score` = `{ a, b }`. |
-| `wr-end` | `id, winner, playerIds, reason` | Match over. `id` is the match id, `playerIds` are its participants, and `reason` is `''` (normal) or `'left'` (the other quit or dropped). The server grants each participant's idempotent match reward. |
+| `wr-end` | `id, winner, playerIds, reason` | Match over. `id` is the match id, `playerIds` are its participants, and `reason` is `''` (normal) or `'left'` (the other quit or dropped). The server grants each participant's idempotent match reward, except when `reason` is `'left'` and no round had been played (`rounds` is `0`; the field is the number of rounds played, draws included). Two players can still quit after one round and play again; the daily earn cap bounds what that earns. The reward counts toward the daily earn cap (`DAILY_EARN_CAP`) like uploaded progress; over it, `wallet-result` answers `accepted: false, reason: 'limit'`. |
 | `quest-claim-result` | `quest, accepted, reason?, wallet` | Reply to `quest-claim`. Known quest claims return `reason: 'server-only'` until quest progress is server-verified. |
 | `daily-activity-result` | `activity, day, accepted, reason?, wallet` | Reply to `daily-activity-claim`; known activities return `reason: 'server-only'` until the activity is server-verified. `day` is the server's Mongolia day. |
 | `deny` | `act, why` | Request refused. `act: 'ger'` → `why: 'taken' \| 'own'`; `act: 'wr'` → `why: 'busy'`. |

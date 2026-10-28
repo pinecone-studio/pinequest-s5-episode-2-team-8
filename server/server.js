@@ -40,14 +40,15 @@ const EXTRA_ORIGINS = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.t
 function originAllowed(o) {
   return /^https:\/\/naadamy-unity(-[a-z0-9-]+)?\.vercel\.app$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(o) || EXTRA_ORIGINS.includes(o);
 }
-/** Where a request comes from: behind Render's proxy the first x-forwarded-for address, else the socket's. */
-function clientIp(req) { const f = PRODUCTION && req.headers['x-forwarded-for']; return (f ? String(f).split(',')[0] : req.socket.remoteAddress || '').trim(); }
+const clientIp = require('./client-ip.js');
 // the AI helper costs money per question: besides its daily cap for the whole server, each address gets at most 30 a quarter hour
 const aiHits = new Map();
 function aiAllowed(ip) {
   const now = Date.now(), w = 15 * 60 * 1000, h = (aiHits.get(ip) || []).filter((t) => now - t < w);
   if (h.length >= 30) { aiHits.set(ip, h); return false; }
-  h.push(now); aiHits.set(ip, h); if (aiHits.size > 5000) aiHits.clear(); return true;
+  h.push(now); aiHits.set(ip, h);
+  if (aiHits.size > 5000) for (const [key, times] of aiHits) if (!times.some((t) => now - t < w)) aiHits.delete(key);
+  return true;
 }
 const basar = require('./basar-ai.js')(REPO);
 const { createRoomStore } = require('./room-store');
@@ -192,12 +193,15 @@ function frame(op, payload) {
 }
 function upgrade(req, socket) {
   const key = req.headers['sec-websocket-key'];
-  if (new URL(req.url, 'http://x').pathname !== '/ws' || !key) { socket.destroy(); return; }
+  let pathname; try { pathname = new URL(req.url, 'http://x').pathname; } catch { socket.destroy(); return; } // e.g. `GET //[` throws
+  if (pathname !== '/ws' || !key) { socket.destroy(); return; }
   const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
   socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
   socket.setNoDelay(true);
-  const conn = { socket, buf: Buffer.alloc(0), frag: [], alive: true, tokens: 30, last: Date.now(), player: null, room: null };
-  conn.send = (obj) => { if (!socket.destroyed) { const f = frame(1, JSON.stringify(obj)); if (f) socket.write(f); } };
+  const conn = { socket, buf: Buffer.alloc(0), frag: [], fragBytes: 0, fragOpen: false, alive: true, tokens: 30, last: Date.now(), player: null, room: null };
+  // a client that never reads (or a very slow one) would make Node queue every reply in memory: drop it instead
+  const write = (f) => { if (socket.destroyed) return; if (socket.writableLength > 256 * 1024) return socket.destroy(); socket.write(f); };
+  conn.send = (obj) => { const f = frame(1, JSON.stringify(obj)); if (f) write(f); };
   socket.on('data', (chunk) => {
     conn.buf = Buffer.concat([conn.buf, chunk]);
     if (conn.buf.length > MAX_PAYLOAD * 4) return socket.destroy();
@@ -207,17 +211,21 @@ function upgrade(req, socket) {
       if (len === 126) { if (conn.buf.length < 4) return; len = conn.buf.readUInt16BE(2); off = 4; }
       else if (len === 127) return socket.destroy(); // far too big for this game
       if (len > MAX_PAYLOAD || !masked) return socket.destroy();
+      if (op >= 8 && (len > 125 || !fin)) return socket.destroy(); // control frames are small and never split (RFC 6455 5.5)
       if (conn.buf.length < off + 4 + len) return;
       const mask = conn.buf.subarray(off, off + 4), data = Buffer.from(conn.buf.subarray(off + 4, off + 4 + len));
       for (let i = 0; i < data.length; i++) data[i] ^= mask[i & 3];
       conn.buf = conn.buf.subarray(off + 4 + len);
       if (op === 8) { try { socket.end(frame(8, Buffer.alloc(0))); } catch { /* closing */ } return; }
-      if (op === 9) { socket.write(frame(10, data)); continue; }
+      if (op === 9) { write(frame(10, data)); continue; }
       if (op === 10) { conn.alive = true; continue; }
-      if (op === 1 || op === 0) {
-        conn.frag.push(data);
-        if (fin) { const text = Buffer.concat(conn.frag).toString('utf8'); conn.frag = []; onMessage(conn, text); }
-      }
+      if (op !== 0 && op !== 1) return socket.destroy(); // binary and reserved opcodes are not used
+      if ((op === 0) !== conn.fragOpen) return socket.destroy(); // a continuation with nothing to continue, or a new message inside one
+      conn.fragBytes += data.length;
+      if (conn.fragBytes > MAX_PAYLOAD) return socket.destroy(); // the whole message, not just one frame
+      conn.frag.push(data);
+      conn.fragOpen = !fin;
+      if (fin) { const text = Buffer.concat(conn.frag).toString('utf8'); conn.frag = []; conn.fragBytes = 0; onMessage(conn, text); }
     }
   });
   socket.on('close', () => { conns.delete(conn); leave(conn); });
@@ -378,6 +386,7 @@ function deliverWrestleEvent(r, event) {
   if (message.t === 'wr-end') awardWrestlingResult(r, message);
 }
 function awardWrestlingResult(r, message) {
+  if (message.reason === 'left' && !message.rounds) return; // quit before any round was played: nobody is paid
   if (!message.winner || typeof message.id !== 'string' || !/^w[\w-]{1,64}$/.test(message.id)
     || !Array.isArray(message.playerIds) || message.playerIds.length !== 2 || !message.playerIds.includes(message.winner)) return;
   for (const id of message.playerIds) {
@@ -389,13 +398,20 @@ async function grantWrestlingReward(player, matchId, won) {
   const operation = `wrestle:${matchId}`;
   const coins = won ? 25 : 0, xp = won ? 30 : 10;
   try {
-    const outcome = await roomStore.mutateWallet(player.id, operation, (wallet) => {
+    const outcome = await roomStore.mutateWallet(player.id, operation, (wallet, inventory, earned) => {
       if (wallet.coins > WALLET_MAX - coins || wallet.xp > WALLET_MAX - xp) {
         return { changed: false, result: { accepted: false, reason: 'limit' } };
       }
+      // like an uploaded sync, wrestling pay counts toward the daily earn cap; what goes over is not paid
+      const day = villageDay();
+      const today = earned.d === day ? earned : { d: day, coins: 0, xp: 0 };
+      const addCoins = Math.max(0, Math.min(coins, R.DAILY_EARN_CAP.coins - today.coins));
+      const addXp = Math.max(0, Math.min(xp, R.DAILY_EARN_CAP.xp - today.xp));
+      if (!addCoins && !addXp) return { changed: false, result: { accepted: false, reason: 'limit' } };
       return {
         changed: true,
-        wallet: { coins: wallet.coins + coins, xp: wallet.xp + xp },
+        wallet: { coins: wallet.coins + addCoins, xp: wallet.xp + addXp },
+        earned: { d: day, coins: today.coins + addCoins, xp: today.xp + addXp },
         result: { accepted: true },
       };
     });
@@ -443,6 +459,7 @@ function resolveSharedRound(wrestling, match, timedOut) {
   const result = R.exchange(a.m, a.p, b.m, b.p);
   if (result > 0) match.score.a++;
   else if (result < 0) match.score.b++;
+  match.played = (match.played || 0) + 1; // draws count too: they were played
   match.moves = {};
   const finished = match.score.a >= 2 || match.score.b >= 2;
   match.deadline = finished ? null : Date.now() + 25000;
@@ -536,7 +553,7 @@ async function handleSharedWrestling(conn, type, message) {
         if (index < 0) return { changed: false };
         const [match] = wrestling.matches.splice(index, 1);
         const winner = match.a === p.id ? match.b : match.a;
-        events.push(wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason: 'left' }));
+        events.push(wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason: 'left', rounds: match.played || 0 }));
         return { changed: true, events };
       }
       return { changed: false };
@@ -558,7 +575,7 @@ async function endSharedWrestlingOnLeave(r, playerId) {
       const winner = match.a === playerId ? match.b : match.a;
       return {
         changed: true,
-        events: [wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason: 'left' })],
+        events: [wrestlingEvent([match.a, match.b], { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason: 'left', rounds: match.played || 0 })],
       };
     });
   } catch (error) {
@@ -903,17 +920,13 @@ async function persistLotAction(conn, action, message) {
         if (action === 'claim') {
           if (lot) return { changed: false, deny: 'taken' };
           if (lots.some((owned) => owned && owned.by === p.id)) return { changed: false, deny: 'own' };
-          let stage = 1;
-          if (Number.isInteger(message.stage)) {
-            stage = Math.max(1, Math.min(R.GER_DONE, message.stage));
-          }
           lot = {
             by: p.id,
             n: p.name,
             roof: Object.hasOwn(R.ROOF, message.roof) ? message.roof : 'blue',
             door: Object.hasOwn(R.DOOR, message.door) ? message.door : 'red',
             furn: [],
-            stage,
+            stage: 1, // a new claim always starts at stage 1; the submitted stage is ignored
           };
           lots[i] = lot;
         } else {
@@ -1110,6 +1123,7 @@ function armMatch(r, match) {
 function resolveMatch(r, match) {
   const { a, b } = match.moves, res = R.exchange(a.m, a.p, b.m, b.p);
   if (res > 0) match.score.a++; else if (res < 0) match.score.b++;
+  match.played = (match.played || 0) + 1; // draws count too: they were played
   match.moves = {};
   for (const id of [match.a, match.b]) { const q = r.players.get(id); if (q) q.conn.send({ t: 'wr-result', ma: a.m, pa: a.p, mb: b.m, pb: b.p, r: res, score: match.score }); }
   if (match.score.a >= 2 || match.score.b >= 2) endMatch(r, match, match.score.a > match.score.b ? match.a : match.b, '');
@@ -1117,7 +1131,7 @@ function resolveMatch(r, match) {
 }
 function endMatch(r, match, winner, reason) {
   clearTimeout(match.timer); r.matches.delete(match.id);
-  const message = { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason };
+  const message = { t: 'wr-end', id: match.id, winner, playerIds: [match.a, match.b], reason, rounds: match.played || 0 };
   for (const id of [match.a, match.b]) { const q = r.players.get(id); if (q) { q.match = null; q.conn.send(message); } }
   awardWrestlingResult(r, message);
 }
