@@ -499,7 +499,7 @@ public sealed partial class Game
         Pill(Emo.Icon(seaIcon), sea.name.ToString(), 28, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(12)) }, () => Open(new SeasonModal()));
         int n = net.others.Count + 1;
         string netText = net.Online ? $"● {n} · {net.room}" : net.status == "solo" ? "○ " + Loc.L("Ганцаараа", "Solo") : "◌ " + Loc.L("Холбогдож…", "Connecting…");
-        Pill(null, netText, 26, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(10)), normal = { textColor = Px.Col(net.Online ? "#2e7d32" : "#8a6a4a") } }, () => Open(new RoomModal()));
+        Pill(null, netText, 26, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(10)), normal = { textColor = Px.Col(net.Online ? "#2e7d32" : "#8a6a4a") } }, () => Open(new ModeModal()));
         if (race == null && battle == null) Pill(Emo.Icon("🤝"), null, 34, pix, () => Open(new TogetherModal()));
         Pill(null, "?", 34, new GUIStyle(pix) { fontSize = PxSize(U(22)) }, () => StartTutorial(true), "help");
         if (race != null) { RaceHud(vw, vh); return; }

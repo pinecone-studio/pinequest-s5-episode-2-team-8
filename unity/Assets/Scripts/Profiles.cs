@@ -51,10 +51,11 @@ public sealed partial class Game
         px = okPos ? V.posX : 17; py = okPos ? V.posY : 13; vx = vy = 0; path.Clear(); pending = null; riding = false; race = null;
         mx = Mathf.FloorToInt(px + 0.5f); my = Mathf.FloorToInt(py + 0.82f); camPos = new Vector2(px, py); petPos = new Vector2(px, py + 0.6f); dgx = px + 0.7f; dgy = py + 0.2f;
         Basar.history.Clear();
-        CloseAll(); Quests(); Sfx.Win(); net.Connect(this);
-        if (string.IsNullOrEmpty(p.eth)) { Open(new CreatePage(true)); return; } // new: build your character (ethnic group, home province, outfit) first
+        CloseAll(); Quests(); Sfx.Win(); net.Close();   // nothing connects until the player picks multiplayer (ModeModal)
+        if (string.IsNullOrEmpty(p.eth)) { Open(new ModeModal(() => Open(new CreatePage(true)))); return; } // new: pick how to play, then build your character (ethnic group, home province, outfit)
         Toast(Loc.L($"Тавтай морил, {p.name}!", $"Welcome, {p.name}!"));
         if (!V.tips && V.tutorialSeen > 0) Open(new TipsModal());
+        Open(new ModeModal());   // singleplayer or multiplayer, on top
     }
     public void LogOut() { net.Close(); if (V != null) { SavePos(); V.Save(); } App.loggedIn = false; App.Save(); CloseAll(); V = null; Open(new AuthPage()); }
 
