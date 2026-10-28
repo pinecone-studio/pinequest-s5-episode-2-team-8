@@ -18,7 +18,37 @@ const QR = require('../web/js/qr.js');
 
 const REPO = path.join(__dirname, '..'); // .env and data/ stay in the repo root
 const UNITY_WEB = path.join(REPO, 'unity', 'Builds', 'WebGL'); // Unity's browser build (Naadamy → Build WebGL)
-const ROOT = fs.existsSync(path.join(UNITY_WEB, 'index.html')) ? UNITY_WEB : path.join(REPO, 'web'); // only the app is served
+// Only Unity's built game is ever served as files. There is no fallback to web/: it holds the server's own game rules
+// (web/js/village/rules.js…), which must never be downloadable. Without a build (on Render) only the API and /ws answer.
+const ROOT = fs.existsSync(path.join(UNITY_WEB, 'index.html')) ? UNITY_WEB : null;
+const PRODUCTION = !!(process.env.RENDER || process.env.NODE_ENV === 'production');
+// headers on every answer: no MIME sniffing, no framing (clickjacking), no referrer leaks, only the device features the
+// game uses, HTTPS only when served over HTTPS, and a content policy that lets the game load and nothing else
+const SECURITY = {
+  'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'cross-origin-opener-policy': 'same-origin',
+  'permissions-policy': 'camera=(), geolocation=(), payment=(), usb=(), microphone=(self)',
+};
+const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; connect-src 'self' https: wss: ws: blob: data:; " +
+  "img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'";
+function secure(req, res) {
+  for (const [k, v] of Object.entries(SECURITY)) res.setHeader(k, v);
+  if (req.headers['x-forwarded-proto'] === 'https' || req.socket.encrypted) res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains');
+}
+// Which web pages may call the API: the game on Vercel (and its preview deployments), a computer on this network while
+// developing, and any extra origins in CORS_ORIGINS (comma separated). Every other site's page is refused by the browser.
+const EXTRA_ORIGINS = (process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+function originAllowed(o) {
+  return /^https:\/\/naadamy-unity(-[a-z0-9-]+)?\.vercel\.app$/.test(o) || /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)(:\d+)?$/.test(o) || EXTRA_ORIGINS.includes(o);
+}
+/** Where a request comes from: behind Render's proxy the first x-forwarded-for address, else the socket's. */
+function clientIp(req) { const f = PRODUCTION && req.headers['x-forwarded-for']; return (f ? String(f).split(',')[0] : req.socket.remoteAddress || '').trim(); }
+// the AI helper costs money per question: besides its daily cap for the whole server, each address gets at most 30 a quarter hour
+const aiHits = new Map();
+function aiAllowed(ip) {
+  const now = Date.now(), w = 15 * 60 * 1000, h = (aiHits.get(ip) || []).filter((t) => now - t < w);
+  if (h.length >= 30) { aiHits.set(ip, h); return false; }
+  h.push(now); aiHits.set(ip, h); if (aiHits.size > 5000) aiHits.clear(); return true;
+}
 const basar = require('./basar-ai.js')(REPO);
 const { createRoomStore } = require('./room-store');
 
@@ -35,16 +65,35 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; ch
 
 // ---------------------------------------------------------------- static files
 function serveStatic(req, res) {
-  const url = new URL(req.url, 'http://x');
+  secure(req, res);
+  let url;
+  try { url = new URL(req.url, 'http://x'); } catch { res.writeHead(400); return res.end(); }
+  if (url.pathname.startsWith('/api/')) {
+    const origin = req.headers.origin;
+    if (origin && originAllowed(origin)) { res.setHeader('access-control-allow-origin', origin); res.setHeader('vary', 'Origin'); }
+    if (req.method === 'OPTIONS') {
+      if (!origin || !originAllowed(origin)) { res.writeHead(403); return res.end(); }
+      res.writeHead(204, { 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '600' });
+      return res.end();
+    }
+  }
   if (url.pathname === '/api/hello') {
     res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-    const c = counts();
-    return res.end(JSON.stringify({ naadamy: true, rooms: rooms.size, players: c.total, nutag: c.nutag, urls: lanIPs().map((ip) => `http://${ip}:${actualPort}/`) }));
+    const c = counts(), info = { naadamy: true, rooms: rooms.size, players: c.total, nutag: c.nutag };
+    if (!PRODUCTION) info.urls = lanIPs().map((ip) => `http://${ip}:${actualPort}/`); // the LAN addresses are for a home network only, never published
+    return res.end(JSON.stringify(info));
   }
-  if (url.pathname === '/api/basar') return basar.handle(req, res);
+  if (url.pathname === '/api/basar') {
+    if (req.method === 'POST' && !aiAllowed(clientIp(req))) { res.writeHead(429, { 'content-type': 'application/json', 'retry-after': '900' }); return res.end('{"ok":false,"reason":"busy"}'); }
+    return basar.handle(req, res);
+  }
   if (url.pathname === '/api/family') return family.handle(req, res);
-  let p = decodeURIComponent(url.pathname);
+  if (!ROOT || (req.method !== 'GET' && req.method !== 'HEAD')) { res.writeHead(ROOT ? 405 : 404, { 'content-type': 'text/plain; charset=utf-8' }); return res.end(ROOT ? 'Method not allowed' : 'Not found'); }
+  let p;
+  try { p = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end(); } // a broken %-escape used to throw and stop the server
+  if (p.includes('\0')) { res.writeHead(400); return res.end(); }
   if (p.endsWith('/')) p += 'index.html';
+  if (p.endsWith('/index.html') || p === '/index.html') res.setHeader('content-security-policy', CSP);
   const file = path.normalize(path.join(ROOT, p));
   if (!file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }
   fs.stat(file, (err, st) => {
