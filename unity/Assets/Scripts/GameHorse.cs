@@ -16,6 +16,7 @@ public sealed partial class Game
     {
         string coat; int cls;
         public UyaModal(Game g) { coat = g.V.horse.coat; cls = Mathf.Min(g.V.horse.cls, Rules.CLASSES.Length - 1); }
+        public override (string who, string face)? Speaker => ("trainer", "happy");
         readonly Tx fact = Rules.Pick(Rules.HORSE_FACTS);
         public override float Width => 560;
         public override void Draw(Game g)
@@ -90,26 +91,11 @@ public sealed partial class Game
         float cruise = 5.6f + V.horse.spd * 0.09f, sprint = cruise + 2.1f;
         return race.sprint && race.stam > 0.02f ? sprint : race.stam < 0.05f ? cruise - 0.7f : cruise;
     }
+    /** A race: the scene switches to the open steppe (NaadamRace). */
     void RaceStart(int clsIdx)
     {
         if (race != null) return;
-        CloseAll();
-        var C = Rules.CLASSES[Mathf.Clamp(clsIdx, 0, Rules.CLASSES.Length - 1)]; var r = RacePath(C.laps); r.cls = clsIdx; r.C = C;
-        if (!riding) Mount(V.horse.coat);
-        var s0 = World.LAP[0];
-        px = s0.x - 0.5f; py = s0.y - 0.82f; vx = vy = 0; path.Clear(); face = 2; camPos = new Vector2(px, py);
-        float pace = C.pace + Mathf.Min(0.5f, V.horse.wins * 0.06f);
-        var names = Rules.RIDERS.OrderBy(_ => Random.value).Take(3).ToArray();
-        string[] hats = { null, "mongol", "cap" }; var coats = Px.COATS.Keys.ToArray();
-        for (int i = 0; i < 3; i++)
-        {
-            var n = new RaceNpc { name = names[i], s = new[] { -1.6f, -1.6f, -3.2f }[i], lane = new[] { -0.6f, 0.6f, 0 }[i], speed = pace * (0.93f + Random.value * 0.1f), wob = Random.value * 6,
-                look = new Look { deel = Rules.Pick(Rules.DEELS), skin = Rules.Pick(Rules.SKINS), hat = hats[Random.Range(0, 3)], coat = coats[Random.Range(0, coats.Length)], ride = "horse" } };
-            var p = PointAt(r, n.s, n.lane); n.px = p.x - 0.5f; n.py = p.y - 0.82f;
-            r.npcs.Add(n);
-        }
-        r.t0 = Time.time; r.say = Loc.L("Гийнгоо! Унаачид морьдоо урамшуулж дуулж байна…", "Giingoo! The riders sing to cheer their horses…");
-        race = r; Sfx.Tap();
+        CloseAll(); Open(new NaadamRace(this, clsIdx));
     }
     void RaceTick(float dt)
     {
@@ -161,7 +147,15 @@ public sealed partial class Game
     {
         var r = race; if (r == null || r.phase == "done") return;
         r.phase = "done"; r.finishT = Time.time; r.sprint = false;
-        float ms = (r.finishT - r.go) * 1000; int place = timeout ? r.npcs.Count + 1 : RacePlace(); var hs = V.horse;
+        float ms = (r.finishT - r.go) * 1000; int place = timeout ? r.npcs.Count + 1 : RacePlace();
+        var rows = new List<(string name, float t, bool me)> { (MyName, timeout ? float.PositiveInfinity : ms / 1000, true) };
+        foreach (var n in r.npcs) rows.Add((n.name, n.done > 0 ? n.done - r.go : float.PositiveInfinity, false));
+        RaceResult(r, place, ms, timeout, rows);
+    }
+    /** The end of any race: the horse gets better, the class may open up, the reward, and the results window. */
+    void RaceResult(Race r, int place, float ms, bool timeout, List<(string name, float t, bool me)> rows)
+    {
+        var hs = V.horse;
         hs.races++; if (place == 1) hs.wins++; if (place <= 5) hs.top5++;
         // training: every race makes the horse a little faster or tougher
         bool spd = Random.value < 0.5f; if (spd) hs.spd = Mathf.Min(10, hs.spd + 1); else hs.sta = Mathf.Min(10, hs.sta + 1);
@@ -174,8 +168,6 @@ public sealed partial class Game
         var rw = Reward(Mathf.RoundToInt(pp[0] * boost), Mathf.RoundToInt(pp[1] * boost)); V.Save();
         Quest("race");
         if (place == 1) { Sfx.Win(); Confetti(90); } else Sfx.Chime();
-        var rows = new List<(string name, float t, bool me)> { (MyName, timeout ? float.PositiveInfinity : ms / 1000, true) };
-        foreach (var n in r.npcs) rows.Add((n.name, n.done > 0 ? n.done - r.go : float.PositiveInfinity, false));
         rows.Sort((a, b) => a.t.CompareTo(b.t));
         Open(new RaceResultModal(r, place, rows, newBest, rw, spd, unlocked));
     }
@@ -186,7 +178,7 @@ public sealed partial class Game
         public override void Draw(Game g)
         {
             g.Picture(Px.Icon("ui:trophy"), 56);
-            GUILayout.Label($"{r.C.name} · {r.C.laps} {Loc.L("тойрог", r.C.laps > 1 ? "laps" : "lap")}", new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter });
+            GUILayout.Label($"{r.C.name} · {r.C.age} · {NaadamRace.Km(r.C)} {Loc.L("км", "km")}", new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter });
             string title = place == 1 ? Loc.L("Түрүү морь!", "Winning horse!") : place <= 5 ? Loc.L($"{place}-р байр · Айргийн тав!", $"Place {place} · top five!") : Loc.L("Баян ходоод!", "Bayan khodood!");
             GUILayout.Label(title, new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleCenter });
             for (int i = 0; i < rows.Count; i++) { var x = rows[i]; GUILayout.BeginHorizontal(x.me ? g.sPrimary : g.sBtn); GUILayout.Label($"<b>{i + 1}</b>", x.me ? g.sPrimary.Clean() : g.sLabel, GUILayout.Width(g.U(24))); GUILayout.Label(x.name, x.me ? g.sPrimary.Clean() : g.sLabel); GUILayout.FlexibleSpace(); GUILayout.Label(float.IsInfinity(x.t) ? "–" : x.t.ToString("0.0") + Loc.L("с", "s"), x.me ? g.sPrimary.Clean() : g.sSmall); GUILayout.EndHorizontal(); }

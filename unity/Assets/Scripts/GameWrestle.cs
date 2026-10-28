@@ -11,6 +11,7 @@ public sealed partial class Game
 
     sealed class ArenaModal : Modal
     {
+        public override (string who, string face)? Speaker => ("zasuul", "proud");
         readonly Tx fact = Rules.Pick(Rules.WR_FACTS);
         public override void Draw(Game g)
         {
@@ -115,14 +116,16 @@ public sealed partial class Game
         const float DEVEE_BEAT = 0.7f; const int DEVEE_TAPS = 4;
         static readonly string[] ARROWS = { "←", "→", "↑", "↓" };
         readonly int round, need; readonly string oppName, oppSkin; readonly float oppSkill, barSpeed, sharp; readonly bool young, practice; string coachMove;
-        readonly Live live = new Live(192, 108);
+        readonly Live live = new Live(400, 180);   // the stadium, full screen (wide, so a widescreen shows the whole field)
+        Vector2 panelScroll;
+        public override bool FullScreen => true;
         int a, b; string phase = "devee", move, lastPlayer, lastMove; float off, target, t0, marker, intro, end, bonus; bool overF;
         string[] pose = { "dance", "dance" }; readonly Dictionary<string, int> used = new Dictionary<string, int>();
         (string text, bool good, float t0)? flash; string msg, herald; bool heraldOn = true;
         int dn, dgood, df; readonly List<bool?> feathers = new List<bool?>();
         // the skill being performed
         string sk; float skT0, skLimit; int[] seq; int si, serr, sn, sneed; bool held; float sv, szc, szw, bx2, bvx, bpush, bgood; int bdir; int holdFrame = -9;
-        bool won; (string newTitle, bool champion) res;
+        bool won; (string newTitle, bool champion) res; float opened;
 
         WrestleModal(Game g, int round, string oppName, float oppSkill, string oppSkin, bool practice = false)
         {
@@ -130,7 +133,7 @@ public sealed partial class Game
             need = round >= 7 ? 3 : 2;
             young = g.V.age > 0 && g.V.age <= 9;   // little ones get a slower marker and wider targets
             barSpeed = (2.1f + round * 0.2f) * (young ? 0.85f : 1) * (practice ? 0.8f : 1); sharp = Mathf.Max(1, 1 + round * 0.08f - (young ? 0.1f : 0));
-            intro = Time.time; t0 = Time.time;
+            intro = Time.time + 1.1f; t0 = Time.time; opened = Time.time; Sfx.Crowd(); Sfx.Horn();   // the scene switch: the curtain opens on the stadium, the crowd roars
             var myT = Rules.TitleById(Rules.TitleFor(g.V.wr)); var opT = Rules.TitleById(Rules.OPP_TITLE[round]);
             string Named(Rules.Title t, string n) => (t != null ? t.name + " " : "") + n;
             herald = Loc.L($"«{Named(myT, g.MyName)}, {Named(opT, oppName)} хоёр барилдана! Хүчит бөхчүүд дэвээгээ хийцгээ!»", $"\"{Named(myT, g.MyName)} and {Named(opT, oppName)} will wrestle! Mighty wrestlers, do your eagle dance!\"");
@@ -266,46 +269,73 @@ public sealed partial class Game
 
         void Scene(Game g)
         {
-            var cx = live.c; float ts = Time.time; const int Wc = 192, ground = 100;
-            Px.R(cx, 0, 0, Wc, 108, "#e8c994");
-            for (int i = 0; i < 90; i++) Px.R(cx, (i * 37) % Wc, 40 + ((i * 53) % 66), 1, 1, i % 2 != 0 ? "#d4ae72" : "#f6e2b8");
-            Px.R(cx, 0, 0, Wc, 30, "#5a361c"); Px.R(cx, 0, 10, Wc, 2, "#7a4a26"); Px.R(cx, 0, 21, Wc, 2, "#7a4a26");
-            string[] shirts = { "#d8342b", "#2b5bd8", "#f7c646", "#2ea35f", "#ffffff", "#9466e0" };
-            for (int row = 0; row < 2; row++) for (int i = 0; i < 31; i++) { int px0 = 3 + i * 6 + row * 3, py0 = 3 + row * 11, bob = (int)(ts / 0.4f + i + row) % 3 == 0 ? -1 : 0; Px.R(cx, px0, py0 + 4 + bob, 4, 4, shirts[(i + row * 2) % 6]); Px.R(cx, px0 + 1, py0 + 1 + bob, 2, 3, (i + row) % 3 != 0 ? "#edbb93" : "#c98a5a"); Px.R(cx, px0 + 1, py0 + bob, 2, 1, "#2b1e14"); }
-            foreach (var (fx, fc) in new[] { (8, "#2b5bd8"), (60, "#d8342b"), (132, "#f7c646"), (184, "#2b5bd8") }) { Px.R(cx, fx, 30, 1, 14, "#4a2a14"); for (int r = 0; r < 5; r++) Px.R(cx, fx + 1, 30 + r, 5 - Mathf.Abs(r - 2), 1, fc); }
-            Px.R(cx, 0, 44, Wc, 1, "#b98a50");
-            Px.R(cx, 167, ground - 1, 12, 2, "rgba(40,20,0,.25)"); cx.Blit(Px.Char(Rules.ZASUUL, 0, (int)(ts / 0.9f) % 2 != 0 && overF ? 1 : 0), 165, ground - 28);
-            int f = (int)(ts / 0.26f) % 2, o = Mathf.RoundToInt(off); float ent = Mathf.Min(1, (ts - intro) / 0.6f);
+            var cx = live.c; float ts = Time.time; const int S = 2, ground = 158;
+            cx.CopyFrom(Art.Get("naadam_stadium"));
+            // the crowd cheers: arms go up all over the stands, more of them when something happens on the field
+            bool loud = overF || (flash.HasValue && ts - flash.Value.t0 < 1.4f) || ts - opened < 2.5f;
+            int beat = (int)(ts * (loud ? 8 : 3)); var arm = new Color32(232, 180, 138, 255);
+            for (int i = 0; i < (loud ? 140 : 40); i++)
+            {
+                uint h = (uint)(i * 2654435761u ^ (uint)beat * 40503u); int x = (int)(h % 398), row = (int)((h >> 9) % 6), y = new[] { 59, 65, 73, 79, 85, 91 }[row];
+                if (x > 164 && x < 236 && row < 4) continue;   // not over the pavilion
+                cx.Put(x, y - 1, arm); cx.Put(x, y - 2, arm); cx.Put(x + 3, y - 1, arm); cx.Put(x + 3, y - 2, arm);
+            }
+            // the herald, in his gold deel, announcing or cheering
+            var z = Folk("zasuul", heraldOn ? "proud" : overF ? "laugh" : "curious", heraldOn ? "idle" : overF ? "cheer" : "talk", (int)(ts * 1.5f) % 2, heraldOn && (int)(ts * 8) % 2 == 0, ts % 3.3f < 0.12f);
+            Px.R(cx, 318, ground - 2, 30, 3, "rgba(40,20,0,.25)"); cx.BlitScaled(z, 308, ground - 84, 50, 85);
+            int f = (int)(ts / 0.26f) % 2, o = Mathf.RoundToInt(off) * S; float ent = Mathf.Clamp01((ts - intro) / 0.6f);
             string myPose = pose[0], opPose = pose[1];
             var A = Px.Wrestler(RED, g.MySkin, myPose == "grip" && f != 0 && phase == "timing" ? "push" : myPose, phase == "devee" ? df : f); var B = Px.Wrestler(BLUE, oppSkin, opPose, f);
-            const int cxm = 92; int ax = Mathf.RoundToInt(cxm - 30 - (1 - ent) * 24) + o + (myPose == "dance" ? -12 : 0), bxx = Mathf.RoundToInt(cxm - 4 + (1 - ent) * 24) + o + (opPose == "dance" ? 12 : 0);
-            void Draw1(PxCanvas img, int X, bool flip, int dy = 0) { int Y = ground - img.H + dy; Px.R(cx, X + 4, ground - 1, img.W - 8, 2, "rgba(40,20,0,.28)"); cx.BlitScaled(img, X, Y, img.W, img.H, flip); }
+            const int cxm = 190; int ax = Mathf.RoundToInt(cxm - 60 - (1 - ent) * 90) + o + (myPose == "dance" ? -24 : 0), bxx = Mathf.RoundToInt(cxm - 8 + (1 - ent) * 90) + o + (opPose == "dance" ? 24 : 0);
+            void Draw1(PxCanvas img, int X, bool flip, int dy = 0) { int Y = ground - img.H * S + dy; Px.R(cx, X + 8, ground - 2, img.W * S - 16, 3, "rgba(40,20,0,.28)"); cx.BlitScaled(img, X, Y, img.W * S, img.H * S, flip); }
             float cross = overF ? Mathf.Clamp01((ts - end - 1.1f) / 1.6f) : 0;
             if (cross > 0) // custom: the fallen wrestler gets up and passes under the winner's raised arm
             {
                 var win = Px.Wrestler(won ? RED : BLUE, won ? g.MySkin : oppSkin, "dance", cross < 1 ? 1 : f); var lose = Px.Wrestler(won ? BLUE : RED, won ? oppSkin : g.MySkin, "idle", 0);
-                int from = won ? bxx : ax, to = won ? ax - 26 : bxx + 26;
-                Draw1(win, won ? ax : bxx, !won); Draw1(lose, Mathf.RoundToInt(from + (to - from) * cross), won, 2);
+                int from = won ? bxx : ax, to = won ? ax - 52 : bxx + 52;
+                Draw1(win, won ? ax : bxx, !won); Draw1(lose, Mathf.RoundToInt(from + (to - from) * cross), won, 4);
             }
-            else { Draw1(A, ax - (myPose == "fall" ? 16 : 0), false); Draw1(B, bxx + (opPose == "fall" ? 2 : 0), true); }
+            else { Draw1(A, ax - (myPose == "fall" ? 32 : 0), false); Draw1(B, bxx + (opPose == "fall" ? 4 : 0), true); }
         }
 
         public override void Draw(Game g)
         {
-            GUILayout.Label(practice ? Loc.L("Бөхийн сургууль · Дасгал", "Wrestling school · Practice") : $"{Loc.L("Наадам", "Naadam")} · {Loc.L("Даваа", "Round")} {round}/9 · {need} {Loc.L("унагаалт", "falls")} · {new string('♦', Mathf.CeilToInt(round / 3f))}", g.sSmall);
-            g.Title($"{g.MyName} · {oppName}");
-            Scene(g); live.Show(g, 190);
+            // the stadium fills the top of the screen, its field running down to the panel with the controls
+            g.Box(new Rect(0, 0, Screen.width, Screen.height), Px.Col("#2a1c18"));
+            Scene(g);
+            float split = Screen.height * 0.6f, K = Mathf.Max(Screen.width / 400f, split / 132f), pw = 400 * K, ph = 180 * K;   // shows the stands down to the ground
+            live.ShowAt(new Rect((Screen.width - pw) / 2, split - ph * (166f / 180f), pw, ph));
             if (flash.HasValue && Time.time - flash.Value.t0 < 1.3f)
             {
-                float q = (Time.time - flash.Value.t0) / 1.3f; var at = live.At(96, 60 - q * 10);
-                g.Outlined(at.x, at.y, flash.Value.text, live.Scale * 11, flash.Value.good ? Px.Col("#f7c646") : Color.white, q > 0.75f ? (1 - q) * 4 : 1);
+                float q = (Time.time - flash.Value.t0) / 1.3f; var at = live.At(190, 100 - q * 14);
+                g.Outlined(at.x, at.y, flash.Value.text, live.Scale * 9, flash.Value.good ? Px.Col("#f7c646") : Color.white, q > 0.75f ? (1 - q) * 4 : 1);
             }
-            if (heraldOn) GUILayout.Label($"<b>{Loc.L("Засуул", "Herald")}:</b> {herald}", g.sLabel);
-            GUILayout.BeginHorizontal();
-            GUILayout.Label($"<color=#d8342b><b>{g.MyName}</b></color> {new string('●', a)}{new string('○', Mathf.Max(0, need - a))}", g.sLabel);
-            GUILayout.FlexibleSpace();
-            GUILayout.Label($"{new string('●', b)}{new string('○', Mathf.Max(0, need - b))} <color=#2b5bd8><b>{oppName}</b></color>", g.sLabel);
-            GUILayout.EndHorizontal();
+            var safe = Screen.safeArea; float U = g.UiScale, top = Screen.height - safe.yMax + U * 8;
+            // the top bar: the round, both names and their falls, and what the herald calls out
+            string info = (practice ? Loc.L("Бөхийн сургууль · Дасгал", "Wrestling school · Practice") : $"{Loc.L("Наадам", "Naadam")} · {Loc.L("Даваа", "Round")} {round}/9 · {need} {Loc.L("унагаалт", "falls")}")
+                + $"\n<color=#d8342b><b>{g.MyName}</b></color> {new string('●', a)}{new string('○', Mathf.Max(0, need - a))}   ·   {new string('●', b)}{new string('○', Mathf.Max(0, need - b))} <color=#2b5bd8><b>{oppName}</b></color>"
+                + (heraldOn ? $"\n<b>{Loc.L("Засуул", "Herald")}:</b> {herald}" : "");
+            var ist = new GUIStyle(g.sNote) { fontSize = g.Ts(12), wordWrap = true }; float iw = Mathf.Min(Screen.width - U * 120, U * 640), ih = ist.CalcHeight(new GUIContent(info), iw) + U * 6;
+            GUI.Box(new Rect((Screen.width - iw) / 2, top, iw, ih), info, ist);
+            if (phase != "done" && GUI.Button(new Rect(safe.x + U * 8, top, U * 44, U * 44), "×", g.sBtn)) g.Later(g.Close);
+            // the controls
+            float pwid = Mathf.Min(Screen.width - U * 16, U * 820); var pr = new Rect((Screen.width - pwid) / 2, split - U * 4, pwid, Screen.height - split - U * 4 - (Screen.height - safe.yMax) - safe.y * 0);
+            GUILayout.BeginArea(pr); GUILayout.BeginVertical(g.sPanel); panelScroll = g.BeginScroll(panelScroll, pr.height - U * 30);
+            Controls(g);
+            g.EndScroll(); GUILayout.EndVertical(); GUILayout.EndArea();
+            // the scene switch: a black curtain opens on the stadium, with the name of the bout
+            float sw = Mathf.Clamp01((Time.time - opened) / 1.3f);
+            if (sw < 1)
+            {
+                float close = 1 - Mathf.SmoothStep(0, 1, Mathf.Clamp01((sw - 0.45f) / 0.55f)), hh = Screen.height / 2f * close;
+                g.Box(new Rect(0, 0, Screen.width, hh), Color.black); g.Box(new Rect(0, Screen.height - hh, Screen.width, hh), Color.black);
+                float ta = Mathf.Clamp01(sw * 4) * close;
+                GUI.Label(new Rect(0, Screen.height / 2 - U * 40, Screen.width, U * 50), "НААДАМ", new GUIStyle(g.sBig) { fontSize = Mathf.RoundToInt(U * 46), normal = { textColor = new Color(1, 0.84f, 0.3f, ta) } });
+                GUI.Label(new Rect(0, Screen.height / 2 + U * 10, Screen.width, U * 30), practice ? Loc.L("Бөхийн сургууль", "Wrestling school") : Loc.L($"Бөхийн барилдаан · {round}-р даваа", $"Wrestling · Round {round}"), new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleCenter, normal = { textColor = new Color(1, 1, 1, ta) } });
+            }
+        }
+        void Controls(Game g)
+        {
             g.Text(msg);
             if (practice && phase != "done") // the school's coach explains as you go
             {
@@ -321,17 +351,14 @@ public sealed partial class Game
                     break;
                 case "choose":
                     {
-                        var moves = Rules.MOVES; int perRow = 3;
-                        for (int i = 0; i < moves.Length; i += perRow)
-                        {
-                            GUILayout.BeginHorizontal();
-                            for (int j = i; j < Mathf.Min(moves.Length, i + perRow); j++)
-                            {
-                                var m = moves[j];
-                                if (GUILayout.Button($"<b>{SkillIcon(m.id)} {m.name}</b>\n<size={g.Ts(9)}>> {string.Join(", ", m.beats.Take(3).Select(x => Rules.MoveById(x).name.ToString()))}…</size>", m.id == lastPlayer ? new GUIStyle(g.sBtn) { normal = g.sBtn.active } : g.sBtn, GUILayout.MinHeight(g.U(44)))) { var id = m.id; g.Later(() => StartSkill(id)); }
-                            }
-                            GUILayout.EndHorizontal();
-                        }
+                        // the moves in equal tiles, each as tall as its words: the name, then the moves it beats in small letters
+                        var moves = Rules.MOVES;
+                        var st = new GUIStyle(g.sBtn) { fontSize = g.Ts(13), padding = new RectOffset(Mathf.RoundToInt(g.U(8)), Mathf.RoundToInt(g.U(8)), Mathf.RoundToInt(g.U(6)), Mathf.RoundToInt(g.U(8))) };
+                        var stOn = new GUIStyle(st) { normal = g.sBtn.active };
+                        GUIContent Tile(Rules.Move m) => new GUIContent($"<b>{SkillIcon(m.id)} {m.name}</b>\n<size={g.Ts(10)}>> {string.Join(", ", m.beats.Take(3).Select(x => Rules.MoveById(x).name.ToString()))}…</size>");
+                        int picked = -1;
+                        g.Grid("wr-moves", moves.Length, 168, (i, w) => Mathf.Max(g.U(46), st.CalcHeight(Tile(moves[i]), w) + g.U(4)), (i, r) => { if (GUI.Button(r, Tile(moves[i]), moves[i].id == lastPlayer ? stOn : st)) picked = i; });
+                        if (picked >= 0) { var id = moves[picked].id; g.Later(() => StartSkill(id)); }
                         break;
                     }
                 case "timing":

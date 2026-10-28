@@ -91,7 +91,7 @@ public sealed partial class Game
     {
         public const int VW = 320, VH = 180;
         public override bool FullScreen => true;
-        public override bool CanEscape => false;
+        public override bool CanEscape => true;   // Esc leaves; the part you were in is saved
         public readonly Game g; readonly StoryChapter ch; int partIx;
         readonly Live live = new Live(VW, VH);
         // the place
@@ -117,13 +117,13 @@ public sealed partial class Game
         {
             while (partIx < ch.parts.Length)
             {
-                SaveData.Set(g.V.story, ch.id, partIx); g.V.Save();
+                if (partIx > g.StoryPart(ch.id)) { SaveData.Set(g.V.story, ch.id, partIx); g.V.Save(); }   // the furthest part reached (it travels in the cloud save)
                 skipping = false; stage = null; actors.Clear(); line = null; cardDone = true;
                 yield return ch.parts[partIx](this);
                 partIx++;
             }
             bool first = SaveData.Get(g.V.story, ch.id + ":done") == 0;
-            SaveData.Set(g.V.story, ch.id + ":done", 1); SaveData.Set(g.V.story, ch.id, 0); g.V.Save();
+            SaveData.Set(g.V.story, ch.id + ":done", 1); SaveData.Set(g.V.story, ch.id, ch.parts.Length); g.V.Save();
             if (first) { var got = g.Reward(80, 120); g.Toast(Loc.L($"Бүлэг дууслаа! +{got.coins} зоос", $"Chapter finished! +{got.coins} coins")); g.Confetti(90); Sfx.Win(); }
             g.Later(g.Close);
         }
@@ -206,7 +206,6 @@ public sealed partial class Game
         {
             foreach (var kv in KEYS) if (kv.Value.Any(Input.GetKeyDown)) pressed.Add(kv.Key);
             if (stage == null && (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.E))) Advance();
-            if (Input.GetKeyDown(KeyCode.Escape)) g.Later(g.Close);
         }
         public override void Press(Game g) { }
         public override void Pointer(Game g, int id, Vector2 pos, bool down, bool up)
@@ -335,7 +334,7 @@ public sealed partial class Game
         public void SayOver(Game g, float wx, float wy, string text, Color? col = null)
         {
             var p = ToScreen(wx - camX, wy); var st = new GUIStyle(g.sNote) { fontSize = g.Ts(11), wordWrap = false, alignment = TextAnchor.MiddleCenter };
-            var sz = st.CalcSize(new GUIContent(text)); var r = new Rect(p.x - sz.x / 2 - 6, p.y - sz.y - 8, sz.x + 12, sz.y + 6);
+            var sz = st.CalcSize(new GUIContent(text)); var r = new Rect(Mathf.Clamp(p.x - sz.x / 2 - 6, 4, Screen.width - sz.x - 16), Mathf.Max(4, p.y - sz.y - 8), sz.x + 12, sz.y + 6);
             var old = GUI.color; if (col != null) GUI.color = col.Value; GUI.Box(r, text, st); GUI.color = old;
         }
         /** Draws someone standing (or riding) with their feet at (x, y) in the picture. */

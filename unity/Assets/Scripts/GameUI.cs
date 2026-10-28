@@ -80,6 +80,8 @@ public sealed partial class Game
         public virtual void Pointer(Game g, int id, Vector2 pos, bool down, bool up) { } // full-screen scenes take the pointer
         public virtual void Closed(Game g) { }
         public Vector2 winScroll; // a window taller than the screen scrolls (DrawModal)
+        /** Who is talking in this window and with what face: they stand beside it from head to toe (Folk). */
+        public virtual (string who, string face)? Speaker => null;
     }
     Modal modal; Rect modalPanel; // where the open window is on the screen, for its ✕ and for taps outside it
     readonly Stack<Modal> under = new Stack<Modal>();
@@ -497,7 +499,7 @@ public sealed partial class Game
         Pill(Emo.Icon(seaIcon), sea.name.ToString(), 28, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(12)) }, () => Open(new SeasonModal()));
         int n = net.others.Count + 1;
         string netText = net.Online ? $"● {n} · {net.room}" : net.status == "solo" ? "○ " + Loc.L("Ганцаараа", "Solo") : "◌ " + Loc.L("Холбогдож…", "Connecting…");
-        Pill(null, netText, 26, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(10)), normal = { textColor = Px.Col(net.Online ? "#2e7d32" : "#8a6a4a") } }, () => Open(new RoomModal()));
+        Pill(null, netText, 26, new GUIStyle(small) { fontSize = Mathf.RoundToInt(U(10)), normal = { textColor = Px.Col(net.Online ? "#2e7d32" : "#8a6a4a") } }, () => Open(new ModeModal()));
         if (race == null && battle == null) Pill(Emo.Icon("🤝"), null, 34, pix, () => Open(new TogetherModal()));
         Pill(null, "?", 34, new GUIStyle(pix) { fontSize = PxSize(U(22)) }, () => StartTutorial(true), "help");
         if (race != null) { RaceHud(vw, vh); return; }
@@ -600,6 +602,23 @@ public sealed partial class Game
         GUILayout.FlexibleSpace();
         GUILayout.EndArea();
         if (m.CanEscape && modalPanel.width > 0 && GUI.Button(new Rect(modalPanel.xMax - U(44), modalPanel.y + U(10), U(34), U(34)), "×", sBtn)) Later(() => { if (modal == m) Close(); });
+        DrawSpeaker(m);
+    }
+    string spWho, spFace; float spAt = -9;
+    /** The person you are talking to stands at the window's left edge: they hop a little when their face changes, talk for a
+     *  moment (mouth moving, breathing faster), blink now and then, and breathe while they listen. */
+    void DrawSpeaker(Modal m)
+    {
+        var sp = m.Speaker; if (sp == null || modalPanel.width <= 0) { spWho = null; return; }
+        var (who, face) = sp.Value; float t = Time.time;
+        if (who != spWho || face != spFace) { spWho = who; spFace = face; spAt = t; }
+        bool talking = t - spAt < 1.6f, open = talking && (int)(t * 9) % 2 == 0, blink = (t + who.Length) % 3.4f < 0.12f;
+        var art = Folk(who, face, null, (int)(t * (talking ? 3 : 1.3f)) % 2, open, blink);
+        float fh = Mathf.Min(Screen.height * 0.72f, U(320)), fw = fh * art.W / art.H;
+        float hop = Mathf.Sin(Mathf.Clamp01((t - spAt) / 0.32f) * Mathf.PI) * U(10);
+        float x = Mathf.Max(U(4), modalPanel.x - fw * 0.85f), y = Mathf.Min(Screen.height - fh - U(4), modalPanel.yMax - fh + U(8));
+        GUI.DrawTexture(new Rect(x + fw * 0.18f, y + fh - U(6), fw * 0.64f, U(10)), white, ScaleMode.StretchToFill, true, 0, new Color(0, 0, 0, 0.3f), 0, U(5));
+        GUI.DrawTexture(new Rect(x, y - hop, fw, fh), Tex(art));
     }
 
     // ---------------------------------------------------------------- scroll views that a finger can drag and that fit their content
@@ -627,7 +646,10 @@ public sealed partial class Game
         else if (e.type == EventType.MouseUp && scrollArmed == k) { scrollArmed = -1; if (scrollMoving) { scrollMoving = false; e.Use(); } }
         var opts = maxH > 0 ? new[] { GUILayout.Height(Mathf.Min(scrollContent[k] > 0 ? scrollContent[k] + 2 : maxH, maxH)) } : new GUILayoutOption[0];
         pos = GUILayout.BeginScrollView(pos, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, opts); scrollAt[k] = pos;
-        GUILayout.BeginVertical();
+        // the content is exactly as wide as the view (less the scrollbar): without this one wide row widened everything, and long
+        // lines ran past the right edge and were cut off
+        float sbw = GUI.skin.verticalScrollbar.fixedWidth > 0 ? GUI.skin.verticalScrollbar.fixedWidth : 15;
+        if (view.width > sbw + 20) GUILayout.BeginVertical(GUILayout.Width(view.width - sbw - 2)); else GUILayout.BeginVertical();
         return pos;
     }
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -697,7 +719,8 @@ public sealed partial class Game
     public bool SmallBtn(string t, bool primary = true, float w = 96, bool enabled = true)
     {
         bool was = GUI.enabled; GUI.enabled = enabled;
-        bool hit = GUILayout.Button(t, primary ? sPrimary : sBtn, GUILayout.Width(U(w)), GUILayout.MinHeight(U(34)));
+        var st = primary ? sPrimary : sBtn; float need = st.CalcSize(new GUIContent(t)).x + U(4); // never narrower than its word: a word broken in two looks broken
+        bool hit = GUILayout.Button(t, st, GUILayout.Width(Mathf.Max(U(w), need)), GUILayout.MinHeight(U(34)));
         GUI.enabled = was; return hit;
     }
     public void Fact(string text, bool first = true, string head = null)
@@ -739,6 +762,28 @@ public sealed partial class Game
         GUI.color = old;
     }
     public void EndRow() => GUILayout.EndHorizontal();
+    readonly Dictionary<string, float> gridW = new Dictionary<string, float>();
+    /** Cells of equal width in rows, each row as tall as its tallest cell. measure(i, w) gives cell i's height at width w (measure
+     *  wrapped text with CalcHeight), draw(i, rect) draws it with GUI calls. GUILayout guesses the height of wrapped text in a row
+     *  from the wrong width, so text spilled out of buttons and tiles; this measures it at the width each cell really gets. */
+    public void Grid(string key, int n, float minCell, Func<int, float, float> measure, Action<int, Rect> draw, float gap = 6)
+    {
+        if (n <= 0) return;
+        gap = U(gap); float w = gridW.TryGetValue(key, out var gw) && gw > 1 ? gw : U(420);
+        int cols = Mathf.Clamp(Mathf.FloorToInt((w + gap) / (U(minCell) + gap)), 1, n);
+        float cw = (w - gap * (cols - 1)) / cols;
+        var rows = new List<float>();
+        for (int i = 0; i < n; i += cols) { float h = 0; for (int k = i; k < Mathf.Min(n, i + cols); k++) h = Mathf.Max(h, measure(k, cw)); rows.Add(h); }
+        float total = 0; foreach (var h in rows) total += h; total += gap * (rows.Count - 1);
+        var area = GUILayoutUtility.GetRect(10, total, GUILayout.ExpandWidth(true));
+        if (Event.current.type == EventType.Repaint && area.width > 1) gridW[key] = area.width;
+        float y = area.y;
+        for (int r = 0; r < rows.Count; r++)
+        {
+            for (int c = 0; c < cols && r * cols + c < n; c++) draw(r * cols + c, new Rect(area.x + c * (cw + gap), y, cw, rows[r]));
+            y += rows[r] + gap;
+        }
+    }
     public void Stats(params (string k, string v)[] items)
     {
         GUILayout.BeginHorizontal();
@@ -818,7 +863,7 @@ public sealed partial class Game
                 ("ui:book", Loc.L("Сургуулийн гэрт гэр барих, цагаан идээ хийх, Нууц товчоог сур. Сурснаа гэр бүлтэйгээ хий!", "In the school ger learn to build a ger, make dairy foods and hear the Secret History. Then do it with your family!")),
                 ("ui:ger", Loc.L("Гэр хороололд өөрийн гэрээ бариарай.", "Build your own ger in the ger neighbourhood.")),
                 ("ui:horse", Loc.L("Морины уяанаас морь унаж давхих, эсвэл уралдаанд оролцоорой!", "Take a horse from the horse line to ride freely or race!")),
-            }) { g.Row(Px.Icon(ic), "", null); GUILayout.Label(t, g.sLabel); g.EndRow(); }
+            }) { GUILayout.BeginHorizontal(g.sBtn); g.IconAt(Px.Icon(ic), 32); GUILayout.Label(t, new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleLeft }); GUILayout.EndHorizontal(); }
             g.Gap();
             if (g.Btn(Loc.L("Эхлэх", "Let's go"), true, 48)) g.Later(g.Close);
         }

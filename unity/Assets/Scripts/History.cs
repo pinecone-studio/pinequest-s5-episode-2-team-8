@@ -21,10 +21,11 @@ public sealed partial class Game
     sealed class HistorianModal : Modal
     {
         HistStep handed;
+        public override (string who, string face)? Speaker => ("historian", handed != null ? "excited" : "curious");
         public override void Draw(Game g)
         {
             var V = g.V;
-            GUILayout.BeginHorizontal(); g.IconAt(Px.Portrait(Rules.HISTORIAN), 48); GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal(); GUILayout.BeginVertical();
             g.Title(Loc.L("Түүхч Нарангэрэл", "Narangerel the historian")); g.Small(Loc.L($"Даалгавар {Mathf.Min(V.histStep + 1, HSTEPS.Count)}/{HSTEPS.Count}", $"Task {Mathf.Min(V.histStep + 1, HSTEPS.Count)}/{HSTEPS.Count}"));
             GUILayout.EndVertical(); GUILayout.EndHorizontal();
             if (handed != null)
@@ -75,10 +76,11 @@ public sealed partial class Game
     }
     sealed class GeneralModal : Modal
     {
+        public override (string who, string face)? Speaker => ("general", "stern");
         public override void Draw(Game g)
         {
             var chs = Chapters.ALL;
-            GUILayout.BeginHorizontal(); g.IconAt(Px.Portrait(Rules.GENERAL), 48); GUILayout.BeginVertical();
+            GUILayout.BeginHorizontal(); GUILayout.BeginVertical();
             g.Title(Loc.L("Жанжин Батмөнх", "General Batmönkh")); g.Small(Loc.L("Эх орноо хамгаалсан түүхүүд", "Stories of defending the homeland")); GUILayout.EndVertical(); GUILayout.EndHorizontal();
             g.Text(Loc.L("Анхаар! Монголчууд олон зуун жилийн турш нутаг усаа хамгаалж ирсэн. Түүх бүрийг сонсоод, нутгаа хамгаал! Дуут сум, уурга хоёр зөвхөн дайсны зоригийг мохоодог: хэн ч гэмтэхгүй.", "Attention! For centuries Mongolians have protected their land. Hear each story, then defend the land! Whistling arrows and the lasso only break the raiders’ courage: nobody gets hurt."));
             for (int i = 0; i < chs.Count; i++)
@@ -95,6 +97,7 @@ public sealed partial class Game
     sealed class BattleIntroModal : Modal
     {
         readonly Chapters.Chapter ch; public BattleIntroModal(Chapters.Chapter ch) { this.ch = ch; }
+        public override (string who, string face)? Speaker => ("general", "proud");
         public override void Draw(Game g)
         {
             g.Small(ch.year.ToString()); g.Title(ch.name.ToString());
@@ -124,6 +127,16 @@ public sealed partial class Game
         for (int i = 0; i < ch.allies.Count; i++) { var l = ch.allies[i].look.Copy(); l.ride = "horse"; l.coat = ch.allies[i].coat; battle.allies.Add(new Ally { look = l, x = 18 + i * 2, y = 13 + i, cd = 1 + i * 0.5f }); }
         Sfx.Pop(); Toast(Loc.L($"{ch.name.mn}: 1-р давалгаа ирж байна!", $"{ch.name.en}: the first wave is coming!"));
     }
+    /** Where a raider rides in for a herd spot: an edge of the village at least 14 tiles of road away, so there is time to ride
+     *  out and meet it (the nearest edge is only 5 tiles from one spot); the farthest edge when none is that far. */
+    static (Vector2Int, List<(int x, int y)>) RaiderRoute(Vector2Int tg)
+    {
+        var routes = B_SPAWN.Select(s => (s, p: World.FindPath(s.x, s.y, tg.x, tg.y))).Where(r => r.p != null).ToList();
+        if (routes.Count == 0) return (B_SPAWN[0], new List<(int, int)>());
+        var far = routes.Where(r => r.p.Count >= 14).ToList();
+        var pick = far.Count > 0 ? far[Random.Range(0, far.Count)] : routes.OrderByDescending(r => r.p.Count).First();
+        return (pick.s, pick.p);
+    }
     Raider NearestEnemy(float x, float y, float max = 9) { Raider best = null; float bd = max; foreach (var e in battle.enemies) if (!e.flee) { float d = Dist(e.x, e.y, x, y); if (d < bd) { bd = d; best = e; } } return best; }
     bool ShootAt(float tx, float ty, Vector2? from = null)
     {
@@ -147,9 +160,10 @@ public sealed partial class Game
             bt.spawnT -= dt;
             if (bt.spawnT <= 0)
             {
-                bt.spawnT = 1.6f; bt.toSpawn--; var sp = B_SPAWN[Random.Range(0, B_SPAWN.Length)]; var tg = B_TARGET[Random.Range(0, B_TARGET.Length)];
+                bt.spawnT = 1.6f; bt.toSpawn--; var tg = B_TARGET[Random.Range(0, B_TARGET.Length)];
+                var (sp, path) = RaiderRoute(tg);
                 var l = bt.ch.enemyLook.Copy(); l.ride = "horse"; l.coat = bt.ch.enemyCoat;
-                bt.enemies.Add(new Raider { x = sp.x + 0.5f, y = sp.y + 0.5f, homeX = sp.x + 0.5f, homeY = sp.y + 0.5f, path = World.FindPath(sp.x, sp.y, tg.x, tg.y) ?? new List<(int, int)>(), courage = bt.ch.courage, max = bt.ch.courage, speed = 1.9f + Chapters.ALL.IndexOf(bt.ch) * 0.15f + bt.wave * 0.1f, look = l });
+                bt.enemies.Add(new Raider { x = sp.x + 0.5f, y = sp.y + 0.5f, homeX = sp.x + 0.5f, homeY = sp.y + 0.5f, path = path, courage = bt.ch.courage, max = bt.ch.courage, speed = 1.9f + Chapters.ALL.IndexOf(bt.ch) * 0.15f + bt.wave * 0.1f, look = l });
             }
         }
         else if (bt.enemies.Count == 0)
@@ -198,6 +212,7 @@ public sealed partial class Game
     sealed class BattleEndModal : Modal
     {
         readonly bool won; readonly Battle bt; public BattleEndModal(bool won, Battle bt) { this.won = won; this.bt = bt; }
+        public override (string who, string face)? Speaker => ("general", won ? "laugh" : "worried");
         public override void Draw(Game g)
         {
             g.Picture(Emo.Icon(won ? "🏆" : "🐑"), 56);
