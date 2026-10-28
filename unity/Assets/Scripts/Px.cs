@@ -414,6 +414,37 @@ public static partial class Px
         for (int r = 0; r < 5; r++) R(x, X + 7 - r * 2, Y - 8 + r, 2 + r * 4, 1, r == 0 ? K.outl : K.red);
         R(x, X - 1, Y - 3, 18, 1, K.outl);
     }
+    /** Setsen: a stone statue of a muscular man with short hair, flexing both arms, on a stone pedestal with a bronze plaque. */
+    static void Statue(PxCanvas x, WObj o)
+    {
+        int X = o.x * 16, Y = o.y * 16; const string L = "#d6d6cf", M = "#aeaea6", D = "#7c7c74", S = "#5c5c56";
+        Ell(x, X + 8, Y + 14, 11, 3, "rgba(30,20,10,.25)");
+        // the pedestal: two stone steps, a plaque on the front
+        R(x, X - 3, Y + 6, 22, 8, K.outl); R(x, X - 2, Y + 7, 20, 6, M); R(x, X - 2, Y + 7, 20, 1, L); R(x, X - 2, Y + 12, 20, 1, D);
+        R(x, X, Y + 2, 16, 5, K.outl); R(x, X + 1, Y + 3, 14, 4, L); R(x, X + 1, Y + 6, 14, 1, D);
+        R(x, X + 3, Y + 8, 10, 4, "#8a5a1e"); R(x, X + 4, Y + 9, 8, 2, "#d9a640"); P(x, X + 5, Y + 9, "#fff0a0");
+        // legs, planted wide, with wrestling shorts
+        R(x, X + 3, Y - 9, 4, 12, K.outl); R(x, X + 9, Y - 9, 4, 12, K.outl);
+        R(x, X + 4, Y - 8, 2, 10, M); R(x, X + 10, Y - 8, 2, 10, D); P(x, X + 4, Y - 6, L);
+        R(x, X + 3, Y - 12, 10, 5, K.outl); R(x, X + 4, Y - 11, 8, 3, D);
+        // a broad V-shaped torso: wide shoulders, chest and the lines of the stomach
+        for (int r = 0; r < 12; r++) { int half = 4 + r * 5 / 11; R(x, X + 8 - half - 1, Y - 13 - r, half * 2 + 2, 1, K.outl); R(x, X + 8 - half, Y - 13 - r, half * 2, 1, r > 8 ? L : M); }
+        R(x, X + 8, Y - 22, 1, 4, S); P(x, X + 5, Y - 21, D); P(x, X + 11, Y - 21, D);   // the chest
+        foreach (var (ax, ay) in new[] { (6, 18), (9, 18), (6, 16), (9, 16) }) P(x, X + ax, Y - ay, D);   // the stomach
+        // both arms flexed up: upper arms out to the sides, forearms up, round biceps and fists
+        foreach (int side in new[] { -1, 1 })
+        {
+            int sx = X + 8 + side * 8, ex = X + 8 + side * 12;
+            Line(x, sx, Y - 23, ex, Y - 23, K.outl); R(x, Math.Min(sx, ex), Y - 25, 5, 4, K.outl); R(x, Math.Min(sx, ex) + 1, Y - 24, 3, 2, side < 0 ? L : M);
+            Blob(x, sx + side * 2, Y - 26, 2, 2, side < 0 ? L : M, K.outl);              // a bicep
+            R(x, ex - 1, Y - 31, 3, 8, K.outl); R(x, ex, Y - 30, 1, 6, side < 0 ? M : D);
+            Blob(x, ex, Y - 32, 2, 2, side < 0 ? L : M, K.outl);                          // a fist
+        }
+        // a thick neck, the head and short hair
+        R(x, X + 6, Y - 27, 4, 3, K.outl); R(x, X + 7, Y - 26, 2, 2, M);
+        Blob(x, X + 8, Y - 31, 4, 4, L, K.outl); P(x, X + 7, Y - 31, S); P(x, X + 9, Y - 31, S); R(x, X + 7, Y - 29, 3, 1, D);
+        R(x, X + 4, Y - 36, 9, 3, K.outl); R(x, X + 5, Y - 35, 7, 2, D); P(x, X + 6, Y - 35, M);   // a flat-top crew cut
+    }
     static void Lantern(PxCanvas x, WObj o)
     {
         int X = o.x * 16, Y = o.y * 16;
@@ -548,7 +579,7 @@ public static partial class Px
         var drawers = new Dictionary<string, Action<PxCanvas, WObj>>
         {
             ["ger"] = Ger, ["shop"] = Shop, ["board"] = Board, ["well"] = Well, ["lantern"] = Lantern, ["lot"] = Lot, ["bleachers"] = Bleachers, ["ovoo"] = Ovoo,
-            ["uya"] = Uya, ["archery"] = Archery, ["academy"] = Academy, ["zel"] = Zel, ["churn"] = Churn, ["tulga"] = Tulga, ["rack"] = Rack,
+            ["uya"] = Uya, ["archery"] = Archery, ["academy"] = Academy, ["zel"] = Zel, ["churn"] = Churn, ["tulga"] = Tulga, ["rack"] = Rack, ["statue"] = Statue,
         };
         foreach (var o in World.objects) { if (skip.Contains(o.kind)) continue; var oo = o; draws.Add((o.y + o.h - 1, () => drawers[oo.kind](x, oo))); }
         foreach (var d in draws.OrderBy(d => d.y)) d.f(); // OrderBy is stable, like Array.sort

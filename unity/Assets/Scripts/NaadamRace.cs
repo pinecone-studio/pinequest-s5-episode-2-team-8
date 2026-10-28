@@ -185,9 +185,8 @@ public sealed partial class Game
             foreach (var r in riders) { var p = At(r.x, r.y - 40); g.Outlined(p.x, p.y, (r.me ? "★ " : "") + r.name, g.U(11), r.me ? Px.Col("#ffd23f") : Color.white); }
             foreach (var s in shouts)
             {
-                float a = Mathf.Clamp01((1.8f - (t - s.t)) * 2); var p = At(s.x, s.finish ? 98 : 112 - (t - s.t) * 6);
-                var st = new GUIStyle(g.sNote) { fontSize = g.Ts(11), wordWrap = false }; var sz = st.CalcSize(new GUIContent(s.text));
-                var old = GUI.color; GUI.color = new Color(1, 1, 1, a); GUI.Box(new Rect(Mathf.Clamp(p.x - sz.x / 2, 4, Screen.width - sz.x - 8), p.y, sz.x + 8, sz.y + 4), s.text, st); GUI.color = old;
+                float a = Mathf.Clamp01((1.8f - (t - s.t)) * 2);
+                g.SpeechBubble(At(s.x, (s.finish ? 112 : 124) - (t - s.t) * 6), s.text, 200, a);   // a shout from the people watching
             }
             Hud(gg, pic);
             // the scene switch: from the village to the open steppe

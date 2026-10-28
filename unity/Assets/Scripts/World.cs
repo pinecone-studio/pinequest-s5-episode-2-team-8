@@ -96,6 +96,7 @@ public static class World
         O("archer", "npcq", 44, 32, 1, 1, 44, 31);
         O("lantern4", "lantern", 40, 11, 1, 1);
         O("lantern5", "lantern", 40, 14, 1, 1);
+        O("setsen", "statue", 53, 9, 1, 1, 53, 10);    // the stone statue of Setsen by the wrestling ground (a reserved spot: the trees stay where they were)
         for (int i = 0; i < LOT_X.Length; i++) { var o = O("lot" + i, "lot", LOT_X[i], 28, 3, 3, LOT_X[i] + 1, 31); o.i = i; }
         foreach (var o in objects) for (int y = o.y; y < o.y + o.h; y++) for (int x = o.x; x < o.x + o.w; x++) { Set(x, y, 'B'); occ[y * W + x] = o; }
 

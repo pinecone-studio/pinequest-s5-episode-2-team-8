@@ -333,9 +333,7 @@ public sealed partial class Game
         /** A speech bubble over someone in the picture; wx is in the stage's world. */
         public void SayOver(Game g, float wx, float wy, string text, Color? col = null)
         {
-            var p = ToScreen(wx - camX, wy); var st = new GUIStyle(g.sNote) { fontSize = g.Ts(11), wordWrap = false, alignment = TextAnchor.MiddleCenter };
-            var sz = st.CalcSize(new GUIContent(text)); var r = new Rect(Mathf.Clamp(p.x - sz.x / 2 - 6, 4, Screen.width - sz.x - 16), Mathf.Max(4, p.y - sz.y - 8), sz.x + 12, sz.y + 6);
-            var old = GUI.color; if (col != null) GUI.color = col.Value; GUI.Box(r, text, st); GUI.color = old;
+            g.SpeechBubble(ToScreen(wx - camX, wy), text, 220, col?.a ?? 1);
         }
         /** Draws someone standing (or riding) with their feet at (x, y) in the picture. */
         public static void DrawPerson(PxCanvas c, Look look, float x, float y, int face, bool moving, bool mounted, float t, bool fast = false, bool blink = false)

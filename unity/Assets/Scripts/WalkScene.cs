@@ -103,7 +103,11 @@ public sealed partial class Game
             GUI.BeginGroup(new Rect(sx, sy, safe.width, safe.height));
             if (g.Button(g.URect(8, 8, 44, 44), "×")) g.Later(g.Close);
             var tr = g.URect(64, 8, Mathf.Min(360, sw2 - 72), 44); GUI.Box(tr, $"<b>{title}</b>" + (sub != null ? $"  <size={g.Ts(11)}>{sub}</size>" : ""), g.sNote);
-            if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, sh - 130, Mathf.Min(520, sw2 - 16), 62); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sNote) { alignment = TextAnchor.MiddleLeft, fontSize = g.Ts(12) }); }
+            if (!string.IsNullOrEmpty(info))   // what is said here, in a box as tall as the words
+            {
+                var ist = new GUIStyle(g.sNote) { alignment = TextAnchor.MiddleLeft, fontSize = g.Ts(12), wordWrap = true }; float iw = Mathf.Min(520, sw2 - 16), ih = Mathf.Max(48, ist.CalcHeight(new GUIContent(info), g.U(iw)) / g.UiScale + 4);
+                var ir = g.URect(8, sh - 68 - ih, iw, ih); g.UiAdd(ir); GUI.Box(ir, info, ist);
+            }
             float bx = 8;
             foreach (var (label, run) in buttons) { string l = label(); float w = Mathf.Max(90, l.Length * 10 + 32); if (g.Button(g.URect(bx, sh - 60, w, 52), l)) g.Later(run); bx += w + 6; }
             if (g.Button(g.URect(sw2 - 340, sh - 60, 82, 52), runLock ? Loc.L("Алхах", "Walk") : Loc.L("Гүйх", "Run"), runLock ? g.sPrimary : g.sBtn)) runLock = !runLock;
