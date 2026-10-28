@@ -363,7 +363,7 @@ public sealed partial class Game : MonoBehaviour
     {
         if (picturesUsed == pictures.Count) { var ng = new GameObject("Picture"); ng.AddComponent<MeshFilter>(); ng.AddComponent<MeshRenderer>(); pictures.Add(ng); }
         var go = pictures[picturesUsed++]; if (!go.activeSelf) go.SetActive(true);
-        go.GetComponent<MeshFilter>().sharedMesh = Billboard.Quad(art, pivotX, pivotY);
+        go.GetComponent<MeshFilter>().sharedMesh = Billboard.Quad(art, pivotX, pivotY, Critter.PPT_BASAR);
         go.GetComponent<MeshRenderer>().sharedMaterial = Billboard.Mat(art, depth);
         go.transform.SetPositionAndRotation(new Vector3(fx, -fy, 0), Iso.Standing);
     }

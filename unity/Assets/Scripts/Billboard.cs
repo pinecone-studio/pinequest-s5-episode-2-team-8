@@ -27,11 +27,11 @@ public static class Billboard
         return mats[art] = m;
     }
 
-    /** The quad for a picture: pivot in pixels from its top-left corner. */
-    public static Mesh Quad(PxCanvas art, float pivotX, float pivotY)
+    /** The quad for a picture: pivot in pixels from its top-left corner, ppt pixels a tile. */
+    public static Mesh Quad(PxCanvas art, float pivotX, float pivotY, float ppt = 16)
     {
         if (meshes.TryGetValue(art, out var q)) return q;
-        float l = -pivotX / 16, r = (art.W - pivotX) / 16, t = pivotY / 16, b = -(art.H - pivotY) / 16;
+        float l = -pivotX / ppt, r = (art.W - pivotX) / ppt, t = pivotY / ppt, b = -(art.H - pivotY) / ppt;
         q = new Mesh { vertices = new[] { new Vector3(l, b), new Vector3(r, b), new Vector3(r, t), new Vector3(l, t) }, uv = new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) }, triangles = new[] { 0, 2, 1, 0, 3, 2 } };
         q.RecalculateBounds();
         return meshes[art] = q;

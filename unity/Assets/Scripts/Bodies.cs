@@ -495,10 +495,10 @@ public static class Bodies
     }
 
     /** Paints quads (world points) as seen by the isometric camera, at 16 pixels a tile; pivot: where the point at lands in the picture. */
-    public static (PxCanvas art, float pivotX, float pivotY, float[] depth) Paint(List<(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col)> quads, Vector3 at)
+    public static (PxCanvas art, float pivotX, float pivotY, float[] depth) Paint(List<(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col)> quads, Vector3 at, float ppt = 16)
     {
         var rot = Iso.Standing; Vector3 R = rot * Vector3.right, U = rot * Vector3.up, F = rot * Vector3.forward; // F: depth, away from the camera
-        Vector2 P(Vector3 v) => new Vector2(Vector3.Dot(v - at, R) * 16, Vector3.Dot(v - at, U) * 16);
+        Vector2 P(Vector3 v) => new Vector2(Vector3.Dot(v - at, R) * ppt, Vector3.Dot(v - at, U) * ppt);
         float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
         foreach (var q in quads) foreach (var v in new[] { q.a, q.b, q.c, q.d }) { var p = P(v); x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x); y0 = Mathf.Min(y0, p.y); y1 = Mathf.Max(y1, p.y); }
         int M = 2, W = Mathf.CeilToInt(x1 - x0) + M * 2 + 1, H = Mathf.CeilToInt(y1 - y0) + M * 2 + 1;
