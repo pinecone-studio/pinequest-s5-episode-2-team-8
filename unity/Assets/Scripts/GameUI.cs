@@ -619,20 +619,12 @@ public sealed partial class Game
         DrawSpeaker(m);
     }
     string spWho, spFace; float spAt = -9;
-    /** The person you are talking to stands at the window's left edge: they hop a little when their face changes, talk for a
-     *  moment (mouth moving, breathing faster), blink now and then, and breathe while they listen. */
+    /** Notes when the person you are talking to changes face, so their portrait talks for a moment (mouth moving). */
     void DrawSpeaker(Modal m)
     {
-        var sp = m.Speaker; if (sp == null || modalPanel.width <= 0) { spWho = null; return; }
-        var (who, face) = sp.Value; float t = Time.time;
-        if (who != spWho || face != spFace) { spWho = who; spFace = face; spAt = t; }
-        bool talking = t - spAt < 1.6f, open = talking && (int)(t * 9) % 2 == 0, blink = (t + who.Length) % 3.4f < 0.12f;
-        var art = Folk(who, face, null, (int)(t * (talking ? 3 : 1.3f)) % 2, open, blink);
-        float fh = Mathf.Min(Screen.height * 0.72f, U(320)), fw = fh * art.W / art.H;
-        float hop = Mathf.Sin(Mathf.Clamp01((t - spAt) / 0.32f) * Mathf.PI) * U(10);
-        float x = Mathf.Max(U(4), modalPanel.x - fw * 0.85f), y = Mathf.Min(Screen.height - fh - U(4), modalPanel.yMax - fh + U(8));
-        GUI.DrawTexture(new Rect(x + fw * 0.18f, y + fh - U(6), fw * 0.64f, U(10)), white, ScaleMode.StretchToFill, true, 0, new Color(0, 0, 0, 0.3f), 0, U(5));
-        GUI.DrawTexture(new Rect(x, y - hop, fw, fh), Tex(art));
+        var sp = m.Speaker; if (sp == null) { spWho = null; return; }
+        var (who, face) = sp.Value;
+        if (who != spWho || face != spFace) { spWho = who; spFace = face; spAt = Time.time; }
     }
 
     // ---------------------------------------------------------------- scroll views that a finger can drag and that fit their content
