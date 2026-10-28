@@ -59,6 +59,7 @@ const lanIPs = () => Object.values(os.networkInterfaces()).flat().filter((i) => 
 let actualPort = PORT;
 const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
 const roomStore = createRoomStore({ dataDir: DATA_DIR });
+const { resyncRealtime } = require('./realtime-resync.js');
 const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id), onErase: (ids) => eraseLive(ids) });
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
@@ -344,8 +345,8 @@ function broadcast(r, msg, except) {
 }
 function handleRealtime(event) {
   if (event && event.t === 'family-erased') { // a family was erased on another instance (or this one: it is safe twice)
-    if (Array.isArray(event.ids)) eraseLive(event.ids.filter((id) => typeof id === 'string')).catch((error) => console.error('Could not drop erased players:', error.message));
-    return;
+    if (!Array.isArray(event.ids)) return;
+    return eraseLive(event.ids.filter((id) => typeof id === 'string')).catch((error) => console.error('Could not drop erased players:', error.message)); // the resync waits on it
   }
   if (!event || !R.ROOM_RE.test(event.room || '') || !event.message || typeof event.message.t !== 'string') return;
   const { room: code, message } = event;
@@ -368,6 +369,7 @@ function handleRealtime(event) {
   }
   if (!REALTIME_TYPES.has(message.t)) return;
   const r = room(code);
+  if (message.t === 'join' || message.t === 'leave') r.presenceRev = (r.presenceRev || 0) + 1;
   if (message.t === 'join' && message.p) {
     r.remotePlayers.set(message.p.id, message.p);
     if (!message.replace) logChat(r, { k: 'join', id: message.p.id, n: cleanName(message.p.name) });
@@ -1236,7 +1238,10 @@ server.on('listening', () => {
 });
 roomStore.load().then(async (state) => {
   saved = state;
-  await roomStore.startRealtime(INSTANCE_ID, handleRealtime);
+  await roomStore.startRealtime(INSTANCE_ID, handleRealtime, () => { // events sent while the listener was down are gone: re-derive erased families and who is online
+    resyncRealtime({ roomStore, rooms, saved: () => saved, localIds: () => [...conns].filter((c) => c.player).map((c) => c.player.id), handle: handleRealtime })
+      .catch((error) => console.error('Could not resync after the realtime listener returned:', error.message));
+  });
   server.listen(PORT, '0.0.0.0');
 }).catch(async (error) => {
   console.error('Could not initialize room storage:', error.message);

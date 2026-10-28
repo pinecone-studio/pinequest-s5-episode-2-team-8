@@ -157,7 +157,7 @@ function cleanProgressRecord(record) {
   return { revision: record.revision, state: record.state };
 }
 
-function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolOverride } = {}) {
+function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolOverride, reconnectMs = [1000, 30000] } = {}) {
   const dataFile = path.join(dataDir, 'rooms.json');
   const identityFile = path.join(dataDir, 'identities.json');
   const walletFile = path.join(dataDir, 'wallets.json');
@@ -347,6 +347,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       },
       async startRealtime() {},
       async listPresence() { return []; },
+      async erasedAmong() { return []; }, // one process: nothing can be erased behind its back
       async registerPresence() { return null; },
       async updatePresence() {},
       async removePresence() {},
@@ -356,9 +357,12 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
   }
 
   const Pool = PoolOverride || require('pg').Pool;
-  const pool = new Pool({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 5000 });
+  const pool = new Pool({ connectionString: databaseUrl, max: 5, connectionTimeoutMillis: 5000,
+    keepAlive: true, keepAliveInitialDelayMillis: 10000 }); // a silently dead peer (NAT/pooler restart) becomes a socket error, and NAT/LB state for the idle LISTEN socket stays alive
   pool.on('error', (error) => console.error('PostgreSQL pool error:', error.message)); // an idle client dropping must not crash the server
   let subscriber = null;
+  const droppedClients = new WeakSet();
+  let closing = false, retryTimer = null, retryDelay = reconnectMs[0];
 
   return {
     kind: 'postgres',
@@ -473,19 +477,59 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         client.release();
       }
     },
-    async startRealtime(instanceId, onEvent) {
-      subscriber = await pool.connect();
-      subscriber.on('error', (error) => console.error('PostgreSQL realtime listener error:', error.message));
-      subscriber.on('notification', (notification) => {
-        if (notification.channel !== REALTIME_CHANNEL) return;
+    async startRealtime(instanceId, onEvent, onReconnect) {
+      const drop = (client) => { // once per client: a dead socket emits both 'error' and 'end'
+        if (droppedClients.has(client)) return false;
+        droppedClients.add(client);
+        if (subscriber === client) subscriber = null;
+        try { client.release(true); } catch { /* already gone */ }
+        return true;
+      };
+      const retry = () => {
+        if (closing || retryTimer) return; // never two loops at once
+        retryTimer = setTimeout(async () => {
+          retryTimer = null;
+          if (closing) return;
+          try {
+            await listen();
+            if (closing) return;
+            retryDelay = reconnectMs[0];
+            console.log('PostgreSQL realtime listener reconnected');
+            if (onReconnect) onReconnect();
+          } catch (error) {
+            console.error(`PostgreSQL realtime reconnect failed: ${error.message}`);
+            retry();
+          }
+        }, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, reconnectMs[1]);
+      };
+      const listen = async () => {
+        const client = await pool.connect();
+        const lost = (error) => {
+          if (!drop(client)) return;
+          console.error(`PostgreSQL realtime listener lost${error ? `: ${error.message}` : ''}; reconnecting`);
+          retry();
+        };
+        client.on('error', (error) => { // before LISTEN succeeds the caller's rejection handles it; a later error is a drop
+          if (subscriber === client) lost(error); else console.error('PostgreSQL realtime listener error:', error.message);
+        });
+        client.on('end', () => { if (subscriber === client) lost(); });
+        client.on('notification', (notification) => {
+          if (notification.channel !== REALTIME_CHANNEL) return;
+          try {
+            const event = JSON.parse(notification.payload);
+            if (event.instanceId !== instanceId) onEvent(event);
+          } catch (error) {
+            console.error('Could not process PostgreSQL realtime event:', error.message);
+          }
+        });
         try {
-          const event = JSON.parse(notification.payload);
-          if (event.instanceId !== instanceId) onEvent(event);
-        } catch (error) {
-          console.error('Could not process PostgreSQL realtime event:', error.message);
-        }
-      });
-      await subscriber.query(`LISTEN ${REALTIME_CHANNEL}`);
+          await client.query(`LISTEN ${REALTIME_CHANNEL}`);
+        } catch (error) { drop(client); throw error; }
+        if (closing) { drop(client); return; }
+        subscriber = client;
+      };
+      await listen();
     },
     async getRoomState(roomCode) {
       const client = await pool.connect();
@@ -525,6 +569,10 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       if (!PLAYER_ID.test(id || '')) return false;
       const result = await pool.query("SELECT 1 FROM naadamy_erased WHERE id = $1 AND erased_at > now() - interval '30 days'", [id]);
       return result.rows.length > 0;
+    },
+    async erasedAmong(ids) { // of these player ids, the ones erased in the last 30 days (one query)
+      const result = await pool.query("SELECT id FROM naadamy_erased WHERE id = ANY($1::text[]) AND erased_at > now() - interval '30 days'", [ids]);
+      return result.rows.map((row) => row.id);
     },
     async addDeviceTicket(id, ticket) {
       if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) throw new Error('Invalid device ticket');
@@ -884,7 +932,9 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
     async close(instanceId) {
       if (instanceId) await pool.query('DELETE FROM naadamy_players WHERE instance_id = $1', [instanceId]);
       // the LISTEN connection is checked out for the server's whole life; pool.end() waits forever unless it is given back
-      if (subscriber) { subscriber.release(true); subscriber = null; }
+      closing = true;
+      clearTimeout(retryTimer); retryTimer = null;
+      if (subscriber) { droppedClients.add(subscriber); subscriber.release(true); subscriber = null; }
       await pool.end();
     },
   };
