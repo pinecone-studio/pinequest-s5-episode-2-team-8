@@ -1,5 +1,5 @@
 // Things with a real body in the isometric view (Iso.cs): fences, rocks, the dock, the arena's flags, the foals' rope
-// line, the empty lots' stakes and signs, the gers, the shop, the ovoo, the script academy, the уяа, the race's gate, the trees, the quest board, the well, the lanterns, the dairy's churn, stove and rack, Setsen's statue, the Naadam stand and the archery range are built
+// line, the empty lots' stakes and signs, the gers, the shop, the ovoo, the script academy, the уяа, the trees, the quest board, the well, the lanterns, the dairy's churn, stove and rack, Setsen's statue, the Naadam stand and the archery range are built
 // from small boxes instead of being painted on the ground. Each box's top is lit, its sides are shaded by which way
 // they face, and the whole village's boxes are one mesh drawn with the 3D world's shader (Shaders/NaadamyVoxel).
 // Tile (x, y) at height h is world (x, -y, -h), on the same ground plane as the sprites.
@@ -26,7 +26,6 @@ public static class Bodies
         Flags();
         foreach (var o in World.objects) if (!PICTURED.Contains(o.kind)) Thing(o);
         foreach (var t in World.trees) Tree(t.x, t.y, t.pine);
-        RaceGate();
         var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
         mesh.SetVertices(vs); mesh.SetColors(cs); mesh.SetTriangles(ts, 0); mesh.RecalculateBounds();
         var go = new GameObject("Solid things");
@@ -44,7 +43,7 @@ public static class Bodies
             case "zel": Zel(o); break; case "lot": Lot(o); break; case "ger": Ger(o); break; case "bleachers": Bleachers(o); break;
             case "archery": Archery(o); break; case "ovoo": Ovoo(o); break; case "shop": Shop(o); break; case "statue": Statue(o); break;
             case "academy": Academy(o); break; case "uya": Uya(o); break; case "board": Board(o); break; case "well": Well(o); break;
-            case "lantern": Lantern(o); break; case "churn": Churn(o); break; case "tulga": Tulga(o); break; case "rack": Rack(o); break;
+            case "lantern": Lantern(o); break; case "felt": Felt(o); break; case "churn": Churn(o); break; case "tulga": Tulga(o); break; case "rack": Rack(o); break;
         }
     }
 
@@ -284,17 +283,6 @@ public static class Bodies
         for (int i = 0; i < 4; i++) Box(Mathf.Lerp(xa, xb, (i + 0.5f) / 4), y, 0.86f, 0.1f, 0.03f, 0.26f, Px.Col(cols[i]));
     }
 
-    /** The town race's start and finish: two tall poles across the track at its first turn point, a banner between them. */
-    static void RaceGate()
-    {
-        var p = World.LAP[0]; float x = p.x + 0.5f, y0 = p.y - 0.4f, y1 = p.y + 1.6f;
-        Color pole = Px.Col(Px.K.woodD);
-        Box(x, y0, 0, 0.12f, 0.12f, 2.6f, pole); Box(x, y1, 0, 0.12f, 0.12f, 2.6f, pole);
-        Box(x, (y0 + y1) / 2, 2.05f, 0.06f, y1 - y0, 0.45f, Px.Col(Px.K.red));
-        Box(x, (y0 + y1) / 2, 2.05f, 0.07f, y1 - y0, 0.06f, Px.Col(Px.K.gold));
-        Box(x, (y0 + y1) / 2, 2.44f, 0.07f, y1 - y0, 0.06f, Px.Col(Px.K.gold));
-        foreach (float fy in new[] { y0, y1 }) Box(x, fy + 0.17f, 2.6f, 0.03f, 0.3f, 0.22f, Px.Col(Px.K.blue));
-    }
 
     /** A tree: a pine as stacked cones, a leafy one as a round crown with clumps of leaves, on a wooden trunk. */
     static void Tree(int tx, int ty, bool pine)
@@ -393,6 +381,26 @@ public static class Bodies
         for (int i = 0; i < 9; i++) for (int j = 0; j < 2; j++) Box(x0 + 0.15f + i * (x1 - x0 - 0.3f) / 8, cy - 0.12f + j * 0.24f, 1.01f, 0.1f, 0.08f, 0.05f, Px.Col("#fff6dc"));
     }
 
+    /** Felt making: the hide mat with wool laid out on it, a rolled felt and its wet bucket, and a finished felt hung on a frame. */
+    static void Felt(WObj o)
+    {
+        Color wood = Px.Col(Px.K.wood), dark = Px.Col(Px.K.woodD), felt = Px.Col("#f1ece0");
+        float cx = o.x + 1, cy = o.y + 0.62f;
+        Box(cx - 0.1f, cy, 0, 1.5f, 0.7f, 0.04f, Px.Col("#a46d3b"));
+        Box(cx - 0.1f, cy, 0.04f, 1.3f, 0.56f, 0.02f, Px.Col("#b98250"));
+        foreach (float wx in new[] { -0.55f, -0.2f, 0.15f }) Box(cx + wx, cy - 0.05f, 0.06f, 0.24f, 0.18f, 0.07f, Px.Col("#f6f2e9")); // wool laid out
+        Box(cx - 0.15f, cy + 0.42f, 0, 1.1f, 0.24f, 0.24f, Px.Col("#d8c8a8"));                                   // the rolled felt
+        foreach (int s in new[] { -1, 1 }) Box(cx - 0.15f + s * 0.56f, cy + 0.42f, 0.02f, 0.03f, 0.2f, 0.2f, Px.Col("#c2b296")); // its ends
+        Ring(cx + 0.82f, cy + 0.1f, 0, 0.15f, 0.3f, 0.17f, wood, 12); Disc(cx + 0.82f, cy + 0.1f, 0.27f, 0.15f, Px.Col("#4aa6e2")); // the bucket
+        // the drying frame behind, with a finished felt hanging on it
+        float fy = o.y + 0.12f;
+        Box(o.x + 0.12f, fy, 0, 0.09f, 0.09f, 1.45f, dark); Box(o.x + o.w - 0.12f, fy, 0, 0.09f, 0.09f, 1.45f, dark);
+        Box(cx, fy, 1.38f, o.w - 0.1f, 0.07f, 0.07f, wood);
+        Box(cx, fy + 0.03f, 0.55f, o.w - 0.5f, 0.03f, 0.82f, felt);
+        Box(cx, fy + 0.05f, 0.68f, o.w - 0.6f, 0.01f, 0.06f, Px.Col(Px.K.red));   // the felt's pattern
+        Box(cx, fy + 0.05f, 1.2f, o.w - 0.6f, 0.01f, 0.06f, Px.Col(Px.K.red));
+    }
+
     static Vector3 W(float x, float y, float z) => new Vector3(x, -y, -z);
     /** A thin strip of boxes from a to b (world points): a scarf or a rope running at a slant. */
     static void Strip(Vector3 a, Vector3 b, float t, Color c)
@@ -465,32 +473,32 @@ public static class Bodies
     // ---------------------------------------------------------------- isometric pixel pictures
     /** Buildings drawn as isometric pixel art instead of standing in 3D: the same shapes, seen from the camera's angle,
      *  painted into a 16-pixels-per-tile picture with a dark outline and darker lines where one face meets another. */
-    public static readonly HashSet<string> PICTURED = new HashSet<string> { "ger", "shop", "well", "academy", "bleachers", "ovoo", "statue", "board", "uya", "churn", "tulga", "rack", "lantern" };
+    public static readonly HashSet<string> PICTURED = new HashSet<string> { "ger", "shop", "well", "academy", "bleachers", "ovoo", "statue", "board", "uya", "churn", "tulga", "rack", "lantern", "felt" };
     // (the archery range stays in 3D: it's spread over a field people walk across, which one standing picture can't sort with)
     static List<(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col)> cap;
 
     /** Each pictured building: its picture, and the world point (the middle of its ground) where it stands, facing the camera. */
-    public static List<(PxCanvas art, float pivotX, float pivotY, Vector3 at, float sort)> Pictures()
+    public static List<(PxCanvas art, float pivotX, float pivotY, float[] depth, Vector3 at)> Pictures()
     {
-        var list = new List<(PxCanvas, float, float, Vector3, float)>();
+        var list = new List<(PxCanvas, float, float, float[], Vector3)>();
         foreach (var o in World.objects)
         {
             if (!PICTURED.Contains(o.kind)) continue;
             cap = new List<(Vector3, Vector3, Vector3, Vector3, Color)>();
             Thing(o);
             var at = new Vector3(o.x + o.w / 2f, -(o.y + o.h / 2f), 0);
-            var (art, px, py) = Paint(cap, at);
+            var (art, px, py, depth) = Paint(cap, at);
             cap = null;
-            list.Add((art, px, py, at, o.x + o.w / 2f + o.y + o.h / 2f));
+            list.Add((art, px, py, depth, at));
         }
         return list;
     }
 
     /** Paints quads (world points) as seen by the isometric camera, at 16 pixels a tile; pivot: where the point at lands in the picture. */
-    public static (PxCanvas art, float pivotX, float pivotY) Paint(List<(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col)> quads, Vector3 at)
+    public static (PxCanvas art, float pivotX, float pivotY, float[] depth) Paint(List<(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col)> quads, Vector3 at, float ppt = 16)
     {
         var rot = Iso.Standing; Vector3 R = rot * Vector3.right, U = rot * Vector3.up, F = rot * Vector3.forward; // F: depth, away from the camera
-        Vector2 P(Vector3 v) => new Vector2(Vector3.Dot(v - at, R) * 16, Vector3.Dot(v - at, U) * 16);
+        Vector2 P(Vector3 v) => new Vector2(Vector3.Dot(v - at, R) * ppt, Vector3.Dot(v - at, U) * ppt);
         float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
         foreach (var q in quads) foreach (var v in new[] { q.a, q.b, q.c, q.d }) { var p = P(v); x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x); y0 = Mathf.Min(y0, p.y); y1 = Mathf.Max(y1, p.y); }
         int M = 2, W = Mathf.CeilToInt(x1 - x0) + M * 2 + 1, H = Mathf.CeilToInt(y1 - y0) + M * 2 + 1;
@@ -542,7 +550,16 @@ public static class Bodies
             bool n = (x > 0 && face[y * W + x - 1] >= 0) || (x < W - 1 && face[y * W + x + 1] >= 0) || (y > 0 && face[(y - 1) * W + x] >= 0) || (y < H - 1 && face[(y + 1) * W + x] >= 0);
             if (n) edge.Add((x, y));
         }
-        foreach (var (x, y) in edge) art.Put(x, y, outl);
-        return (art, ox, oy);
+        foreach (var (x, y) in edge)
+        {
+            art.Put(x, y, outl);
+            float near = float.MaxValue; // the outline sits at the depth of what it outlines
+            foreach (var (nx, ny) in new[] { (x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1) }) if (nx >= 0 && ny >= 0 && nx < W && ny < H && face[ny * W + nx] >= 0) near = Mathf.Min(near, zbuf[ny * W + nx]);
+            zbuf[y * W + x] = near;
+        }
+        // each pixel's depth as how much farther it is than the picture's plane (through at), for Shaders/NaadamyPicture
+        float plane = Vector3.Dot(at, F);
+        for (int i = 0; i < zbuf.Length; i++) if (zbuf[i] != float.MaxValue) zbuf[i] -= plane;
+        return (art, ox, oy, zbuf);
     }
 }

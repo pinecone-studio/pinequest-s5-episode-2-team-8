@@ -321,7 +321,7 @@ public sealed partial class Game : MonoBehaviour
         var d = dolls[dollsUsed++]; if (!d.root.activeSelf) d.root.SetActive(true);
         var h = heading ?? (dir == 0 ? new Vector2(1, 1) : dir == 3 ? new Vector2(-1, -1) : dir == 1 ? new Vector2(-1, 1) : new Vector2(1, -1));
         float? swing = walking || frame != 0 ? Time.time * (run ? 15 : 10) + x * 1.7f : (float?)null;
-        d.Pose(look, x + 0.5f, y + 0.94f, z / T, h.x, h.y, swing);
+        d.Pose(look, x + 0.5f, y + 0.82f, z / T, h.x, h.y, swing); // feet where they collide (Move: px + 0.5, py + 0.82)
     }
     /** A doll with its feet at tile (fx, fy), z tiles up (a rider on a horse's back), facing grid direction h. */
     void DollAt(Look look, float fx, float fy, float z, Vector2 h, float? swing)
@@ -357,16 +357,15 @@ public sealed partial class Game : MonoBehaviour
         NextCritter().Pose(kind, coat, fx, fy, 0, h.x, h.y, walking || moved ? Time.time * 9 + fx : (float?)null, sit);
     }
 
-    readonly Dictionary<PxCanvas, Sprite> pictureSprites = new Dictionary<PxCanvas, Sprite>();
-    /** An isometric picture (pivot: its feet) standing facing the camera with its feet at tile (fx, fy), sorted like Spr. */
-    void Picture(PxCanvas art, float pivotX, float pivotY, float fx, float fy, float sortY)
+    readonly List<GameObject> pictures = new List<GameObject>(); int picturesUsed;
+    /** An isometric picture (pivot: its feet) standing facing the camera with its feet at tile (fx, fy), each pixel at its own depth (Billboard). */
+    void Picture(PxCanvas art, float pivotX, float pivotY, float[] depth, float fx, float fy)
     {
-        if (poolUsed == pool.Count) pool.Add(new GameObject("Sprite").AddComponent<SpriteRenderer>());
-        var r = pool[poolUsed++]; r.enabled = true;
-        if (!pictureSprites.TryGetValue(art, out var s)) pictureSprites[art] = s = art.ToSprite(pivotX, pivotY);
-        r.sprite = s; r.flipX = false; r.color = Color.white;
-        r.transform.SetPositionAndRotation(new Vector3(fx, -fy, 0), Iso.Standing);
-        r.sortingOrder = Mathf.RoundToInt((fx + sortY) * 100);
+        if (picturesUsed == pictures.Count) { var ng = new GameObject("Picture"); ng.AddComponent<MeshFilter>(); ng.AddComponent<MeshRenderer>(); pictures.Add(ng); }
+        var go = pictures[picturesUsed++]; if (!go.activeSelf) go.SetActive(true);
+        go.GetComponent<MeshFilter>().sharedMesh = Billboard.Quad(art, pivotX, pivotY, Critter.PPT_BASAR);
+        go.GetComponent<MeshRenderer>().sharedMaterial = Billboard.Mat(art, depth);
+        go.transform.SetPositionAndRotation(new Vector3(fx, -fy, 0), Iso.Standing);
     }
 
     // ================================================================ the isometric view (Iso.cs)
@@ -384,12 +383,7 @@ public sealed partial class Game : MonoBehaviour
             var g = new GameObject("Ground").AddComponent<SpriteRenderer>(); g.transform.SetParent(isoRoot.transform, false);
             g.sprite = ground.ToSprite(0, 0); g.sortingOrder = -30000;
             Bodies.Build().transform.SetParent(isoRoot.transform, false);
-            foreach (var (art, ppx, ppy, at, sort) in Bodies.Pictures()) // the buildings drawn as isometric pixel art
-            {
-                var s = new GameObject("Building").AddComponent<SpriteRenderer>(); s.transform.SetParent(isoRoot.transform, false);
-                s.sprite = art.ToSprite(ppx, ppy); s.transform.SetPositionAndRotation(at, Iso.Standing);
-                s.sortingOrder = Mathf.RoundToInt((sort - 1) * 100);
-            }
+            foreach (var (art, ppx, ppy, depth, at) in Bodies.Pictures()) Billboard.Make("Building", art, ppx, ppy, depth, at, isoRoot.transform); // the buildings drawn as isometric pixel art
             foreach (var (art, fx, fy) in props)
             {
                 var s = new GameObject("Prop").AddComponent<SpriteRenderer>(); s.transform.SetParent(isoRoot.transform, false);
@@ -430,7 +424,7 @@ public sealed partial class Game : MonoBehaviour
 
     void Draw()
     {
-        poolUsed = 0; dollsUsed = 0; crittersUsed = 0;
+        poolUsed = 0; dollsUsed = 0; crittersUsed = 0; picturesUsed = 0;
         float t = Time.time;
         if (!InScene)
         {
@@ -448,9 +442,10 @@ public sealed partial class Game : MonoBehaviour
             Shadow(dgx * T, dgy * T + 1, dgy + 0.05f); if (IsoOn) // Basar: an isometric pixel picture, turned eight ways, walking or sitting (Critter.Picture)
             {
                 float bfx = dgx + 0.5f, bfy = dgy + 1f; var bh = Track("basar", bfx, bfy, Facing(dgFlip), out _);
+                if (!dgMoving) { var tp = new Vector2(px - dgx, py - dgy); if (tp.sqrMagnitude > 0.01f) bh = tp.normalized; } // standing, he looks at you
                 int d8 = ((Mathf.RoundToInt(Mathf.Atan2(bh.y, bh.x) / (Mathf.PI / 4)) % 8) + 8) % 8;
-                var (bart, bpx, bpy) = Critter.Picture("basar", d8, dgMoving ? (int)(t * 10) % 4 : -1, df == 3);
-                Picture(bart, bpx, bpy, bfx, bfy, dgy + 0.05f);
+                var (bart, bpx, bpy, bdepth) = Critter.Picture("basar", d8, dgMoving ? (int)(t * 10) % 4 : -1, df == 3);
+                Picture(bart, bpx, bpy, bdepth, bfx, bfy);
             }
             else Spr(Px.Bankhar(df), dgx * T - 3, dgy * T - 1, dgFlip, dgy + 0.05f);
             // your own ger on its lot
@@ -463,7 +458,7 @@ public sealed partial class Game : MonoBehaviour
                     bool turn = (int)(t / 4 + o.x) % 3 == 0; int f = (int)(t * 2 + o.y) % 5 == 0 ? 1 : 0; var img = Px.Beast(o.kind, f); bool cow = o.kind == "cow";
                     Shadow(o.x * T + (cow ? 6 : 0), o.y * T + 1, o.y + 0.2f); Animal(o.kind, null, img, o.x * T + (cow ? 4 : -1), o.y * T + 14 - img.H, turn, o.y + 0.2f);
                 }
-                else if (o.kind == "felt") Spr(Px.FeltMat(), o.x * T, o.y * T, false, o.y + 0.4f, flat: true);
+                else if (o.kind == "felt" && !IsoOn) Spr(Px.FeltMat(), o.x * T, o.y * T, false, o.y + 0.4f, flat: true); // (isometric: a picture, Bodies.Felt)
                 else if (o.kind == "zel")
                 {
                     var zl = new[] { (0.6f, "foal"), (2.2f, "foal"), (1.2f, "mare"), (3.1f, "mare") };
@@ -491,6 +486,7 @@ public sealed partial class Game : MonoBehaviour
         for (int i = poolUsed; i < pool.Count; i++) pool[i].enabled = false;
         for (int i = dollsUsed; i < dolls.Count; i++) if (dolls[i].root.activeSelf) dolls[i].root.SetActive(false);
         for (int i = crittersUsed; i < critters.Count; i++) if (critters[i].root.activeSelf) critters[i].root.SetActive(false);
+        for (int i = picturesUsed; i < pictures.Count; i++) if (pictures[i].activeSelf) pictures[i].SetActive(false);
         // camera: follow, stay inside the map, snap to whole screen pixels so the pixel art doesn't shimmer
         // a whole number of screen pixels per art pixel, about 24 tiles across (11 on a phone), never showing past the map (view.js measure)
         float cssW = Screen.width / Mathf.Max(1, Dpr);
@@ -526,6 +522,46 @@ public sealed partial class Game : MonoBehaviour
         ctx = null;
     }
 
+    // ---------------------------------------------------------------- taps in the isometric view
+    // people, animals and buildings stand up off the ground there, so a tap is tested against where they show on the screen
+    // (the ground point under the tap is behind them), the nearest first
+    float ScreenPpu => Screen.height / (2 * cam.orthographicSize);
+    /** Whether a screen point falls on something standing at tile (fx, fy), halfW tiles wide and height tiles tall. */
+    bool OnStanding(Vector2 screen, float fx, float fy, float halfW, float height)
+    {
+        var s = cam.WorldToScreenPoint(new Vector3(fx, -fy, 0)); float u = ScreenPpu;
+        return Mathf.Abs(screen.x - s.x) < halfW * u && screen.y > s.y - 0.25f * u && screen.y < s.y + height * u;
+    }
+    static float TallOf(string kind)
+    {
+        switch (kind)
+        {
+            case "academy": return 3.1f; case "ger": case "bleachers": return 2.6f; case "shop": case "statue": return 2.4f; case "ovoo": return 2.3f;
+            case "lantern": return 2.1f; case "well": return 1.9f; case "board": return 1.85f; case "npc": case "npcq": case "emee": case "general": case "historian": return 1.8f;
+            case "churn": case "felt": return 1.5f; case "uya": return 1.3f; case "archery": return 1.2f; case "rack": return 1.1f; default: return 1f;
+        }
+    }
+    /** Whether a screen point falls inside the box an object stands in (its tiles, up to its height). */
+    bool OnObject(Vector2 screen, WObj o)
+    {
+        float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue, h = TallOf(o.kind);
+        foreach (var gx in new float[] { o.x, o.x + o.w }) foreach (var gy in new float[] { o.y, o.y + o.h }) foreach (var z in new[] { 0, h })
+        { var s = cam.WorldToScreenPoint(new Vector3(gx, -gy, -z)); x0 = Mathf.Min(x0, s.x); x1 = Mathf.Max(x1, s.x); y0 = Mathf.Min(y0, s.y); y1 = Mathf.Max(y1, s.y); }
+        return screen.x >= x0 && screen.x <= x1 && screen.y >= y0 && screen.y <= y1;
+    }
+    /** Basar, a sheep or something with a door under the tap: does what tapping it does and says so. */
+    bool TapStanding(Vector2 screen)
+    {
+        if (OnStanding(screen, dgx + 0.5f, dgy + 1f, 0.5f, 1.2f)) { DoAction(new Act { type = "basar" }); return true; }
+        Sheep sh = null; float best = float.MinValue;
+        foreach (var q in sheep) if (q.px + q.py > best && OnStanding(screen, q.px + 0.5f, q.py + 1f, 0.5f, 0.85f)) { sh = q; best = q.px + q.py; }
+        if (sh != null) { var n = World.NearestOpen(sh.x, sh.y, mx, my); if (n != null) GoTo(n.Value.x, n.Value.y, new Act { type = ShearSheep(sh) ? "shear" : "sheep", s = sh }); return true; }
+        WObj hit = null; best = float.MinValue;
+        foreach (var o in World.objects) { if (!o.hasDoor) continue; float k = o.x + o.w + o.y + o.h; if (k > best && OnObject(screen, o)) { hit = o; best = k; } } // the one nearest the camera
+        if (hit != null) { GoTo(hit.doorX, hit.doorY, ActFor(hit)); return true; }
+        return false;
+    }
+
     /** A tap or click on the map: Basar, a sheep, a building's door, or just a place to walk to. */
     void TapWorld(Vector2 screen)
     {
@@ -534,6 +570,7 @@ public sealed partial class Game : MonoBehaviour
         if (IsoOn) { var gp = Iso.Ground(cam, screen); if (gp == null) return; wx = gp.Value.x; wy = gp.Value.y; }
         else { Vector3 w = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, 10)); wx = w.x; wy = -w.y; }
         int tx0 = Mathf.FloorToInt(wx), ty0 = Mathf.FloorToInt(wy);
+        if (IsoOn && battle == null && TapStanding(screen)) return;
         if (battle != null) { var e = NearestEnemy(wx, wy + 0.4f, 1.4f); if (e != null) { ShootAt(e.x, e.y); return; } } // tap a raider to loose a whistling arrow
         // only a tap right on Basar opens his chat; he walks beside you, so a wide area kept stealing taps meant for walking (the 🐕 button opens him too)
         if (Mathf.Abs(dgx + 0.55f - wx) < 0.4f && wy > dgy - 0.1f && wy < dgy + 0.8f) { DoAction(new Act { type = "basar" }); return; }

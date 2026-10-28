@@ -11,7 +11,7 @@ public sealed class Critter
     {
         public float len = 1, h = 0.45f, w = 0.4f, legH = 0.5f, leg = 0.12f, head = 0.3f, headLen = 0.4f, neck = 0.3f, tail = 0.3f;
         public string body = "#8a5a33", dark = "#6b4220", light = null, mane = null, horns = null;
-        public bool saddle, humps, antlers, wool, beard, ears, patches, skirt, bird, curl, longNeck, cute;
+        public bool saddle, humps, antlers, wool, beard, ears, patches, skirt, bird, curl, longNeck, cute, collar;
         public Spec Scaled(float k) { var s = (Spec)MemberwiseClone(); s.len *= k; s.h *= k; s.w *= k; s.legH *= k; s.leg *= k; s.head *= k; s.headLen *= k; s.neck *= k; s.tail *= k; return s; }
     }
 
@@ -31,8 +31,10 @@ public sealed class Critter
             case "mare": return Horse("chestnut", false);
             case "foal": return Horse("chestnut", false).Scaled(0.62f);
             // Basar is drawn cute: a big round head with big eyes, tan "four-eye" brows and his tongue out, a short body on short legs
-            case "basar": return new Spec { len = 0.62f, h = 0.34f, w = 0.34f, legH = 0.24f, leg = 0.11f, head = 0.42f, headLen = 0.38f, neck = 0.1f, tail = 0.32f, body = "#2a2326", dark = "#c98a4b", light = "#c98a4b", ears = true, curl = true, cute = true };
-            case "puppy": return Kind("basar", null).Scaled(0.55f);
+            // he matters (he is your guide): a handsome, fluffy Mongolian bankhar, a size bigger than a real dog, black and tan with a thick ruff,
+            // the tan "four eyes", a fluffy tail curled over his back and a blue collar with a gold bell
+            case "basar": return new Spec { len = 0.84f, h = 0.38f, w = 0.36f, legH = 0.36f, leg = 0.12f, head = 0.34f, headLen = 0.36f, neck = 0.2f, tail = 0.36f, body = "#2e272b", dark = "#c98a4b", light = "#c98a4b", curl = true, cute = true, collar = true }.Scaled(1.15f);
+            case "puppy": { var p = Kind("basar", null).Scaled(0.48f); p.collar = false; return p; }
             case "kitten": return new Spec { len = 0.5f, h = 0.22f, w = 0.2f, legH = 0.2f, leg = 0.07f, head = 0.22f, headLen = 0.22f, neck = 0.06f, tail = 0.35f, body = "#f39b2c", dark = "#c46d12", light = "#fff2c8", ears = true };
             case "sheep": return new Spec { len = 0.78f, h = 0.44f, w = 0.5f, legH = 0.26f, leg = 0.08f, head = 0.24f, headLen = 0.3f, neck = 0.1f, tail = 0.1f, body = "#f1ece0", dark = "#3a3236", wool = true };
             case "shorn": return new Spec { len = 0.7f, h = 0.32f, w = 0.36f, legH = 0.26f, leg = 0.08f, head = 0.24f, headLen = 0.3f, neck = 0.1f, tail = 0.1f, body = "#e8d9c6", dark = "#3a3236" };
@@ -97,17 +99,19 @@ public sealed class Critter
         float s = swing.HasValue ? Mathf.Sin(swing.Value) : 0;
         for (int i = 0; i < 4; i++) legs[i].localRotation = Quaternion.AngleAxis(((i == 0 || i == 3) ? s : -s) * 30, Vector3.right);
         // sitting: the body tips back onto its haunches and the back legs fold forward
-        torso.localPosition = sit ? L(0, -spec.len * 0.1f, -spec.legH * 0.3f) : Vector3.zero;
-        torso.localRotation = sit ? Quaternion.AngleAxis(-28, Vector3.right) : Quaternion.identity;
-        if (sit) { legs[2].localRotation = legs[3].localRotation = Quaternion.AngleAxis(-80, Vector3.right); }
+        torso.localPosition = sit ? L(0, spec.len * 0.3f, -spec.legH * 0.28f) : Vector3.zero; // tipped back, the chest stays over the front legs and the haunches reach the ground
+        torso.localRotation = sit ? Quaternion.AngleAxis(28, Vector3.right) : Quaternion.identity; // (+: the front goes up)
+        if (sit) { legs[2].localRotation = legs[3].localRotation = Quaternion.AngleAxis(80, Vector3.right); } // (+: folded forward under him)
     }
 
     // ---------------------------------------------------------------- isometric pixel pictures of an animal
+    /** Basar is painted at twice the village's pixels a tile, finer than the rest: he is the one you look at most. */
+    public const float PPT_BASAR = 32;
     static Critter painter;
-    static readonly Dictionary<string, (PxCanvas, float, float)> pics = new Dictionary<string, (PxCanvas, float, float)>();
+    static readonly Dictionary<string, (PxCanvas, float, float, float[])> pics = new Dictionary<string, (PxCanvas, float, float, float[])>();
     /** A picture of kind standing facing one of 8 grid directions (dir8 · 45° from +x), in walk phase 0–3 (−1 standing) or sitting,
      *  painted like the buildings (Bodies.Paint); pivot is its feet. Made once and kept. */
-    public static (PxCanvas art, float pivotX, float pivotY) Picture(string kind, int dir8, int phase, bool sit)
+    public static (PxCanvas art, float pivotX, float pivotY, float[] depth) Picture(string kind, int dir8, int phase, bool sit)
     {
         string k = kind + "|" + dir8 + "|" + phase + "|" + sit;
         if (pics.TryGetValue(k, out var hit)) return hit;
@@ -121,7 +125,7 @@ public sealed class Critter
             var v = m.vertices; var c = m.colors32; var M = mf.transform.localToWorldMatrix;
             for (int i = 0; i + 3 < v.Length; i += 4) quads.Add((M.MultiplyPoint3x4(v[i]), M.MultiplyPoint3x4(v[i + 1]), M.MultiplyPoint3x4(v[i + 2]), M.MultiplyPoint3x4(v[i + 3]), c[i]));
         }
-        return pics[k] = Bodies.Paint(quads, Vector3.zero);
+        return pics[k] = Bodies.Paint(quads, Vector3.zero, kind == "basar" ? PPT_BASAR : 16);
     }
 
     // ---------------------------------------------------------------- the pieces, in its own space
@@ -150,24 +154,56 @@ public sealed class Critter
         {
             foreach (int side in new[] { -1, 1 })
             {
-                B(side * s.head * 0.26f, hf + s.headLen * 0.5f, hu + s.head * 0.5f, 0.1f, 0.03f, 0.11f, outl);                      // big eyes
-                B(side * s.head * 0.23f, hf + s.headLen * 0.5f + 0.02f, hu + s.head * 0.58f, 0.04f, 0.01f, 0.04f, Px.Col("#ffffff")); // their shine
-                B(side * s.head * 0.26f, hf + s.headLen * 0.5f, hu + s.head * 0.76f, 0.09f, 0.03f, 0.05f, Px.Col("#e2ab6c"));      // the tan "second eyes"
+                B(side * s.head * 0.24f, hf + s.headLen * 0.5f, hu + s.head * 0.56f, s.head * 0.16f, 0.02f, s.head * 0.14f, outl);              // eyes
+                B(side * s.head * 0.22f, hf + s.headLen * 0.5f + 0.01f, hu + s.head * 0.64f, s.head * 0.05f, 0.01f, s.head * 0.05f, Px.Col("#ffffff")); // their shine
+                B(side * s.head * 0.25f, hf + s.headLen * 0.5f, hu + s.head * 0.78f, s.head * 0.18f, 0.02f, s.head * 0.08f, Px.Col("#e2ab6c")); // the tan "second eyes"
+                B(side * s.head * 0.52f, hf - s.headLen * 0.05f, hu + s.head * 0.3f, s.head * 0.12f, s.headLen * 0.38f, s.head * 0.6f, Px.Col("#3a3236")); // floppy ears
+                B(side * s.head * 0.36f, hf + s.headLen * 0.35f, hu + s.head * 0.08f, s.head * 0.2f, s.headLen * 0.3f, s.head * 0.3f, light); // tan cheeks
             }
-            B(0, hf + s.headLen * 0.62f, hu + s.head * 0.12f, 0.14f, 0.12f, 0.14f, light);                                        // muzzle
-            B(0, hf + s.headLen * 0.69f, hu + s.head * 0.3f, 0.08f, 0.03f, 0.06f, outl);                                          // nose
-            B(0, hf + s.headLen * 0.66f, hu - 0.04f, 0.07f, 0.06f, 0.08f, Px.Col("#e8687a"));                                     // tongue
+            B(0, hf + s.headLen * 0.62f, hu + s.head * 0.04f, s.head * 0.56f, s.headLen * 0.42f, s.head * 0.42f, light);   // the strong muzzle
+            B(0, hf + s.headLen * 0.83f, hu + s.head * 0.36f, s.head * 0.26f, s.headLen * 0.06f, s.head * 0.14f, outl);    // nose
+            B(0, hf + s.headLen * 0.84f, hu + s.head * 0.14f, s.head * 0.4f, s.headLen * 0.02f, s.head * 0.03f, Px.Col("#8a5a33")); // mouth
+            // the thick ruff round his neck and shoulders, a sheen along his back, the tan chest
+            B(0, front - s.len * 0.12f, u0 + s.h * 0.15f, s.w * 1.18f, s.len * 0.34f, s.h * 0.95f, Px.Col("#3a3236"));
+            B(0, -s.len * 0.05f, top - 0.005f, s.w * 0.4f, s.len * 0.62f, 0.03f, Px.Col("#4a4044"));
+            B(0, front + 0.01f, u0 + s.h * 0.05f, s.w * 0.5f, 0.04f, s.h * 0.55f, light);
+            // fluffy all over: tufts of fur sticking out along his back, sides and belly, bigger and shaggier at the ruff
+            Color fur = Px.Col("#3a3236"), furD = Px.Col("#2e272b"), furL = Px.Col("#4a4044");
+            for (int i = 0; i < 9; i++)
+            {
+                float f = Mathf.Lerp(-front * 0.92f, front * 0.75f, i / 8f), j = (float)Px.Hash(i, 41), big = f > front * 0.3f ? 1.5f : 1f;
+                B((j - 0.5f) * s.w * 0.3f, f, top - 0.01f, s.w * 0.36f * big, s.len * 0.09f, s.h * (0.1f + j * 0.1f) * big, i % 3 == 0 ? furL : fur); // along the back
+                foreach (int side in new[] { -1, 1 })
+                {
+                    B(side * (s.w / 2 + s.w * 0.06f * big), f, u0 + s.h * (0.2f + j * 0.45f), s.w * 0.12f * big, s.len * 0.1f, s.h * 0.24f * big, (i + side) % 2 == 0 ? fur : furD); // on the sides
+                    B(side * s.w * 0.3f, f, u0 - s.h * 0.1f * big, s.w * 0.22f, s.len * 0.1f, s.h * 0.14f, furD);  // hanging under the belly
+                }
+            }
+            foreach (int side in new[] { -1, 1 }) B(side * s.head * 0.5f, hf - s.headLen * 0.3f, hu - s.head * 0.05f, s.head * 0.18f, s.headLen * 0.3f, s.head * 0.32f, fur); // fluffy cheeks under the ears
+            B(0, -front * 0.8f, u0 - s.h * 0.05f, s.w * 1.12f, s.len * 0.18f, s.h * 0.55f, fur); // the "trousers" round his back legs
         }
         else foreach (int side in new[] { -1, 1 }) B(side * s.head * 0.36f, hf + s.headLen * 0.22f, hu + s.head * 0.62f, 0.04f, 0.05f, 0.05f, outl); // eyes
-        if (s.ears) foreach (int side in new[] { -1, 1 }) B(side * s.head * 0.32f, hf - s.headLen * 0.2f, hu + s.head, 0.08f, 0.06f, 0.12f, s.light != null && s.body == "#2a2326" ? body : dark);
+        if (s.ears && !s.cute) foreach (int side in new[] { -1, 1 }) B(side * s.head * 0.32f, hf - s.headLen * 0.2f, hu + s.head, 0.08f, 0.06f, 0.12f, dark);
         if (s.mane != null) { B(0, front - 0.05f, nu + 0.05f, 0.06f, 0.2f, s.neck + s.head * 0.6f, Px.Col(s.mane)); B(0, hf - s.headLen * 0.3f, hu + s.head, 0.06f, 0.14f, 0.06f, Px.Col(s.mane)); }
         if (s.horns != null) foreach (int side in new[] { -1, 1 }) { B(side * s.head * 0.3f, hf - s.headLen * 0.2f, hu + s.head, 0.05f, 0.05f, 0.14f, Px.Col(s.horns)); B(side * s.head * 0.36f, hf - s.headLen * 0.32f, hu + s.head + 0.12f, 0.05f, 0.1f, 0.05f, Px.Col(s.horns)); }
         if (s.antlers) foreach (int side in new[] { -1, 1 }) { B(side * 0.08f, hf - 0.06f, hu + s.head, 0.04f, 0.04f, 0.3f, Px.Col("#c9b48c")); B(side * 0.16f, hf - 0.02f, hu + s.head + 0.2f, 0.16f, 0.04f, 0.04f, Px.Col("#c9b48c")); B(side * 0.1f, hf + 0.08f, hu + s.head + 0.12f, 0.04f, 0.14f, 0.04f, Px.Col("#c9b48c")); }
+        if (s.collar) // round his neck, where it meets the head, and the bell hanging at the front
+        {
+            B(0, front - s.len * 0.02f, top - s.h * 0.35f, s.w * 0.95f, s.len * 0.16f, s.h * 0.22f, Px.Col("#3f76db"));
+            B(0, front + s.len * 0.07f, top - s.h * 0.55f, s.w * 0.3f, s.len * 0.06f, s.h * 0.28f, Px.Col(Px.K.gold));
+        }
         if (s.beard) B(0, hf + s.headLen * 0.3f, hu - 0.1f, 0.06f, 0.05f, 0.12f, Px.Col("#d6ccb7"));
         // the tail: Basar's curls up over his back, a horse's hangs, the others stick out a little
         if (s.tail > 0)
         {
-            if (s.curl) { B(0, -front + 0.02f, top, 0.16f, 0.12f, 0.16f, body); B(0, -front + 0.12f, top + 0.14f, 0.18f, 0.18f, 0.1f, Px.Col("#4a3f44")); }
+            if (s.curl)
+            {
+                Color fur = Px.Col("#3a3236"), furL = Px.Col("#4a4044");
+                B(0, -front + s.len * 0.02f, top - s.h * 0.1f, s.w * 0.6f, s.len * 0.18f, s.h * 0.6f, fur);
+                B(0, -front + s.len * 0.16f, top + s.h * 0.36f, s.w * 0.75f, s.len * 0.3f, s.h * 0.38f, fur);  // the plume curled over his back
+                foreach (int side in new[] { -1, 1 }) B(side * s.w * 0.36f, -front + s.len * 0.14f, top + s.h * 0.3f, s.w * 0.14f, s.len * 0.22f, s.h * 0.28f, furL); // its fluffy edges
+                B(0, -front + s.len * 0.34f, top + s.h * 0.4f, s.w * 0.4f, s.len * 0.1f, s.h * 0.28f, light); // the tan tip
+            }
             else if (s.mane != null) B(0, -front - 0.04f, top - s.tail - 0.05f, 0.1f, 0.1f, s.tail, Px.Col(s.mane));
             else B(0, -front - s.tail * 0.4f, top - s.h * 0.35f, 0.07f, s.tail * 0.8f, 0.07f, s.bird ? body : dark);
         }
@@ -175,8 +211,9 @@ public sealed class Critter
     /** A leg hangs from where it meets the body (the piece's origin) down to its hoof or paw. */
     static void LegBoxes(Spec s)
     {
-        B(0, 0, -s.legH + s.leg * 0.6f, s.leg, s.leg, s.legH - s.leg * 0.6f + 0.04f, Px.Col(s.wool ? s.dark : s.light != null && s.body == "#2a2326" ? s.light : s.dark));
+        B(0, 0, -s.legH + s.leg * 0.6f, s.leg, s.leg, s.legH - s.leg * 0.6f + 0.04f, Px.Col(s.wool ? s.dark : s.light != null && s.body == "#2e272b" ? s.light : s.dark));
         B(0, 0.01f, -s.legH, s.leg * 1.1f, s.leg * 1.2f, s.leg * 0.6f, Px.Col(s.mane != null ? "#2b1e14" : s.dark));
+        if (s.cute) B(0, -s.leg * 0.55f, -s.legH * 0.6f, s.leg * 0.9f, s.leg * 0.45f, s.legH * 0.55f, Px.Col("#b07a40")); // fluffy feathering down the back of the leg
     }
 
     // ---------------------------------------------------------------- boxes to a mesh (as in Doll)
