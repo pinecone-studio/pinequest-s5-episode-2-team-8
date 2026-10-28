@@ -76,7 +76,9 @@ public sealed partial class Game
         foreach (var o in World.objects)
         {
             if (o.kind != "lantern") continue;
-            var c = PxGui(o.x * T + 8, o.y * T - 6);
+            // in the isometric view the lamp is up on its pole (Bodies.Lantern: 1.64–2 tiles), and its light falls in a pool on the ground below
+            var c = IsoOn ? WorldGui(o.x + 0.5f, o.y + 0.85f, 1.82f) : PxGui(o.x * T + 8, o.y * T - 6);
+            if (IsoOn) { var g = WorldGui(o.x + 0.5f, o.y + 0.85f, 0); foreach (var (rx, ry, a) in new[] { (34f, 15f, 0.09f), (20f, 9f, 0.12f) }) { var old = GUI.color; GUI.color = new Color(1f, 0.78f, 0.42f, a); GUI.DrawTexture(new Rect(g.x - rx * k, g.y - ry * k, rx * 2 * k, ry * 2 * k), Tex(Disc())); GUI.color = old; } }
             foreach (var (rx, ry, a) in new[] { (26f, 20f, 0.10f), (15f, 12f, 0.14f), (6f, 5f, 0.2f) }) { var old = GUI.color; GUI.color = new Color(1f, 0.8f, 0.45f, a); GUI.DrawTexture(new Rect(c.x - rx * k, c.y - ry * k, rx * 2 * k, ry * 2 * k), Tex(Disc())); GUI.color = old; }
         }
     }

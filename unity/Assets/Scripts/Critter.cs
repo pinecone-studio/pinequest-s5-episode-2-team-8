@@ -11,7 +11,7 @@ public sealed class Critter
     {
         public float len = 1, h = 0.45f, w = 0.4f, legH = 0.5f, leg = 0.12f, head = 0.3f, headLen = 0.4f, neck = 0.3f, tail = 0.3f;
         public string body = "#8a5a33", dark = "#6b4220", light = null, mane = null, horns = null;
-        public bool saddle, humps, antlers, wool, beard, ears, patches, skirt, bird, curl, longNeck, cute;
+        public bool saddle, humps, antlers, wool, beard, ears, patches, skirt, bird, curl, longNeck, cute, collar;
         public Spec Scaled(float k) { var s = (Spec)MemberwiseClone(); s.len *= k; s.h *= k; s.w *= k; s.legH *= k; s.leg *= k; s.head *= k; s.headLen *= k; s.neck *= k; s.tail *= k; return s; }
     }
 
@@ -31,8 +31,9 @@ public sealed class Critter
             case "mare": return Horse("chestnut", false);
             case "foal": return Horse("chestnut", false).Scaled(0.62f);
             // Basar is drawn cute: a big round head with big eyes, tan "four-eye" brows and his tongue out, a short body on short legs
-            case "basar": return new Spec { len = 0.62f, h = 0.34f, w = 0.34f, legH = 0.24f, leg = 0.11f, head = 0.42f, headLen = 0.38f, neck = 0.1f, tail = 0.32f, body = "#2a2326", dark = "#c98a4b", light = "#c98a4b", ears = true, curl = true, cute = true };
-            case "puppy": return Kind("basar", null).Scaled(0.55f);
+            // he matters (he is your guide), so he is drawn a size bigger than a real dog would be, in a blue collar with a gold bell
+            case "basar": return new Spec { len = 0.62f, h = 0.34f, w = 0.34f, legH = 0.24f, leg = 0.11f, head = 0.42f, headLen = 0.38f, neck = 0.1f, tail = 0.32f, body = "#4a4044", dark = "#c98a4b", light = "#c98a4b", ears = true, curl = true, cute = true, collar = true }.Scaled(1.3f); // (a little lighter than his pixel picture, so the outline shows his shape)
+            case "puppy": { var p = Kind("basar", null).Scaled(0.42f); p.collar = false; return p; }
             case "kitten": return new Spec { len = 0.5f, h = 0.22f, w = 0.2f, legH = 0.2f, leg = 0.07f, head = 0.22f, headLen = 0.22f, neck = 0.06f, tail = 0.35f, body = "#f39b2c", dark = "#c46d12", light = "#fff2c8", ears = true };
             case "sheep": return new Spec { len = 0.78f, h = 0.44f, w = 0.5f, legH = 0.26f, leg = 0.08f, head = 0.24f, headLen = 0.3f, neck = 0.1f, tail = 0.1f, body = "#f1ece0", dark = "#3a3236", wool = true };
             case "shorn": return new Spec { len = 0.7f, h = 0.32f, w = 0.36f, legH = 0.26f, leg = 0.08f, head = 0.24f, headLen = 0.3f, neck = 0.1f, tail = 0.1f, body = "#e8d9c6", dark = "#3a3236" };
@@ -98,16 +99,16 @@ public sealed class Critter
         for (int i = 0; i < 4; i++) legs[i].localRotation = Quaternion.AngleAxis(((i == 0 || i == 3) ? s : -s) * 30, Vector3.right);
         // sitting: the body tips back onto its haunches and the back legs fold forward
         torso.localPosition = sit ? L(0, -spec.len * 0.1f, -spec.legH * 0.3f) : Vector3.zero;
-        torso.localRotation = sit ? Quaternion.AngleAxis(-28, Vector3.right) : Quaternion.identity;
-        if (sit) { legs[2].localRotation = legs[3].localRotation = Quaternion.AngleAxis(-80, Vector3.right); }
+        torso.localRotation = sit ? Quaternion.AngleAxis(28, Vector3.right) : Quaternion.identity; // (+: the front goes up)
+        if (sit) { legs[2].localRotation = legs[3].localRotation = Quaternion.AngleAxis(80, Vector3.right); } // (+: folded forward under him)
     }
 
     // ---------------------------------------------------------------- isometric pixel pictures of an animal
     static Critter painter;
-    static readonly Dictionary<string, (PxCanvas, float, float)> pics = new Dictionary<string, (PxCanvas, float, float)>();
+    static readonly Dictionary<string, (PxCanvas, float, float, float[])> pics = new Dictionary<string, (PxCanvas, float, float, float[])>();
     /** A picture of kind standing facing one of 8 grid directions (dir8 · 45° from +x), in walk phase 0–3 (−1 standing) or sitting,
      *  painted like the buildings (Bodies.Paint); pivot is its feet. Made once and kept. */
-    public static (PxCanvas art, float pivotX, float pivotY) Picture(string kind, int dir8, int phase, bool sit)
+    public static (PxCanvas art, float pivotX, float pivotY, float[] depth) Picture(string kind, int dir8, int phase, bool sit)
     {
         string k = kind + "|" + dir8 + "|" + phase + "|" + sit;
         if (pics.TryGetValue(k, out var hit)) return hit;
@@ -154,15 +155,21 @@ public sealed class Critter
                 B(side * s.head * 0.23f, hf + s.headLen * 0.5f + 0.02f, hu + s.head * 0.58f, 0.04f, 0.01f, 0.04f, Px.Col("#ffffff")); // their shine
                 B(side * s.head * 0.26f, hf + s.headLen * 0.5f, hu + s.head * 0.76f, 0.09f, 0.03f, 0.05f, Px.Col("#e2ab6c"));      // the tan "second eyes"
             }
-            B(0, hf + s.headLen * 0.62f, hu + s.head * 0.12f, 0.14f, 0.12f, 0.14f, light);                                        // muzzle
+            B(0, hf + s.headLen * 0.6f, hu + s.head * 0.05f, 0.24f, 0.16f, 0.2f, light);                                          // muzzle
+            foreach (int side in new[] { -1, 1 }) B(side * s.head * 0.42f, hf + s.headLen * 0.2f, hu + s.head * 0.1f, 0.06f, s.headLen * 0.5f, s.head * 0.3f, light); // tan cheeks
             B(0, hf + s.headLen * 0.69f, hu + s.head * 0.3f, 0.08f, 0.03f, 0.06f, outl);                                          // nose
             B(0, hf + s.headLen * 0.66f, hu - 0.04f, 0.07f, 0.06f, 0.08f, Px.Col("#e8687a"));                                     // tongue
         }
         else foreach (int side in new[] { -1, 1 }) B(side * s.head * 0.36f, hf + s.headLen * 0.22f, hu + s.head * 0.62f, 0.04f, 0.05f, 0.05f, outl); // eyes
-        if (s.ears) foreach (int side in new[] { -1, 1 }) B(side * s.head * 0.32f, hf - s.headLen * 0.2f, hu + s.head, 0.08f, 0.06f, 0.12f, s.light != null && s.body == "#2a2326" ? body : dark);
+        if (s.ears) foreach (int side in new[] { -1, 1 }) B(side * s.head * 0.32f, hf - s.headLen * 0.2f, hu + s.head, 0.08f, 0.06f, 0.12f, s.light != null && s.body == "#4a4044" ? body : dark);
         if (s.mane != null) { B(0, front - 0.05f, nu + 0.05f, 0.06f, 0.2f, s.neck + s.head * 0.6f, Px.Col(s.mane)); B(0, hf - s.headLen * 0.3f, hu + s.head, 0.06f, 0.14f, 0.06f, Px.Col(s.mane)); }
         if (s.horns != null) foreach (int side in new[] { -1, 1 }) { B(side * s.head * 0.3f, hf - s.headLen * 0.2f, hu + s.head, 0.05f, 0.05f, 0.14f, Px.Col(s.horns)); B(side * s.head * 0.36f, hf - s.headLen * 0.32f, hu + s.head + 0.12f, 0.05f, 0.1f, 0.05f, Px.Col(s.horns)); }
         if (s.antlers) foreach (int side in new[] { -1, 1 }) { B(side * 0.08f, hf - 0.06f, hu + s.head, 0.04f, 0.04f, 0.3f, Px.Col("#c9b48c")); B(side * 0.16f, hf - 0.02f, hu + s.head + 0.2f, 0.16f, 0.04f, 0.04f, Px.Col("#c9b48c")); B(side * 0.1f, hf + 0.08f, hu + s.head + 0.12f, 0.04f, 0.14f, 0.04f, Px.Col("#c9b48c")); }
+        if (s.collar) // round his neck, where it meets the head, and the bell hanging at the front
+        {
+            B(0, front - s.len * 0.02f, top - s.h * 0.35f, s.w * 0.95f, s.len * 0.16f, s.h * 0.22f, Px.Col("#3f76db"));
+            B(0, front + s.len * 0.07f, top - s.h * 0.55f, s.w * 0.3f, s.len * 0.06f, s.h * 0.28f, Px.Col(Px.K.gold));
+        }
         if (s.beard) B(0, hf + s.headLen * 0.3f, hu - 0.1f, 0.06f, 0.05f, 0.12f, Px.Col("#d6ccb7"));
         // the tail: Basar's curls up over his back, a horse's hangs, the others stick out a little
         if (s.tail > 0)
@@ -175,7 +182,7 @@ public sealed class Critter
     /** A leg hangs from where it meets the body (the piece's origin) down to its hoof or paw. */
     static void LegBoxes(Spec s)
     {
-        B(0, 0, -s.legH + s.leg * 0.6f, s.leg, s.leg, s.legH - s.leg * 0.6f + 0.04f, Px.Col(s.wool ? s.dark : s.light != null && s.body == "#2a2326" ? s.light : s.dark));
+        B(0, 0, -s.legH + s.leg * 0.6f, s.leg, s.leg, s.legH - s.leg * 0.6f + 0.04f, Px.Col(s.wool ? s.dark : s.light != null && s.body == "#4a4044" ? s.light : s.dark));
         B(0, 0.01f, -s.legH, s.leg * 1.1f, s.leg * 1.2f, s.leg * 0.6f, Px.Col(s.mane != null ? "#2b1e14" : s.dark));
     }
 

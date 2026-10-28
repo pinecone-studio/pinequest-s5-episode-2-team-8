@@ -46,7 +46,8 @@ public sealed partial class Game
         if (down && drag == null && modal == null && !OverUI(pos)) drag = new Drag { id = id, p0 = pos, p = pos };
         if (drag == null || drag.id != id) return;
         drag.p = pos;
-        if (!drag.on && (pos - drag.p0).magnitude > 12 * UiScale / 2) { drag.on = true; path.Clear(); pending = null; }
+        // a finger that drags becomes the joystick; the mouse on a computer never does (the keys walk there), its click just walks to the spot
+        if (!drag.on && (id >= 0 || TouchUI) && (pos - drag.p0).magnitude > 12 * UiScale / 2) { drag.on = true; path.Clear(); pending = null; }
         if (up) { if (!drag.on && modal == null) TapWorld(pos); drag = null; }
     }
 
@@ -271,6 +272,8 @@ public sealed partial class Game
         return new Vector2(s.x, Screen.height - s.y);
     }
     /** Art pixel (X, Y) of the village to a screen point. */
+    /** Tile (fx, fy), h tiles up, to a screen point (for things on top of something in the isometric view). */
+    Vector2 WorldGui(float fx, float fy, float h) { var s = cam.WorldToScreenPoint(new Vector3(fx, -fy, -h)); return new Vector2(s.x, Screen.height - s.y); }
     Vector2 PxGui(float X, float Y)
     {
         // labels sit above someone standing about 30 art pixels lower: up from those feet, so in the isometric view too
