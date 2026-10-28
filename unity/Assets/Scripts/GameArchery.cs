@@ -5,6 +5,7 @@ public sealed partial class Game
 {
     sealed class ArcheryInfoModal : Modal
     {
+        public override (string who, string face)? Speaker => ("archer", "proud");
         readonly Tx fact = Rules.Pick(Rules.ARCH_FACTS);
         public override void Draw(Game g)
         {

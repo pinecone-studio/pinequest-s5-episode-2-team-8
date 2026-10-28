@@ -12,6 +12,7 @@ public sealed partial class Game
         List<Rules.Opt> opts; readonly HashSet<Rules.Opt> tried = new HashSet<Rules.Opt>();
         public EmeeModal() { Show(); }
         public override float Width => 540;
+        public override (string who, string face)? Speaker => ("emee", finished ? (perfect ? "laugh" : "happy") : gentle ? "worried" : i == 0 ? "happy" : "curious");
         void Show()
         {
             var s = Rules.EMEE_STEPS[i]; st.hl = s.hl; st.hlBad = false; say = s.say.ToString(); gentle = false; tried.Clear();
@@ -76,10 +77,13 @@ public sealed partial class Game
         readonly Rules.Npc d; string speech;
         public NpcModal(string id) { d = Rules.NpcById(id); }
         public override float Width => 540;
+        int faceState; // 0 hello, 1 on the task, 2 ready, 3 all done, 4 telling about themselves
+        public override (string who, string face)? Speaker => (d.id, faceState == 2 ? "excited" : faceState == 3 ? "proud" : faceState == 4 ? "wink" : faceState == 1 ? "curious" : "happy");
         public override void Draw(Game g)
         {
             var st = g.V.Npc(d.id); var q = st.step < d.chain.Length ? d.chain[st.step] : null; bool ready = q != null && st.on && st.p >= q.n;
-            GUILayout.BeginHorizontal(); g.IconAt(Px.Char(d.look, 0, 0), 56);
+            faceState = speech != null ? 4 : q == null ? 3 : ready ? 2 : st.on ? 1 : 0;
+            GUILayout.BeginHorizontal();
             GUILayout.BeginVertical(); g.Title(d.name.ToString());
             GUILayout.Label(string.Concat(Enumerable.Range(0, d.chain.Length).Select(k => k < st.step ? "<color=#2ea35f>●</color> " : k == st.step ? "<color=#f7c646>●</color> " : "○ ")), g.sLabel);
             GUILayout.EndVertical(); GUILayout.EndHorizontal();

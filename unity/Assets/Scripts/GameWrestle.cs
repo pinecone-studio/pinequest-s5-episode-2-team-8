@@ -11,6 +11,7 @@ public sealed partial class Game
 
     sealed class ArenaModal : Modal
     {
+        public override (string who, string face)? Speaker => ("zasuul", "proud");
         readonly Tx fact = Rules.Pick(Rules.WR_FACTS);
         public override void Draw(Game g)
         {

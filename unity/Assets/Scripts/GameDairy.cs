@@ -10,6 +10,7 @@ public sealed partial class Game
         const int NEED = 5; const float ZA = 0.36f, ZB = 0.64f;
         readonly string id, kind; readonly Rules.Animal A; readonly Live live = new Live(180, 110);
         string phase = "young", msg; int good; float pos, dirn = 1, nuzzle = -9; bool done, first;
+        public override (string who, string face)? Speaker => ("farmer", done ? "laugh" : "happy");
         public MilkModal(string id, string kind) { this.id = id; this.kind = kind; A = Rules.DAIRY_ANIMALS[kind]; SetMsg(); }
         void SetMsg() => msg = phase == "young"
             ? Loc.L($"Эхлээд төлийг нь ({A.young.mn.ToLower()}) хөхүүлж сүүг нь ивлүүлье.", $"First let the {A.young.en.ToLower()} suckle so the milk flows.")
