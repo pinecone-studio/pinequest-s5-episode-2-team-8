@@ -1,4 +1,4 @@
-// Family login (as web/js/family.js): the family code a grown-up makes, which lets a child log in on another device with
+// Family login: the family code a grown-up makes, which lets a child log in on another device with
 // their 3 secret pictures and play as the same child there (same coins, XP and clothes). See docs/PROTOCOL.md, "Family login".
 using System;
 using System.Collections;
