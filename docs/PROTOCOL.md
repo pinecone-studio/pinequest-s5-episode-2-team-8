@@ -7,6 +7,7 @@ It describes protocol **version 13** (`VERSION` in `web/js/village/rules.js`). U
 - Every message is one JSON text frame: an object with a `t` (type) field.
 - Max message size: 16 KB in total, also when split over fragments. Binary frames, unknown opcodes, a continuation frame with no open message and a new message inside an unfinished one close the connection.
 - Rate limit: about 20 messages per second per connection (a burst of 30 is allowed). Messages over the limit are dropped silently.
+- Connection caps (per server instance): each address may hold 200 connections at once (`WS_MAX_PER_IP`) and open 300 new ones per minute (`WS_NEW_PER_MIN`), and the server holds 2000 in total (`WS_MAX_TOTAL`). Over an address cap the upgrade is refused with `429 Too Many Requests` and `Retry-After: 60`; over the total, with `503 Service Unavailable` and `Retry-After: 30`.
 - The server pings every 20 s. A client that misses a ping is disconnected.
 - Bad messages (unknown `t`, broken JSON, out-of-range values) are ignored, or clamped where noted.
 

@@ -191,10 +191,33 @@ function frame(op, payload) {
   if (!head) return null;
   return Buffer.concat([head, data]);
 }
+// one address (a whole classroom can share a school's) may hold only so many game connections, and open only so many a minute;
+// the whole server holds only so many. All per server instance. A phone whose Wi-Fi vanished keeps its old slot until the missed ping.
+const posInt = (v, d) => (/^[1-9]\d*$/.test(String(v || '').trim()) ? Number(v) : d);
+const WS_MAX_PER_IP = posInt(process.env.WS_MAX_PER_IP, 200), WS_NEW_PER_MIN = posInt(process.env.WS_NEW_PER_MIN, 300), WS_MAX_TOTAL = posInt(process.env.WS_MAX_TOTAL, 2000);
+const wsOpen = new Map(), wsNew = new Map(), wsLogged = new Set();
+function wsAllowed(ip) {
+  const now = Date.now(), h = (wsNew.get(ip) || []).filter((t) => now - t < 60000), open = wsOpen.get(ip) || 0;
+  if (open >= WS_MAX_PER_IP || h.length >= WS_NEW_PER_MIN) {
+    wsNew.set(ip, h);
+    if (!wsLogged.has(ip) && wsLogged.size < 1000) { wsLogged.add(ip); console.warn('ws cap hit', ip, open); } // once per address a minute
+    return false;
+  }
+  h.push(now); wsNew.set(ip, h); wsOpen.set(ip, open + 1);
+  return true;
+}
+setInterval(() => { // off the hot path: forget addresses with nothing open and nothing in the last minute
+  const now = Date.now();
+  for (const [key, times] of wsNew) if (!wsOpen.has(key) && !times.some((t) => now - t < 60000)) wsNew.delete(key);
+  wsLogged.clear();
+}, 60000).unref();
 function upgrade(req, socket) {
   const key = req.headers['sec-websocket-key'];
   let pathname; try { pathname = new URL(req.url, 'http://x').pathname; } catch { socket.destroy(); return; } // e.g. `GET //[` throws
   if (pathname !== '/ws' || !key) { socket.destroy(); return; }
+  if (conns.size >= WS_MAX_TOTAL) { socket.on('error', () => {}); socket.end('HTTP/1.1 503 Service Unavailable\r\nRetry-After: 30\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); return; }
+  const ip = clientIp(req);
+  if (!wsAllowed(ip)) { socket.on('error', () => {}); socket.end('HTTP/1.1 429 Too Many Requests\r\nRetry-After: 60\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); return; }
   const accept = crypto.createHash('sha1').update(key + GUID).digest('base64');
   socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ' + accept + '\r\n\r\n');
   socket.setNoDelay(true);
@@ -228,8 +251,16 @@ function upgrade(req, socket) {
       if (fin) { const text = Buffer.concat(conn.frag).toString('utf8'); conn.frag = []; conn.fragBytes = 0; onMessage(conn, text); }
     }
   });
-  socket.on('close', () => { conns.delete(conn); leave(conn); });
-  socket.on('error', () => { conns.delete(conn); leave(conn); });
+  // close and error can both fire: give the address its slot back only once
+  // (the slot goes first, so a throw in leave cannot leak it)
+  const end = () => {
+    if (conn.counted) { conn.counted = false; const n = (wsOpen.get(ip) || 1) - 1; if (n > 0) wsOpen.set(ip, n); else wsOpen.delete(ip); }
+    conns.delete(conn); leave(conn);
+  };
+  conn.counted = true;
+  socket.on('end', () => socket.end()); // a client that just drops the connection (no close frame) frees its slot now, not at the next ping
+  socket.on('close', end);
+  socket.on('error', end);
   conns.add(conn);
 }
 const conns = new Set();
