@@ -8,9 +8,9 @@ using UnityEngine;
 
 public sealed partial class Game
 {
-    // ================================================================ the people of Нутаг (drawn by Tools/art/folk.py): Bolormaa and the villagers
+    // ================================================================ the people of Нутаг (drawn by Tools/art/folk.py and hero.py): Bolormaa and the villagers
     static readonly Dictionary<string, PxCanvas> folkArt = new Dictionary<string, PxCanvas>();
-    /** Someone from head to toe, 80×136: id bolormaa, emee, zasuul, general, historian, herder, fisher, farmer, teacher, trainer, archer,
+    /** Someone from head to toe (200×344): id bolormaa, emee, zasuul, general, historian, herder, fisher, farmer, teacher, trainer, archer,
      *  craftsman. face: neutral, happy, laugh, wink, surprised, think, sad, proud, tease, excited, worried, shy, curious, stern.
      *  pose: idle (their own stance, with what they work with), talk, cheer, think, wave, point, proud, or null for the one that
      *  suits the face. frame 0/1 breathes; open: the mouth while talking; blink: the eyes shut. */
@@ -25,7 +25,8 @@ public sealed partial class Game
         int W = m["W"].I, H = m["H"].I, fw = m["faceW"].I, fh = m["faceH"].I, row = poses.IndexOf(pose), fi = faces.IndexOf(face) * 4 + (open ? 1 : 0) + (blink ? 2 : 0);
         c = new PxCanvas(W, H);
         c.BlitScaled(Art.Get("folk_" + id + "_body"), 0, 0, W, H, false, frame * W, row * H, W, H);
-        c.BlitScaled(Art.Get("folk_" + id + "_faces"), m["faceX"].I, m["faceY"].I + m["folk"][id]["bob"][pose][frame].I, fw, fh, false, fi % 4 * fw, fi / 4 * fh, fw, fh);
+        var who = m["folk"][id]; int fx = who.Has("faceX") ? who["faceX"].I : m["faceX"].I, fy = who.Has("faceY") ? who["faceY"].I : m["faceY"].I;   // each character's face sits on their own head
+        c.BlitScaled(Art.Get("folk_" + id + "_faces"), fx, fy + who["bob"][pose][frame].I, fw, fh, false, fi % 4 * fw, fi / 4 * fh, fw, fh);
         return folkArt[key] = c;
     }
     public static PxCanvas Bolormaa(string face, string pose, int frame, bool open, bool blink) => Folk("bolormaa", face, pose, frame, open, blink);
@@ -34,7 +35,7 @@ public sealed partial class Game
     {
         string p = pose == "bye" ? "wave" : pose == "yay" ? "cheer" : "idle", f = pose == "yay" ? "laugh" : pose == "bye" ? "wink" : "happy";
         int fr = (int)(Time.time * (pose == "idle" || pose == "wait" ? 1.6f : 4)) % 2;
-        float h = 60 * scale, w = h * 80 / 136f;
+        float h = 60 * scale, w = h * 200 / 344f;
         x.BlitScaled(Bolormaa(f, p, fr, false, Time.time % 3.7f < 0.12f), X - (w - 27 * scale) / 2, Y, w, h);
     }
 

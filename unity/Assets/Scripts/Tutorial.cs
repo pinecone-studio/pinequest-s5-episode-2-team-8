@@ -58,7 +58,7 @@ public sealed partial class Game
         // the story box, as on the web version: black with a white pixel border and white pixel text typing out. Basar sits in a portrait
         // on the left; Bolormaa stands beside the box from head to toe, her face and pose following what she says
         bool guide = d.who != "basar";
-        float bigH = Mathf.Min(vh * 0.6f, 290), bigW = bigH * 80 / 136f;   // Bolormaa stands tall beside the box
+        float bigH = Mathf.Min(vh * 0.62f, 300), bigW = bigH * 200 / 344f;   // Bolormaa stands tall beside the box
         float w = Mathf.Min(vw - 16, 720), pad = 12, pic = guide ? bigW * 0.8f : 72, tx = pad * 2 + pic, tw = w - tx - pad;
         var st = new GUIStyle(sPixel) { wordWrap = true, alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16)), normal = { textColor = Color.white } }; // the story box is pixel text, as on the web
         float th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
