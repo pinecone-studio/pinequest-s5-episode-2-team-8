@@ -598,7 +598,19 @@ public sealed partial class Game
         GUILayout.BeginArea(new Rect((Screen.width - w) / 2, U(12), w, h));
         GUILayout.FlexibleSpace();
         GUILayout.BeginVertical(sPanel);
-        var m = modal; m.winScroll = BeginScroll(m.winScroll, h - U(40)); m.Draw(this); EndScroll();
+        var m = modal; m.winScroll = BeginScroll(m.winScroll, h - U(40));
+        var sp = m.Speaker; PxCanvas port = sp != null ? Portrait(sp.Value.who, sp.Value.face, spWho == sp.Value.who && Time.time - spAt < 1.6f && (int)(Time.time * 9) % 2 == 0, (Time.time + sp.Value.who.Length) % 3.4f < 0.12f) : null;
+        if (port != null)   // the one you are talking to, in a portrait at the window's left
+        {
+            GUILayout.BeginHorizontal();
+            var pr = GUILayoutUtility.GetRect(U(104), U(134), GUILayout.Width(U(104)), GUILayout.Height(U(134)));
+            Box(new Rect(pr.x - U(3), pr.y - U(3), pr.width + U(6), pr.height + U(6)), Px.Col("#5a2d10")); Box(pr, Px.Col("#34286e"));
+            GUI.DrawTexture(pr, Tex(port), ScaleMode.ScaleToFit);
+            GUILayout.Space(U(12)); GUILayout.BeginVertical();
+        }
+        m.Draw(this);
+        if (port != null) { GUILayout.EndVertical(); GUILayout.EndHorizontal(); }
+        EndScroll();
         GUILayout.EndVertical();
         if (e.type == EventType.Repaint) { var pr = GUILayoutUtility.GetLastRect(); modalPanel = new Rect(pr.x + (Screen.width - w) / 2, pr.y + U(12), pr.width, pr.height); }
         GUILayout.FlexibleSpace();

@@ -58,11 +58,10 @@ public sealed partial class Game
         // the story box, as on the web version: black with a white pixel border and white pixel text typing out. Basar sits in a portrait
         // on the left; Bolormaa stands beside the box from head to toe, her face and pose following what she says
         bool guide = d.who != "basar";
-        float bigH = Mathf.Min(vh * 0.62f, 300), bigW = bigH * 200 / 344f;   // Bolormaa stands tall beside the box
-        float w = Mathf.Min(vw - 16, 720), pad = 12, pic = guide ? bigW * 0.8f : 72, tx = pad * 2 + pic, tw = w - tx - pad;
+        float w = Mathf.Min(vw - 16, 720), pad = 12, pic = guide ? 112 : 72, tx = pad * 2 + pic, tw = w - tx - pad;   // Bolormaa's portrait (56×72 pixels, ×2)
         var st = new GUIStyle(sPixel) { wordWrap = true, alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16)), normal = { textColor = Color.white } }; // the story box is pixel text, as on the web
         float th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
-        float h = Mathf.Max(guide ? 96 : pic + pad * 2, pad + 24 + th + (n > 0 ? 8 + n * 46 : 18) + pad);
+        float h = Mathf.Max(guide ? pic * 72 / 56f + pad * 2 : pic + pad * 2, pad + 24 + th + (n > 0 ? 8 + n * 46 : 18) + pad);
         float x = vw / 2 - w / 2, y = d.top ? (guide ? 120 : 60) : vh - h - 70;
         var r = UR(x, y, w, h); Ui(r);
         Box(r, Color.white); Box(UR(x + 3, y + 3, w - 6, h - 6), Px.Col("#08060e"));
@@ -70,12 +69,11 @@ public sealed partial class Game
         bool talking = d.Typing && (int)(Time.time * 9) % 2 == 0, blink = Time.time % 3.7f < 0.12f;
         if (guide)
         {
-            // she stands on the box's bottom edge and leans out over its top, breathing (and waving or cheering a little faster)
-            float bh = bigH, bw = bigW, hop = d.face == "laugh" || d.face == "excited" ? Mathf.Abs(Mathf.Sin((Time.time - d.born) * 7)) * 5 * (d.Typing ? 1 : 0) : Mathf.Max(0, 1 - (Time.time - d.born) / 0.3f) * 4;
-            var body = Bolormaa(d.face, null, (int)(Time.time * (d.Typing ? 3 : 1.4f)) % 2, talking, blink);
-            var br = UR(x + pad + (pic - bw) / 2 - 6, y + h - bh + 2 - hop, bw, bh);
-            GUI.DrawTexture(new Rect(br.x + U(10), br.yMax - U(3), br.width - U(20), U(4)), white, ScaleMode.StretchToFill, true, 0, new Color(0, 0, 0, 0.35f), 0, U(2));
-            GUI.DrawTexture(br, Tex(body));
+            // her portrait in a frame on the left of the box: her face follows what she says, her mouth moves as the words type out
+            float ph = pic * 72 / 56f, hop = Mathf.Max(0, 1 - (Time.time - d.born) / 0.25f) * 3;
+            var fr = UR(x + pad, y + pad - hop, pic, ph);
+            Box(new Rect(fr.x - U(3), fr.y - U(3), fr.width + U(6), fr.height + U(6)), Color.white); Box(fr, Px.Col("#34286e"));
+            GUI.DrawTexture(fr, Tex(Portrait("bolormaa", d.face, talking, blink)));
         }
         else
         {
