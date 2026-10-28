@@ -114,7 +114,7 @@ public sealed partial class Game
     /** Phones and tablets get on-screen buttons and touch hints; a computer uses the keys Bolormaa teaches. */
     public static bool TouchUI => Application.isMobilePlatform;
     float builtFor = -1;
-    public GUIStyle sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt, sSel, sPixel, sTeach, sKicker, sNote, sSlot, sChipHi, sWhite, sNav, sNavOn, sTabOff, sField, sTile, sLogo;
+    public GUIStyle sSpeech, sPanel, sBtn, sPrimary, sLabel, sTitle, sSmall, sChip, sChipText, sToast, sCenter, sTag, sBig, sOpt, sSel, sPixel, sTeach, sKicker, sNote, sSlot, sChipHi, sWhite, sNav, sNavOn, sTabOff, sField, sTile, sLogo;
     Texture2D white;
     readonly Dictionary<PxCanvas, Texture2D> texCache = new Dictionary<PxCanvas, Texture2D>();
     public Texture2D Tex(PxCanvas c) { if (!texCache.TryGetValue(c, out var t)) texCache[c] = t = c.ToTexture(); return t; }
@@ -195,6 +195,7 @@ public sealed partial class Game
         sLogo = Style(Frame("#2f6bff", new (string, int)[0], 6, null, 0, u), null, bodyFont, T(12), ink, TextAnchor.MiddleCenter);
         sSlot = Style(Frame("#e6c48a", Ring("#c99a5a", 2), 0, null, 0, u), null, pixelFont, F(11), ink, TextAnchor.MiddleCenter);
         sNote = new GUIStyle(sChip) { font = bodyFont, fontSize = T(14), wordWrap = true, alignment = TextAnchor.MiddleCenter }; // a parchment box over a scene: its title, a hint
+        sSpeech = new GUIStyle(sNote) { fontSize = T(12), padding = new RectOffset(T(10), T(10), T(6), T(8)) }; // what someone says, in a bubble (SpeechBubble)
     }
     public float U(float v) => v * UiScale;
     Rect UR(float x, float y, float w, float h) => new Rect(U(x), U(y), U(w), U(h));
@@ -288,6 +289,7 @@ public sealed partial class Game
         // names over the townspeople, with ! for a new task and ? when one is done
         foreach (var o in World.objects)
         {
+            if (o.kind == "statue") { var sp = PxGui(o.x * T + 8, o.y * T - 40); Outlined(sp.x, sp.y, Loc.L("Сэцэн", "Setsen"), ts * 0.8f, gold); continue; }
             if (o.kind != "npc" && o.kind != "npcq" && o.kind != "emee" && o.kind != "general" && o.kind != "historian") continue;
             var p = PxGui(o.x * T + 8, o.y * T - 16);
             string name = o.kind == "npc" ? Loc.L("Засуул", "Herald") : o.kind == "emee" ? Loc.L("Эмээ", "Grandma") : o.kind == "general" ? Loc.L("Жанжин", "General") : o.kind == "historian" ? Loc.L("Түүхч", "Historian") : LastWord(Rules.NpcById(o.id).name.ToString());
@@ -440,7 +442,7 @@ public sealed partial class Game
         switch (type)
         {
             case "home": return "ui:house"; case "arcade": case "academy": case "historian": return "ui:book"; case "lasso": case "uya": return "ui:horse";
-            case "general": return "ui:trophy"; case "shop": return "ui:shop"; case "board": return "ui:scroll"; case "well": return "ui:drop";
+            case "general": case "setsen": return "ui:trophy"; case "shop": return "ui:shop"; case "board": return "ui:scroll"; case "well": return "ui:drop";
             case "zel": return "beast:mare"; case "cow1": case "cow2": return "beast:cow"; case "goat1": case "goat2": return "beast:goat";
             case "churn": return "dairy:airag"; case "tulga": return "dairy:urum"; case "rack": return "dairy:aaruul"; case "fish": return "ui:fish";
             case "sheep": case "emee": return "ui:heart"; case "shear": return "part:wool"; case "felt": return "part:esgii"; case "zasuul": case "arena": return "ui:wrestle";
@@ -762,6 +764,25 @@ public sealed partial class Game
         GUI.color = old;
     }
     public void EndRow() => GUILayout.EndHorizontal();
+    /** What someone says, in a bubble with its tail pointing at them (tip: the speaker's head, in screen GUI coordinates). The words
+     *  wrap at maxW units and the bubble is as big as they are; it stays on the screen, and near the top it hangs below the speaker. */
+    public Rect SpeechBubble(Vector2 tip, string text, float maxW = 230, float alpha = 1)
+    {
+        var gc = new GUIContent(text); float w = Mathf.Clamp(sSpeech.CalcSize(gc).x + U(2), U(40), U(maxW)), h = sSpeech.CalcHeight(gc, w), tail = U(7);
+        float x = Mathf.Clamp(tip.x - w / 2, U(4), Screen.width - w - U(4)), y = tip.y - tail - h; bool below = y < U(4);
+        if (below) y = tip.y + tail;
+        var old = GUI.color; GUI.color = new Color(1, 1, 1, alpha);
+        GUI.Box(new Rect(x, y, w, h), text, sSpeech);
+        GUI.color = old;
+        // the tail: a little triangle in the bubble's colours, pointing at whoever is talking
+        float tx = Mathf.Clamp(tip.x, x + U(12), x + w - U(12)); Color edge = Px.Col("#5a2d10"), fill = Px.Col("#f6dca8"); edge.a = fill.a = alpha;
+        for (int i = 0; i < 4; i++)
+        {
+            float half = (4 - i) * U(1.6f), yy = below ? y - (i + 1) * tail / 4 : y + h - U(2) + i * tail / 4;
+            Box(new Rect(tx - half - U(1.5f), yy, half * 2 + U(3), tail / 4 + 1), edge); Box(new Rect(tx - half, yy, half * 2, tail / 4 + 1), fill);
+        }
+        return new Rect(x, y, w, h);
+    }
     readonly Dictionary<string, float> gridW = new Dictionary<string, float>();
     /** Cells of equal width in rows, each row as tall as its tallest cell. measure(i, w) gives cell i's height at width w (measure
      *  wrapped text with CalcHeight), draw(i, rect) draws it with GUI calls. GUILayout guesses the height of wrapped text in a row

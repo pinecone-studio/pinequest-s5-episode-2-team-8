@@ -404,9 +404,10 @@ public sealed partial class Game
     }
     void Bubble(float x, float y, string text, PxCanvas icon)
     {
-        float w = icon != null ? U(34) : Mathf.Max(U(40), sLabel.CalcSize(new GUIContent(text)).x + U(16)), h = U(30);
+        if (icon == null) { SpeechBubble(new Vector2(x, y), "<b>" + text + "</b>", 200); return; }   // words: a bubble that fits them
+        float w = U(34), h = U(30);
         var r = new Rect(x - w / 2, y - h, w, h); Box(new Rect(r.x - 2, r.y - 2, r.width + 4, r.height + 4), Px.Col("#2b1e2e")); Box(r, Color.white);
-        if (icon != null) GUI.DrawTexture(new Rect(r.center.x - U(11), r.y + U(4), U(22), U(22)), Tex(icon)); else GUI.Label(r, "<color=#2b1e2e><b>" + text + "</b></color>", sCenter);
+        GUI.DrawTexture(new Rect(r.center.x - U(11), r.y + U(4), U(22), U(22)), Tex(icon));
     }
 
     // ---------------------------------------------------------------- the room window: who's here, phrases and emotes, a wrestling challenge

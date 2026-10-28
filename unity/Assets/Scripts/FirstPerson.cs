@@ -591,7 +591,11 @@ public sealed partial class Game
             if (g.battle != null) GUI.Box(g.URect(vw / 2 - 210, 58, 420, 30), g.BattleLabel(), g.sToast);
             if (!Game.TouchUI && building == null) GUI.Box(g.URect(vw / 2 - 190, 94, 380, 30), locked ? Loc.L("Esc: Нутаг руу буцах", "Esc: back to Nutag") : Loc.L("Дарж эргэн харна · Esc: гарах", "Click to look around · Esc: leave"), g.sNote);
             string info = src.info?.Invoke();
-            if (!string.IsNullOrEmpty(info)) { var ir = g.URect(8, vh - 140, Mathf.Min(520, vw - 16), 72); g.UiAdd(ir); GUI.Box(ir, info, new GUIStyle(g.sNote) { alignment = TextAnchor.MiddleLeft, fontSize = g.Ts(12), wordWrap = true }); }
+            if (!string.IsNullOrEmpty(info))   // what is said here, in a box as tall as the words
+            {
+                var ist = new GUIStyle(g.sNote) { alignment = TextAnchor.MiddleLeft, fontSize = g.Ts(12), wordWrap = true }; float iw = Mathf.Min(520, vw - 16), ih = Mathf.Max(56, ist.CalcHeight(new GUIContent(info), g.U(iw)) / g.UiScale + 4);
+                var ir = g.URect(8, vh - 68 - ih, iw, ih); g.UiAdd(ir); GUI.Box(ir, info, ist);
+            }
             float bx0 = 8;
             foreach (var (label, run) in src.buttons) { string l = label(); float w = Mathf.Max(90, l.Length * 10 + 32); if (g.Button(g.URect(bx0, vh - 60, w, 52), l)) g.Later(run); bx0 += w + 6; }
             if (g.riding && g.Button(g.URect(bx0, vh - 60, 110, 52), Loc.L("Мориноос буух", "Get off"))) g.Later(g.Dismount);

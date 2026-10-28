@@ -435,6 +435,7 @@ public sealed partial class Game : MonoBehaviour
             case "arcade": return Loc.L("Сурах", "Learn");
             case "academy": return Loc.L("Монгол бичиг", "Mongol script");
             case "general": return Loc.L("Жанжин", "General");
+            case "setsen": return Loc.L("Сэцэн", "Setsen");
             case "historian": return Loc.L("Түүхч", "Historian");
             case "shop": return Loc.L("Дэлгүүр", "Shop");
             case "board": return Loc.L("Даалгавар", "Quests");
@@ -489,6 +490,7 @@ public sealed partial class Game : MonoBehaviour
             case "arcade": Open(new LearnPage()); return;
             case "academy": Open(new BichigPage()); return;
             case "general": Open(new GeneralModal()); return;
+            case "setsen": Open(new InfoModal(Loc.L("Сэцэн", "Setsen"), Loc.L("Наадмын талбайн дэргэдэх хүчит бөхийн чулуун хөшөө: Сэцэн.", "A stone statue of a mighty wrestler beside the Naadam ground: Setsen."))); return;
             case "historian": Open(new HistorianModal()); return;
             case "basar": OpenBasar(); return;
         }
