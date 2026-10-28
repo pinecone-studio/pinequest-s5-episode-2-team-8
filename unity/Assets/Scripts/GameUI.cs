@@ -588,7 +588,16 @@ public sealed partial class Game
     void DrawModal()
     {
         if (modal.FullScreen) { modal.Draw(this); return; }
-        var sc = SceneUnder; if (sc != null && Event.current.type == EventType.Repaint) sc.Draw(this); // the scene stays behind its windows
+        // the scene stays behind its windows. It is drawn in every event, not only on repaint: GUILayout pairs areas by the
+        // order they are made in, so a page under a window (its BeginArea) must also be there in the layout pass. Taps, keys,
+        // the wheel and drags reach only the window on top: the page sees an Ignore event instead, which still walks its layout.
+        var sc = SceneUnder;
+        if (sc != null)
+        {
+            var cur = Event.current;
+            if (cur.type != EventType.Layout && cur.type != EventType.Repaint) Event.current = new Event { type = EventType.Ignore, mousePosition = new Vector2(-1e5f, -1e5f) };
+            try { sc.Draw(this); } finally { Event.current = cur; }
+        }
         // dim the village, then a centred window that grows with its content
         Box(new Rect(0, 0, Screen.width, Screen.height), new Color(0.1f, 0.06f, 0.12f, 0.55f));
         // a tap on the dimmed village outside the window closes it, as the ✕ does
