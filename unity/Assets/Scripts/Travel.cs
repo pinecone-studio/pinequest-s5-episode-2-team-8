@@ -30,6 +30,18 @@ public sealed partial class Game
         return folkArt[key] = c;
     }
     public static PxCanvas Bolormaa(string face, string pose, int frame, bool open, bool blink) => Folk("bolormaa", face, pose, frame, open, blink);
+    static readonly Dictionary<string, PxCanvas> busts = new Dictionary<string, PxCanvas>();
+    /** Someone's dialogue portrait (Tools/art/bust.py): a 56×72 pixel-art head and shoulders, with the same 14 faces as Folk,
+     *  talking (open) and blinking. Null for someone without one. */
+    public static PxCanvas Portrait(string id, string face, bool open, bool blink)
+    {
+        var m = Data.Get("bust"); if (!m["people"].Strings().Contains(id)) return null;
+        var faces = m["faces"].Strings(); if (!faces.Contains(face)) face = "happy";
+        string key = id + face + open + blink; if (busts.TryGetValue(key, out var c)) return c;
+        int W = m["W"].I, H = m["H"].I, i = faces.IndexOf(face) * 4 + (open ? 1 : 0) + (blink ? 2 : 0);
+        c = new PxCanvas(W, H); c.BlitScaled(Art.Get("bust_" + id), 0, 0, W, H, false, i % 4 * W, i / 4 * H, W, H);
+        return busts[key] = c;
+    }
     /** Bolormaa standing in a scene picture at (X, Y), its top left, 60 pixels tall at scale 1. pose: wait | bye | yay. */
     public void Nomin(PxCanvas x, float X, float Y, string pose, float scale = 1)
     {
