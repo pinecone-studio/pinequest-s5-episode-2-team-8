@@ -60,8 +60,8 @@ public sealed partial class Game : MonoBehaviour
         if (cam.GetComponent<AudioListener>() == null) cam.gameObject.AddComponent<AudioListener>(); // without a listener Unity plays every sound silently
 
         // the ground, buildings and trees are one big pixel picture
-        var map = new GameObject("Map").AddComponent<SpriteRenderer>();
-        map.sprite = Px.RenderStatic().ToSprite(0, 0); map.sortingOrder = -30000;
+        flatMap = new GameObject("Map").AddComponent<SpriteRenderer>();
+        flatMap.sprite = Px.RenderStatic().ToSprite(0, 0); flatMap.sortingOrder = -30000;
 
         int[,] sp = { { 24, 20 }, { 28, 22 }, { 31, 20 }, { 26, 23 } };
         for (int i = 0; i < 4; i++) sheep.Add(new Sheep { i = i, x = sp[i, 0], y = sp[i, 1], px = sp[i, 0], py = sp[i, 1], next = 1 + i });
@@ -202,6 +202,8 @@ public sealed partial class Game : MonoBehaviour
     bool ShiftHeld => Input.GetKey(KeyCode.LeftShift) || p2 == null && Input.GetKey(KeyCode.RightShift);
 
     public void Jump() { if (Time.time - jumpT < JUMP_S) return; jumpT = Time.time; Sfx.Pop(); net.Jumped(); }
+
+    Vector2 lastMove = new Vector2(0, 1); // the way you last went on the grid: your doll faces it (Person)
     float JumpZ() { float q = (Time.time - jumpT) / JUMP_S; return q >= 0 && q < 1 ? Mathf.Round(Mathf.Sin(q * Mathf.PI) * 9) : 0; }
 
     /** over: the feet are off the ground (or already on a rock), so rocks no longer block the way. */
@@ -226,6 +228,7 @@ public sealed partial class Game : MonoBehaviour
         float SP = riding ? (race != null ? RaceSpeed() : running ? 11 : 7.2f) : running ? RUN_SPEED : SPEED, tvx = 0, tvy = 0;
         float sm = stickOn ? stick.magnitude : 0;
         if (ix == 0 && iy == 0 && sm > 0.12f && !block && !counting) { ix = stick.x; iy = stick.y; mag = Mathf.Clamp((sm - 0.12f) / 0.5f, 0.4f, 1); } // a gentle push walks slowly, a full push walks at full speed
+        if (IsoOn && (ix != 0 || iy != 0)) { var gv = Iso.FromScreen(ix, iy); ix = gv.x; iy = gv.y; } // up on the screen is up-left on the grid
         if (counting) path.Clear();
         if (ix != 0 || iy != 0) { path.Clear(); pending = null; float n = Mathf.Sqrt(ix * ix + iy * iy); tvx = ix / n * SP * mag; tvy = iy / n * SP * mag; }
         else if (path.Count > 0)
@@ -250,6 +253,7 @@ public sealed partial class Game : MonoBehaviour
         }
         float acc = Mathf.Min(1, dt * (ix != 0 || iy != 0 || path.Count > 0 ? ACCEL : ACCEL * 1.4f));
         vx += (tvx - vx) * acc; vy += (tvy - vy) * acc;
+        if (ix != 0 || iy != 0) lastMove = new Vector2(ix, iy).normalized; else if (vx * vx + vy * vy > 0.5f) lastMove = new Vector2(vx, vy).normalized;
         if (Mathf.Abs(vx) < 0.01f) vx = 0; if (Mathf.Abs(vy) < 0.01f) vy = 0;
         // move with collision, sliding along walls; in the air you clear rocks, and walking into one hops over it
         float ox = px, oy = py;
@@ -260,8 +264,9 @@ public sealed partial class Game : MonoBehaviour
         if (vy != 0 && FreeAt(px + 0.5f, py + 0.82f + vy * dt, over)) py += vy * dt; else vy = 0;
         float speed = Mathf.Sqrt(vx * vx + vy * vy);
         moving = speed > 0.3f;
-        if (moving) { walkT += dt; dir = Mathf.Abs(vx) > Mathf.Abs(vy) * 0.9f ? (vx < 0 ? 1 : 2) : (vy < 0 ? 3 : 0); }
-        if (Mathf.Abs(vx) > 0.3f) face = vx < 0 ? 1 : 2;
+        var sv = IsoOn ? Iso.ToScreen(vx, vy) * 0.70710678f : new Vector2(vx, vy); // facing follows the way you go on the screen
+        if (moving) { walkT += dt; dir = Mathf.Abs(sv.x) > Mathf.Abs(sv.y) * 0.9f ? (sv.x < 0 ? 1 : 2) : (sv.y < 0 ? 3 : 0); }
+        if (Mathf.Abs(sv.x) > 0.3f) face = sv.x < 0 ? 1 : 2;
         if (riding && moving) V.horse.dist += speed * dt;
         if (moving) walked += speed * dt;
         if (running && moving) { V.energy = Mathf.Max(0, V.energy - dt * (riding ? 0.6f : 1.1f)); if (V.energy > 0) tiredSaid = false; }
@@ -270,7 +275,8 @@ public sealed partial class Game : MonoBehaviour
         if (tx != mx || ty != my) { mx = tx; my = ty; ctx = ContextAction(); }
         // smooth camera, and your pet trotting after you
         var focus = p2 != null && !p2.hidden ? new Vector2((px + p2.px) / 2, (py + p2.py) / 2) : new Vector2(px, py); // between both players when two play on one screen
-        float ca = Mathf.Min(1, dt * 7); camPos += (focus - camPos) * ca;
+        if (IsoOn && p2 == null) focus += new Vector2(vx, vy) * 0.28f; // the isometric camera looks a little ahead of where you're going
+        float ca = Mathf.Min(1, dt * (IsoOn ? 4 : 7)); camPos += (focus - camPos) * ca;
         var pt = new Vector2(px - 0.45f, py + 0.25f); if ((pt - petPos).magnitude > 4) petPos = pt; else petPos += (pt - petPos) * Mathf.Min(1, dt * 4);
     }
 
@@ -282,32 +288,138 @@ public sealed partial class Game : MonoBehaviour
         if (Mathf.Abs(px - dgx) + Mathf.Abs(py - dgy) > 5) { dgx = tx; dgy = ty; }
         float sp = Mathf.Sqrt((dgx - ox) * (dgx - ox) + (dgy - oy) * (dgy - oy)) / Mathf.Max(dt, 1e-3f);
         dgMoving = sp > 0.4f; dgIdle = dgMoving ? 0 : dgIdle + dt;
-        if (Mathf.Abs(dgx - ox) > 0.002f) dgFlip = dgx < ox; else if (!dgMoving) dgFlip = px + 0.2f < dgx;
+        if (IsoOn) { float s0 = ox - oy, s1 = dgx - dgy; if (Mathf.Abs(s1 - s0) > 0.002f) dgFlip = s1 < s0; else if (!dgMoving) dgFlip = px - py + 0.2f < s1; }
+        else if (Mathf.Abs(dgx - ox) > 0.002f) dgFlip = dgx < ox; else if (!dgMoving) dgFlip = px + 0.2f < dgx;
         DogFacts(dt);
     }
 
     // ================================================================ drawing: a pool of sprites placed like the web canvas
     readonly List<SpriteRenderer> pool = new List<SpriteRenderer>(); int poolUsed;
     static PxCanvas shadowArt;
-    /** Draws art with its top-left at (X, Y) art pixels, sorted with the others by sortY (tiles). */
-    void Spr(PxCanvas art, float X, float Y, bool flip, float sortY, int bias = 0, float alpha = 1)
+    /** Draws art with its top-left at (X, Y) art pixels, sorted with the others by sortY (tiles).
+     *  In the isometric view it stands up facing the camera with its feet on the ground, sorted by x + y;
+     *  flat art (shadows, the felt) lies on the ground under everything standing. */
+    void Spr(PxCanvas art, float X, float Y, bool flip, float sortY, int bias = 0, float alpha = 1, bool flat = false)
     {
         if (poolUsed == pool.Count) pool.Add(new GameObject("Sprite").AddComponent<SpriteRenderer>());
         var r = pool[poolUsed++]; r.enabled = true;
         r.sprite = SprOf(art); r.flipX = flip; r.color = new Color(1, 1, 1, alpha);
-        r.transform.position = new Vector3((X + art.W / 2f) / T, -(Y + art.H - 1) / T, 0);
-        r.sortingOrder = Mathf.RoundToInt(sortY * 100) + bias;
+        float fx = (X + art.W / 2f) / T;
+        r.transform.position = new Vector3(fx, -(Y + art.H - 1) / T, 0);
+        r.transform.rotation = IsoOn && !flat ? Iso.Standing : Quaternion.identity;
+        r.sortingOrder = !IsoOn ? Mathf.RoundToInt(sortY * 100) + bias : flat ? -20000 + Mathf.RoundToInt((fx + sortY) * 10) + bias : Mathf.RoundToInt((fx + sortY) * 100) + bias;
+    }
+
+    // ================================================================ people: a sprite, or in the isometric view a doll with a body (Doll.cs)
+    readonly List<Doll> dolls = new List<Doll>(); int dollsUsed;
+    /** Someone standing at tile (x, y) (their sprite's top-left at x·T, y·T - 12), z art pixels up, facing dir (0 front,
+     *  1 left, 2 right, 3 back) on the screen, or grid direction heading when given; walking swings the legs. */
+    void Person(Look look, int dir, int frame, float x, float y, float sortY, float z = 0, Vector2? heading = null, bool walking = false, bool run = false)
+    {
+        if (!IsoOn) { Spr(Px.Char(look, dir, frame), x * T, y * T - 12 - z, false, sortY); return; }
+        if (dollsUsed == dolls.Count) dolls.Add(new Doll());
+        var d = dolls[dollsUsed++]; if (!d.root.activeSelf) d.root.SetActive(true);
+        var h = heading ?? (dir == 0 ? new Vector2(1, 1) : dir == 3 ? new Vector2(-1, -1) : dir == 1 ? new Vector2(-1, 1) : new Vector2(1, -1));
+        float? swing = walking || frame != 0 ? Time.time * (run ? 15 : 10) + x * 1.7f : (float?)null;
+        d.Pose(look, x + 0.5f, y + 0.94f, z / T, h.x, h.y, swing);
+    }
+    /** A doll with its feet at tile (fx, fy), z tiles up (a rider on a horse's back), facing grid direction h. */
+    void DollAt(Look look, float fx, float fy, float z, Vector2 h, float? swing)
+    {
+        if (dollsUsed == dolls.Count) dolls.Add(new Doll());
+        var d = dolls[dollsUsed++]; if (!d.root.activeSelf) d.root.SetActive(true);
+        d.Pose(look, fx, fy, z, h.x, h.y, swing);
+    }
+
+    // ================================================================ animals: a picture, or in the isometric view a body (Critter.cs)
+    readonly List<Critter> critters = new List<Critter>(); int crittersUsed;
+    readonly Dictionary<string, (Vector2 at, Vector2 h, float moved)> tracks = new Dictionary<string, (Vector2, Vector2, float)>();
+    /** Which way something is going, from how it moved since the last frame (smoothed); fallback until it first moves. */
+    Vector2 Track(string id, float x, float y, Vector2 fallback, out bool walking)
+    {
+        var p = new Vector2(x, y);
+        if (!tracks.TryGetValue(id, out var s)) s = (p, fallback, -9);
+        var d = p - s.at;
+        if (d.sqrMagnitude > 1e-6f) { s.h = Vector2.Lerp(s.h, d.normalized, 0.3f); s.moved = Time.time; }
+        s.at = p; tracks[id] = s; walking = Time.time - s.moved < 0.12f;
+        return s.h.sqrMagnitude > 1e-4f ? s.h.normalized : fallback;
+    }
+    /** Facing left or right on the screen, as a grid direction. */
+    static Vector2 Facing(bool left) => left ? new Vector2(-1, 1) : new Vector2(1, -1);
+    Critter NextCritter() { if (crittersUsed == critters.Count) critters.Add(new Critter()); var c = critters[crittersUsed++]; if (!c.root.activeSelf) c.root.SetActive(true); return c; }
+    /** An animal drawn like Spr (art's top-left at X, Y, facing right unless flip), or in the isometric view its body standing at the
+     *  picture's feet, turned the way it's going when it has an id to follow. */
+    void Animal(string kind, string coat, PxCanvas art, float X, float Y, bool flip, float sortY, string id = null, bool walking = false, bool sit = false)
+    {
+        if (!IsoOn || !Critter.Has(kind)) { Spr(art, X, Y, flip, sortY); return; }
+        float fx = (X + art.W / 2f) / T, fy = (Y + art.H - 1) / T; bool moved = false;
+        var h = id != null ? Track(id, fx, fy, Facing(flip), out moved) : Facing(flip);
+        NextCritter().Pose(kind, coat, fx, fy, 0, h.x, h.y, walking || moved ? Time.time * 9 + fx : (float?)null, sit);
+    }
+
+    readonly Dictionary<PxCanvas, Sprite> pictureSprites = new Dictionary<PxCanvas, Sprite>();
+    /** An isometric picture (pivot: its feet) standing facing the camera with its feet at tile (fx, fy), sorted like Spr. */
+    void Picture(PxCanvas art, float pivotX, float pivotY, float fx, float fy, float sortY)
+    {
+        if (poolUsed == pool.Count) pool.Add(new GameObject("Sprite").AddComponent<SpriteRenderer>());
+        var r = pool[poolUsed++]; r.enabled = true;
+        if (!pictureSprites.TryGetValue(art, out var s)) pictureSprites[art] = s = art.ToSprite(pivotX, pivotY);
+        r.sprite = s; r.flipX = false; r.color = Color.white;
+        r.transform.SetPositionAndRotation(new Vector3(fx, -fy, 0), Iso.Standing);
+        r.sortingOrder = Mathf.RoundToInt((fx + sortY) * 100);
+    }
+
+    // ================================================================ the isometric view (Iso.cs)
+    SpriteRenderer flatMap; GameObject isoRoot;
+    bool IsoOn => !App.flatView;
+    /** Shows the flat map or the isometric ground with its standing trees and buildings, building the latter the first time. */
+    void ShowMap()
+    {
+        if (IsoOn && isoRoot == null)
+        {
+            isoRoot = new GameObject("Isometric village");
+            var props = Px.RenderProps(); var ground = Px.RenderGround(true);
+            // each standing thing's shadow on the ground: an oval under its feet, pushed away from the light at the upper left
+            foreach (var (art, fx, fy) in props) { int rx = Mathf.Clamp(Mathf.RoundToInt(art.W * 0.42f), 4, 40); Px.Ell(ground, Mathf.RoundToInt(fx * T) + rx / 4, Mathf.RoundToInt(fy * T) - rx / 5, rx, Mathf.Max(2, rx * 2 / 5), "rgba(20,30,10,.3)"); }
+            var g = new GameObject("Ground").AddComponent<SpriteRenderer>(); g.transform.SetParent(isoRoot.transform, false);
+            g.sprite = ground.ToSprite(0, 0); g.sortingOrder = -30000;
+            Bodies.Build().transform.SetParent(isoRoot.transform, false);
+            foreach (var (art, ppx, ppy, at, sort) in Bodies.Pictures()) // the buildings drawn as isometric pixel art
+            {
+                var s = new GameObject("Building").AddComponent<SpriteRenderer>(); s.transform.SetParent(isoRoot.transform, false);
+                s.sprite = art.ToSprite(ppx, ppy); s.transform.SetPositionAndRotation(at, Iso.Standing);
+                s.sortingOrder = Mathf.RoundToInt((sort - 1) * 100);
+            }
+            foreach (var (art, fx, fy) in props)
+            {
+                var s = new GameObject("Prop").AddComponent<SpriteRenderer>(); s.transform.SetParent(isoRoot.transform, false);
+                s.sprite = art.ToSprite(art.W / 2f, art.H); s.transform.SetPositionAndRotation(new Vector3(fx, -fy, 0), Iso.Standing);
+                s.sortingOrder = Mathf.RoundToInt((fx + fy - 1) * 100);
+            }
+        }
+        if (flatMap.gameObject.activeSelf == IsoOn) flatMap.gameObject.SetActive(!IsoOn);
+        if (isoRoot != null && isoRoot.activeSelf != IsoOn) isoRoot.SetActive(IsoOn);
     }
     void Shadow(float X, float Y, float sortY)
     {
         if (shadowArt == null) { shadowArt = new PxCanvas(11, 3); var c = Px.Col("rgba(30,20,10,.25)"); for (int x = 1; x < 10; x++) { shadowArt.Put(x, 0, c); shadowArt.Put(x, 2, c); } for (int x = 0; x < 11; x++) shadowArt.Put(x, 1, c); }
-        Spr(shadowArt, X + 3, Y + 13, false, sortY, -2);
+        Spr(shadowArt, X + 3, Y + 13, false, sortY, -2, flat: true);
     }
-    void Rider(Look look, int fc, bool mov, float wx, float wy, float sortY, float z = 0, bool fast = false)
+    void Rider(Look look, int fc, bool mov, float wx, float wy, float sortY, float z = 0, bool fast = false, Vector2? heading = null, string id = null)
     {
+        if (IsoOn) // a horse with a body, and the rider's doll sitting in its saddle
+        {
+            float fx = wx + 0.5f, fy = wy + 0.94f; bool moved = false;
+            var h = heading ?? (id != null ? Track(id, fx, fy, Facing(fc == 1), out moved) : Facing(fc == 1));
+            float? sw = mov || moved ? Time.time * (fast ? 17 : 12) : (float?)null;
+            Spr(HorseShadow(), wx * T - 2, wy * T + 15, false, sortY, -2, flat: true);
+            NextCritter().Pose("rider", string.IsNullOrEmpty(look.coat) ? "bay" : look.coat, fx, fy, z / T, h.x, h.y, sw);
+            var lk = look.Copy(); lk.pet = null; DollAt(lk, fx, fy, z / T + 0.84f, h, null);
+            return;
+        }
         int hf = z != 0 ? 2 : mov ? 1 + (int)(Time.time * (fast ? 17 : 12)) % 4 : 0; var hs = Px.Horse(string.IsNullOrEmpty(look.coat) ? "bay" : look.coat, hf, true); bool left = fc == 1;
         float HX = wx * T - 6, HY = wy * T + 16 - hs.H - z;
-        Spr(HorseShadow(), HX + 4, HY + 21 + z, false, sortY, -2);
+        Spr(HorseShadow(), HX + 4, HY + 21 + z, false, sortY, -2, flat: true);
         var rl = look.Copy(); rl.pet = null;
         Spr(Px.Char(rl, left ? 1 : 2, 0), HX + 6, HY - 15, false, sortY, 0);
         Spr(hs, HX, HY, left, sortY, 1);
@@ -318,18 +430,29 @@ public sealed partial class Game : MonoBehaviour
 
     void Draw()
     {
-        poolUsed = 0;
+        poolUsed = 0; dollsUsed = 0; crittersUsed = 0;
         float t = Time.time;
         if (!InScene)
         {
-            foreach (var q in sheep) { Shadow(q.px * T, q.py * T, q.py); var shp = Px.Beast("sheep", (int)(t * 2 + q.i) % 2); Spr(Shearable(q.i) ? shp : Px.Shorn(shp), q.px * T, q.py * T + 2, !q.right, q.py); }
+            foreach (var q in sheep) { Shadow(q.px * T, q.py * T, q.py); var shp = Px.Beast("sheep", (int)(t * 2 + q.i) % 2); Animal(Shearable(q.i) ? "sheep" : "shorn", null, Shearable(q.i) ? shp : Px.Shorn(shp), q.px * T, q.py * T + 2, !q.right, q.py, "sheep" + q.i); }
             // you (on foot or riding), and your pet
             var look = V.look; float z = JumpZ();
-            if (!string.IsNullOrEmpty(look.pet)) { var a = Px.Animal(look.pet, Frame(moving, running)); Shadow(petPos.x * T - 2, petPos.y * T - 1, petPos.y); Spr(a, petPos.x * T + 2, petPos.y * T + 16 - a.H, px < petPos.x - 0.05f, petPos.y); }
-            if (riding) { var rl = look.Copy(); rl.coat = V.horse.coat; Rider(rl, face, moving, px, py, py, z, running || (race != null && race.sprint)); }
-            else { Shadow(px * T, py * T, py); Spr(Px.Char(look, dir, z != 0 ? 0 : Frame(moving, running)), px * T, py * T - 12 - z, false, py); }
+            if (!string.IsNullOrEmpty(look.pet)) { var a = Px.Animal(look.pet, Frame(moving, running)); Shadow(petPos.x * T - 2, petPos.y * T - 1, petPos.y); Animal(look.pet, null, a, petPos.x * T + 2, petPos.y * T + 16 - a.H, px < petPos.x - 0.05f, petPos.y, "pet"); }
+            if (riding) { var rl = look.Copy(); rl.coat = V.horse.coat; Rider(rl, face, moving, px, py, py, z, running || (race != null && race.sprint), lastMove); }
+            else
+            {
+                Shadow(px * T, py * T, py); var me = Px.Char(look, dir, z != 0 ? 0 : Frame(moving, running));
+                if (IsoOn) Person(look, dir, 0, px, py, py, z, lastMove, moving, running); else Spr(me, px * T, py * T - 12 - z, false, py);
+            }
             int df = dgMoving ? 1 + (int)(t * 8) % 2 : dgIdle > 1.5f ? 3 : 0;
-            Shadow(dgx * T, dgy * T + 1, dgy + 0.05f); Spr(Px.Bankhar(df), dgx * T - 3, dgy * T - 1, dgFlip, dgy + 0.05f);
+            Shadow(dgx * T, dgy * T + 1, dgy + 0.05f); if (IsoOn) // Basar: an isometric pixel picture, turned eight ways, walking or sitting (Critter.Picture)
+            {
+                float bfx = dgx + 0.5f, bfy = dgy + 1f; var bh = Track("basar", bfx, bfy, Facing(dgFlip), out _);
+                int d8 = ((Mathf.RoundToInt(Mathf.Atan2(bh.y, bh.x) / (Mathf.PI / 4)) % 8) + 8) % 8;
+                var (bart, bpx, bpy) = Critter.Picture("basar", d8, dgMoving ? (int)(t * 10) % 4 : -1, df == 3);
+                Picture(bart, bpx, bpy, bfx, bfy, dgy + 0.05f);
+            }
+            else Spr(Px.Bankhar(df), dgx * T - 3, dgy * T - 1, dgFlip, dgy + 0.05f);
             // your own ger on its lot
             if (V.lot.i >= 0 && MyStage > 0) { var o = World.objects.Find(q => q.kind == "lot" && q.i == V.lot.i); Spr(Px.GerStage(MyStage, Px.ROOF[V.lot.roof ?? "blue"], Px.DOOR[V.lot.door ?? "red"]), o.x * T, o.y * T - 2, false, o.y + 2); }
             // the dairy yard's animals: cows and goats shift about, mares stand by their foals on the зэл
@@ -338,20 +461,27 @@ public sealed partial class Game : MonoBehaviour
                 if (o.kind == "cow" || o.kind == "goat")
                 {
                     bool turn = (int)(t / 4 + o.x) % 3 == 0; int f = (int)(t * 2 + o.y) % 5 == 0 ? 1 : 0; var img = Px.Beast(o.kind, f); bool cow = o.kind == "cow";
-                    Shadow(o.x * T + (cow ? 6 : 0), o.y * T + 1, o.y + 0.2f); Spr(img, o.x * T + (cow ? 4 : -1), o.y * T + 14 - img.H, turn, o.y + 0.2f);
+                    Shadow(o.x * T + (cow ? 6 : 0), o.y * T + 1, o.y + 0.2f); Animal(o.kind, null, img, o.x * T + (cow ? 4 : -1), o.y * T + 14 - img.H, turn, o.y + 0.2f);
                 }
-                else if (o.kind == "felt") Spr(Px.FeltMat(), o.x * T, o.y * T, false, o.y + 0.4f);
+                else if (o.kind == "felt") Spr(Px.FeltMat(), o.x * T, o.y * T, false, o.y + 0.4f, flat: true);
                 else if (o.kind == "zel")
                 {
                     var zl = new[] { (0.6f, "foal"), (2.2f, "foal"), (1.2f, "mare"), (3.1f, "mare") };
-                    for (int i = 0; i < 4; i++) { var (dx, k) = zl[i]; var img = Px.Beast(k, k == "foal" && (int)(t * 1.5f + i) % 7 == 0 ? 1 : 0); float my2 = k == "mare" ? 0.75f : 0; Spr(img, (o.x + dx) * T, (o.y + my2) * T + 12 - img.H, i % 2 == 1, o.y + my2 + 0.1f); }
+                    for (int i = 0; i < 4; i++) { var (dx, k) = zl[i]; var img = Px.Beast(k, k == "foal" && (int)(t * 1.5f + i) % 7 == 0 ? 1 : 0); float my2 = k == "mare" ? 0.75f : 0; Animal(k, null, img, (o.x + dx) * T, (o.y + my2) * T + 12 - img.H, i % 2 == 1, o.y + my2 + 0.1f); }
                 }
                 else if (o.kind == "npc" || o.kind == "npcq" || o.kind == "emee" || o.kind == "general" || o.kind == "historian")
                 {
                     Look lk = o.kind == "npc" ? Rules.ZASUUL : o.kind == "emee" ? Rules.EMEE : o.kind == "general" ? Rules.GENERAL : o.kind == "historian" ? Rules.HISTORIAN : Rules.NpcById(o.id).look;
                     int d = o.kind == "npc" ? ((int)(t / 2.5f) % 4 == 3 ? 2 : 0) : o.kind == "emee" ? ((int)(t / 3) % 4 == 2 ? 1 : 0) : ((int)(t / 3 + o.x) % 5 == 4 ? 2 : 0);
-                    Shadow(o.x * T, o.y * T, o.y); Spr(Px.Char(lk, d, 0), o.x * T, o.y * T - 12, false, o.y);
+                    Shadow(o.x * T, o.y * T, o.y); Person(lk, d, 0, o.x, o.y, o.y);
                 }
+            }
+            if (IsoOn) foreach (var o in World.objects) // the уяа's two horses (the flat map has them painted in)
+            {
+                if (o.kind != "uya") continue;
+                int X = o.x * T, Y = o.y * T, w = o.w * T;
+                Animal("uya", "bay", Px.Horse("bay", 0, true), X + 3, Y - 10, false, o.y);
+                Animal("uya", "white", Px.Horse("white", 0, true), X + w - 31, Y - 9, false, o.y);
             }
             if (race != null) RaceDraw(t);
             BattleDraw();
@@ -359,16 +489,21 @@ public sealed partial class Game : MonoBehaviour
             P2Draw(t);
         }
         for (int i = poolUsed; i < pool.Count; i++) pool[i].enabled = false;
+        for (int i = dollsUsed; i < dolls.Count; i++) if (dolls[i].root.activeSelf) dolls[i].root.SetActive(false);
+        for (int i = crittersUsed; i < critters.Count; i++) if (critters[i].root.activeSelf) critters[i].root.SetActive(false);
         // camera: follow, stay inside the map, snap to whole screen pixels so the pixel art doesn't shimmer
         // a whole number of screen pixels per art pixel, about 24 tiles across (11 on a phone), never showing past the map (view.js measure)
         float cssW = Screen.width / Mathf.Max(1, Dpr);
-        int zoom = Mathf.Max(1, Mathf.RoundToInt(Screen.width / ((cssW < 640 ? 11f : 24f) * T)));
+        int zoom = Mathf.Max(1, Mathf.RoundToInt(Screen.width / ((cssW < 640 ? (IsoOn ? 10f : 11f) : IsoOn ? 20f : 24f) * T))); // the isometric camera comes in closer, like Hades
         zoom = Mathf.Max(zoom, Mathf.CeilToInt(Screen.width / (float)(World.W * T)), Mathf.CeilToInt(Screen.height / (float)(World.H * T)));
         cam.orthographicSize = Screen.height / (2f * zoom * T);
         float hh = cam.orthographicSize, hw = hh * cam.aspect;
+        float ppu = Screen.height / (2 * hh);
+        ShowMap();
+        if (IsoOn) { Iso.Place(cam, Mathf.Clamp(camPos.x + 0.5f, 0, World.W), Mathf.Clamp(camPos.y + 0.9f, 0, World.H), ppu); return; }
         float cx = hw * 2 > World.W ? World.W / 2f : Mathf.Clamp(camPos.x + 0.5f, hw, World.W - hw);
         float cy = hh * 2 > World.H ? -World.H / 2f : Mathf.Clamp(-(camPos.y + 0.5f), -World.H + hh, -hh);
-        float ppu = Screen.height / (2 * hh);
+        cam.transform.rotation = Quaternion.identity;
         cam.transform.position = new Vector3(Mathf.Round(cx * ppu) / ppu, Mathf.Round(cy * ppu) / ppu, -10);
     }
 
@@ -395,8 +530,10 @@ public sealed partial class Game : MonoBehaviour
     void TapWorld(Vector2 screen)
     {
         if (race != null) return;
-        Vector3 w = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, 10));
-        float wx = w.x, wy = -w.y; int tx0 = Mathf.FloorToInt(wx), ty0 = Mathf.FloorToInt(wy);
+        float wx, wy;
+        if (IsoOn) { var gp = Iso.Ground(cam, screen); if (gp == null) return; wx = gp.Value.x; wy = gp.Value.y; }
+        else { Vector3 w = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, 10)); wx = w.x; wy = -w.y; }
+        int tx0 = Mathf.FloorToInt(wx), ty0 = Mathf.FloorToInt(wy);
         if (battle != null) { var e = NearestEnemy(wx, wy + 0.4f, 1.4f); if (e != null) { ShootAt(e.x, e.y); return; } } // tap a raider to loose a whistling arrow
         // only a tap right on Basar opens his chat; he walks beside you, so a wide area kept stealing taps meant for walking (the 🐕 button opens him too)
         if (Mathf.Abs(dgx + 0.55f - wx) < 0.4f && wy > dgy - 0.1f && wy < dgy + 0.8f) { DoAction(new Act { type = "basar" }); return; }

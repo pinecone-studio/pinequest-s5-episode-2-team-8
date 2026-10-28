@@ -13,7 +13,7 @@ using UnityEngine;
 public sealed class AppState
 {
     const string KEY = "naadamy.app.v1";
-    public bool en, loggedIn, sound = true, bigText, music = true;
+    public bool en, loggedIn, sound = true, bigText, music = true, flatView; // flatView: the old top-down village instead of the isometric one (Iso.cs); false in older saves too
     public float musicVolume = 0.35f;
     public string activeId = "";
     public string server = "", familyCode = "";   // the server this device last used, and its family code (Family.cs)

@@ -73,7 +73,7 @@ public sealed partial class Game
     void P2Draw(float t)
     {
         var p = p2; if (p == null || p.hidden || InScene) return;
-        Shadow(p.px * T, p.py * T, p.py); Spr(Px.Char(p.look, p.dir, Frame(p.moving, p.running)), p.px * T, p.py * T - 12, false, p.py);
+        Shadow(p.px * T, p.py * T, p.py); Person(p.look, p.dir, Frame(p.moving, p.running), p.px, p.py, p.py, 0, null, p.moving, p.running);
     }
     void P2Label(float ts)
     {
