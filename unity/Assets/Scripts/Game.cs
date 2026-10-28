@@ -321,7 +321,7 @@ public sealed partial class Game : MonoBehaviour
         var d = dolls[dollsUsed++]; if (!d.root.activeSelf) d.root.SetActive(true);
         var h = heading ?? (dir == 0 ? new Vector2(1, 1) : dir == 3 ? new Vector2(-1, -1) : dir == 1 ? new Vector2(-1, 1) : new Vector2(1, -1));
         float? swing = walking || frame != 0 ? Time.time * (run ? 15 : 10) + x * 1.7f : (float?)null;
-        d.Pose(look, x + 0.5f, y + 0.94f, z / T, h.x, h.y, swing);
+        d.Pose(look, x + 0.5f, y + 0.82f, z / T, h.x, h.y, swing); // feet where they collide (Move: px + 0.5, py + 0.82)
     }
     /** A doll with its feet at tile (fx, fy), z tiles up (a rider on a horse's back), facing grid direction h. */
     void DollAt(Look look, float fx, float fy, float z, Vector2 h, float? swing)
@@ -526,6 +526,46 @@ public sealed partial class Game : MonoBehaviour
         ctx = null;
     }
 
+    // ---------------------------------------------------------------- taps in the isometric view
+    // people, animals and buildings stand up off the ground there, so a tap is tested against where they show on the screen
+    // (the ground point under the tap is behind them), the nearest first
+    float ScreenPpu => Screen.height / (2 * cam.orthographicSize);
+    /** Whether a screen point falls on something standing at tile (fx, fy), halfW tiles wide and height tiles tall. */
+    bool OnStanding(Vector2 screen, float fx, float fy, float halfW, float height)
+    {
+        var s = cam.WorldToScreenPoint(new Vector3(fx, -fy, 0)); float u = ScreenPpu;
+        return Mathf.Abs(screen.x - s.x) < halfW * u && screen.y > s.y - 0.25f * u && screen.y < s.y + height * u;
+    }
+    static float TallOf(string kind)
+    {
+        switch (kind)
+        {
+            case "academy": return 3.1f; case "ger": case "bleachers": return 2.6f; case "shop": case "statue": return 2.4f; case "ovoo": return 2.3f;
+            case "lantern": return 2.1f; case "well": return 1.9f; case "board": return 1.85f; case "npc": case "npcq": case "emee": case "general": case "historian": return 1.8f;
+            case "churn": return 1.5f; case "uya": return 1.3f; case "archery": return 1.2f; case "rack": return 1.1f; default: return 1f;
+        }
+    }
+    /** Whether a screen point falls inside the box an object stands in (its tiles, up to its height). */
+    bool OnObject(Vector2 screen, WObj o)
+    {
+        float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue, h = TallOf(o.kind);
+        foreach (var gx in new float[] { o.x, o.x + o.w }) foreach (var gy in new float[] { o.y, o.y + o.h }) foreach (var z in new[] { 0, h })
+        { var s = cam.WorldToScreenPoint(new Vector3(gx, -gy, -z)); x0 = Mathf.Min(x0, s.x); x1 = Mathf.Max(x1, s.x); y0 = Mathf.Min(y0, s.y); y1 = Mathf.Max(y1, s.y); }
+        return screen.x >= x0 && screen.x <= x1 && screen.y >= y0 && screen.y <= y1;
+    }
+    /** Basar, a sheep or something with a door under the tap: does what tapping it does and says so. */
+    bool TapStanding(Vector2 screen)
+    {
+        if (OnStanding(screen, dgx + 0.5f, dgy + 1f, 0.42f, 0.95f)) { DoAction(new Act { type = "basar" }); return true; }
+        Sheep sh = null; float best = float.MinValue;
+        foreach (var q in sheep) if (q.px + q.py > best && OnStanding(screen, q.px + 0.5f, q.py + 1f, 0.5f, 0.85f)) { sh = q; best = q.px + q.py; }
+        if (sh != null) { var n = World.NearestOpen(sh.x, sh.y, mx, my); if (n != null) GoTo(n.Value.x, n.Value.y, new Act { type = ShearSheep(sh) ? "shear" : "sheep", s = sh }); return true; }
+        WObj hit = null; best = float.MinValue;
+        foreach (var o in World.objects) { if (!o.hasDoor) continue; float k = o.x + o.w + o.y + o.h; if (k > best && OnObject(screen, o)) { hit = o; best = k; } } // the one nearest the camera
+        if (hit != null) { GoTo(hit.doorX, hit.doorY, ActFor(hit)); return true; }
+        return false;
+    }
+
     /** A tap or click on the map: Basar, a sheep, a building's door, or just a place to walk to. */
     void TapWorld(Vector2 screen)
     {
@@ -534,6 +574,7 @@ public sealed partial class Game : MonoBehaviour
         if (IsoOn) { var gp = Iso.Ground(cam, screen); if (gp == null) return; wx = gp.Value.x; wy = gp.Value.y; }
         else { Vector3 w = cam.ScreenToWorldPoint(new Vector3(screen.x, screen.y, 10)); wx = w.x; wy = -w.y; }
         int tx0 = Mathf.FloorToInt(wx), ty0 = Mathf.FloorToInt(wy);
+        if (IsoOn && battle == null && TapStanding(screen)) return;
         if (battle != null) { var e = NearestEnemy(wx, wy + 0.4f, 1.4f); if (e != null) { ShootAt(e.x, e.y); return; } } // tap a raider to loose a whistling arrow
         // only a tap right on Basar opens his chat; he walks beside you, so a wide area kept stealing taps meant for walking (the 🐕 button opens him too)
         if (Mathf.Abs(dgx + 0.55f - wx) < 0.4f && wy > dgy - 0.1f && wy < dgy + 0.8f) { DoAction(new Act { type = "basar" }); return; }
