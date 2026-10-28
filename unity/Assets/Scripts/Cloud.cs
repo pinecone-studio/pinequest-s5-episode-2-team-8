@@ -1,4 +1,4 @@
-// Cloud save (as web/js/cloud.js): a child's progress outside the wallet, in the shared shape of rules.js (cleanCloud /
+// Cloud save: a child's progress outside the wallet, in the shared shape of rules.js (cleanCloud /
 // mergeCloud) — character, lessons, badges, passport stamps, Mongol script, the historian's quest, story mode. Net uploads it and takes
 // back the server's merged copy; the family login brings it along, so it follows the child to another device.
 using System.Collections.Generic;
