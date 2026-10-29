@@ -37,7 +37,12 @@ public static class Scenes
     {
         Bg(x, t);
         int s = st.stage; float q = st.sub; const string felt = "#e8dfc8", white = "#fbfbf6", wood = "#c99257", woodD = "#8a5a33";
-        if (s >= 1) { R(x, 27, 63, 66, 3, K.woodD); R(x, 28, 63, 64, 1, K.woodL); }
+        if (s >= 1) // the floor: a round platform of planks, seen a little from above
+        {
+            Ell(x, 60, 64, 34, 5, K.woodD); Ell(x, 60, 63, 33, 4, K.wood);
+            for (int X = 31; X <= 89; X += 5) { double h = 4 * Math.Sqrt(Math.Max(0, 1 - (X - 60) * (X - 60) / (33.0 * 33.0))); if (h >= 1) R(x, X, Js.Round(63 - h), 1, Js.Round(2 * h), K.woodD); } // the seams between planks
+            R(x, 40, 59, 40, 1, K.woodL); // light on the back edge
+        }
         // stage 4: the toono is lifted on its two posts (sub 0 on the floor, 1 up); while it waits it bobs with the timing needle (temp)
         int ty = s == 4 && q < 1 ? Js.Round(54 - 26 * q - st.temp * 3) : 28;
         if (s >= 4) { R(x, 56, ty + 3, 2, 64 - ty - 3, woodD); R(x, 62, ty + 3, 2, 64 - ty - 3, woodD); }
