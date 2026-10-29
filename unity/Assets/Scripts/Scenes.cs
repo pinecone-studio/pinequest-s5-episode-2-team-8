@@ -43,7 +43,7 @@ public static class Scenes
         if (s >= 4) { R(x, 56, ty + 3, 2, 64 - ty - 3, woodD); R(x, 62, ty + 3, 2, 64 - ty - 3, woodD); }
         if (s >= 2 && s < 6)
         {
-            int w = s == 2 ? Js.Round(60 * q) : 60;
+            int w = s == 2 ? Math.Max(6, Js.Round(60 * q)) : 60; // still folded up until you stretch them
             for (int X = 30; X < 30 + w; X += 5) { Line(x, X, 63, Math.Min(X + 5, 30 + w), 47, wood); Line(x, X, 47, Math.Min(X + 5, 30 + w), 63, wood); }
             R(x, 30, 46, w, 1, woodD); R(x, 30, 63, w, 1, woodD);
         }
