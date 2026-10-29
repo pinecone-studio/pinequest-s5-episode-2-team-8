@@ -410,7 +410,7 @@ public sealed partial class Game
     void NetDraw()
     {
         float t = Time.time;
-        if (net.lots != null) for (int i = 0; i < net.lots.Length; i++) { var l = LotOf(i); if (l == null) continue; var o = World.objects.Find(q => q.kind == "lot" && q.i == i); if (o != null) Spr(Px.GerStage(l.stage > 0 ? l.stage : GerRules.DONE, Px.ROOF.TryGetValue(l.roof, out var r) ? r : Px.ROOF["blue"], Px.DOOR.TryGetValue(l.door, out var d) ? d : Px.DOOR["red"]), o.x * T, o.y * T - 2, false, o.y + 2); }
+        if (net.lots != null) for (int i = 0; i < net.lots.Length; i++) { var l = LotOf(i); if (l == null) continue; var o = World.objects.Find(q => q.kind == "lot" && q.i == i); if (o != null && !IsoOn) Spr(Px.GerStage(l.stage > 0 ? l.stage : GerRules.DONE, Px.ROOF.TryGetValue(l.roof, out var r) ? r : Px.ROOF["blue"], Px.DOOR.TryGetValue(l.door, out var d) ? d : Px.DOOR["red"]), o.x * T, o.y * T - 2, false, o.y + 2); }
         foreach (var o in net.others.Values)
         {
             float jq = (t - o.jt) / JUMP_S, z = jq >= 0 && jq < 1 ? Mathf.Round(Mathf.Sin(jq * Mathf.PI) * 9) : 0; var look = o.look ?? new Look();

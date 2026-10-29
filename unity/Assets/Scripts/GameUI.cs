@@ -43,6 +43,7 @@ public sealed partial class Game
     {
         if (modal != null && modal.FullScreen) { modal.Pointer(this, id, pos, down, up); return; }
         if (modal == null && P2Pointer(id, pos, down, up)) return;
+        if (GerBuildPointer(id, pos, down, up)) return; // dragging a ger part from the tray (GerBuild.cs)
         if (down && drag == null && modal == null && !OverUI(pos)) drag = new Drag { id = id, p0 = pos, p = pos };
         if (drag == null || drag.id != id) return;
         drag.p = pos;
@@ -605,9 +606,10 @@ public sealed partial class Game
         // bottom middle: your milk and the dairy foods you made. Tap a food to eat it.
         var have = Rules.DAIRY_ORDER.Where(k => V.Have(k) > 0).ToList();
         float left = moreOpen ? 126 : 68, room = right - left;
-        if (have.Count == 0)
+        if (gbOn && IsoOn) GerBuildGui(left, right, vw, vh); // building my ger: the parts tray takes this row (GerBuild.cs)
+        else if (have.Count == 0)
         {
-            string go = Loc.L("Саах →", "Go milk →"); float gw = pix.CalcSize(new GUIContent(go)).x / UiScale + 56;
+            string go =Loc.L("Саах →", "Go milk →"); float gw = pix.CalcSize(new GUIContent(go)).x / UiScale + 56;
             var gr = UR(left + (room - gw) / 2, vh - 12 - 46, gw, 46);
             if (Button(gr, "", sSlot)) Later(() => GoTo(9, 14, null)); // nothing yet: a shortcut to the dairy yard
             GUI.DrawTexture(new Rect(gr.x + U(8), gr.y + U(9), U(28), U(28)), Tex(Px.Icon("beast:cow")), ScaleMode.ScaleToFit);
