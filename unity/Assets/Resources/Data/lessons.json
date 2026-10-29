@@ -2705,6 +2705,31 @@
         ]
       },
       {
+        "type": "timing",
+        "stage": 0,
+        "set": {
+          "focus": "archer"
+        },
+        "lo": 0.45,
+        "hi": 0.6,
+        "label": {
+          "mn": "Харва!",
+          "en": "Shoot!"
+        },
+        "title": {
+          "mn": "Сур харваа",
+          "en": "Archery"
+        },
+        "text": {
+          "mn": "Нумаа татаад зүү ногоон хэсэгт ирэхэд “Харва!” дар.",
+          "en": "Draw the bow and tap “Shoot!” when the needle reaches the green zone."
+        },
+        "after": {
+          "mn": "Онолоо!",
+          "en": "A hit!"
+        }
+      },
+      {
         "type": "pick",
         "set": {
           "focus": "archer"
@@ -2740,31 +2765,6 @@
             "ok": false
           }
         ]
-      },
-      {
-        "type": "timing",
-        "stage": 0,
-        "set": {
-          "focus": "archer"
-        },
-        "lo": 0.45,
-        "hi": 0.6,
-        "label": {
-          "mn": "Харва!",
-          "en": "Shoot!"
-        },
-        "title": {
-          "mn": "Сур харваа",
-          "en": "Archery"
-        },
-        "text": {
-          "mn": "Нумаа татаад зүү ногоон хэсэгт ирэхэд “Харва!” дар.",
-          "en": "Draw the bow and tap “Shoot!” when the needle reaches the green zone."
-        },
-        "after": {
-          "mn": "Онолоо! Уухай!",
-          "en": "A hit! Uukhai!"
-        }
       },
       {
         "type": "tf",
