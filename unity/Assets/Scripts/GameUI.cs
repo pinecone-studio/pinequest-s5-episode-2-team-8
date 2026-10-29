@@ -35,7 +35,7 @@ public sealed partial class Game
         if (stickOn)
         {
             // the ring slides along behind a thumb that goes past it, so pulling back turns around at once
-            float R = STICK_R * UiScale; var off = drag.p - drag.p0; if (off.magnitude > R) { drag.p0 += off - off.normalized * R; off = drag.p - drag.p0; }
+            float R = StickR; var off = drag.p - drag.p0; if (off.magnitude > R) { drag.p0 += off - off.normalized * R; off = drag.p - drag.p0; }
             var d = off / R; stick = new Vector2(d.x, -d.y);
         }
     }
@@ -199,6 +199,10 @@ public sealed partial class Game
         sSpeech = new GUIStyle(sNote) { fontSize = T(12), padding = new RectOffset(T(10), T(10), T(6), T(8)) }; // what someone says, in a bubble (SpeechBubble)
     }
     public float U(float v) => v * UiScale;
+    /** The layout is scaled to fit 900 units across, so on a phone held upright small type turns tiny: this many units, but at
+     *  least `css` CSS pixels on the screen. On a computer it is just `units`. */
+    public float AtLeastCss(float units, float css) => Mathf.Max(units, css * Dpr / UiScale);
+    float StickR => Mathf.Max(STICK_R * UiScale, 62 * Dpr); // a thumb-sized ring on a phone, however small the layout is
     Rect UR(float x, float y, float w, float h) => new Rect(U(x), U(y), U(w), U(h));
     void Ui(Rect r) { if (Event.current.type == EventType.Repaint) uiNext.Add(r); }
     bool Button(Rect r, string text, GUIStyle st = null) { Ui(r); return GUI.Button(r, text, st ?? sBtn); }
@@ -320,9 +324,12 @@ public sealed partial class Game
         }
         if (stickOn)
         {
-            var b = new Vector2(drag.p0.x, Screen.height - drag.p0.y); float R = STICK_R * UiScale;
-            var old = GUI.color; GUI.color = new Color(1, 1, 1, 0.35f); GUI.DrawTexture(new Rect(b.x - R, b.y - R, R * 2, R * 2), Tex(Disc()));
-            var k = b + new Vector2(stick.x, -stick.y) * R; GUI.color = new Color(1, 1, 1, 0.8f); GUI.DrawTexture(new Rect(k.x - R * 0.42f, k.y - R * 0.42f, R * 0.84f, R * 0.84f), Tex(Disc())); GUI.color = old;
+            // a dark glassy ring with arrows, and a gold knob under the thumb with a soft shadow
+            var b = new Vector2(drag.p0.x, Screen.height - drag.p0.y); float R = StickR;
+            GUI.DrawTexture(new Rect(b.x - R, b.y - R, R * 2, R * 2), Tex(StickBase()));
+            var k = b + new Vector2(stick.x, -stick.y) * R; float kr = R * 0.5f, sh = R * 0.08f;
+            var old = GUI.color; GUI.color = new Color(0, 0, 0, 0.3f); GUI.DrawTexture(new Rect(k.x - kr + sh, k.y - kr + sh * 1.5f, kr * 2, kr * 2), Tex(Disc())); GUI.color = old;
+            GUI.DrawTexture(new Rect(k.x - kr, k.y - kr, kr * 2, kr * 2), Tex(StickKnob()));
         }
     }
     static string LastWord(string s) { int i = s.LastIndexOf(' '); return i < 0 ? s : s.Substring(i + 1); }
@@ -340,6 +347,33 @@ public sealed partial class Game
     }
     static PxCanvas ringArt, discArt;
     static PxCanvas Ring() { if (ringArt != null) return ringArt; ringArt = new PxCanvas(32, 32); for (int y = 0; y < 32; y++) for (int x = 0; x < 32; x++) { float d = Mathf.Sqrt((x - 15.5f) * (x - 15.5f) + (y - 15.5f) * (y - 15.5f)); if (d > 12 && d < 15.5f) ringArt.Put(x, y, Color.white); } return ringArt; }
+    static PxCanvas stickBase, stickKnob;
+    /** The joystick's ring: see-through dark glass, a white rim and a little arrow at each side. */
+    static PxCanvas StickBase()
+    {
+        if (stickBase != null) return stickBase; var c = stickBase = new PxCanvas(64, 64);
+        for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++)
+        {
+            float d = Mathf.Sqrt((x - 31.5f) * (x - 31.5f) + (y - 31.5f) * (y - 31.5f));
+            if (d < 31.5f) c.Put(x, y, d > 29.5f ? new Color32(43, 30, 46, 150) : d > 27 ? new Color32(255, 255, 255, 200) : new Color32(20, 14, 30, (byte)(70 + d * 1.6f)));
+        }
+        var aw = new Color32(255, 255, 255, 190);
+        for (int j = 0; j < 4; j++) for (int w = -j; w <= j + 1; w++) // arrows: up, down, left, right
+            { int a = 31 + w, e = 6 + j; c.Put(a, e, aw); c.Put(a, 63 - e, aw); c.Put(e, a, aw); c.Put(63 - e, a, aw); }
+        return c;
+    }
+    /** The knob under the thumb: a gold button with a dark rim and a shine at the top left. */
+    static PxCanvas StickKnob()
+    {
+        if (stickKnob != null) return stickKnob; var c = stickKnob = new PxCanvas(32, 32);
+        Color32 rim = Px.Col("#5a2d10"), gold = Px.Col("#f7c646"), goldD = Px.Col("#e09a2a"), hi = Px.Col("#fff3c4");
+        for (int y = 0; y < 32; y++) for (int x = 0; x < 32; x++)
+        {
+            float d = Mathf.Sqrt((x - 15.5f) * (x - 15.5f) + (y - 15.5f) * (y - 15.5f));
+            if (d < 15.5f) c.Put(x, y, d > 13.6f ? rim : (x - 11f) * (x - 11f) + (y - 10f) * (y - 10f) < 12 ? hi : y + x * 0.3f > 25 ? goldD : gold);
+        }
+        return c;
+    }
     static PxCanvas Disc() { if (discArt != null) return discArt; discArt = new PxCanvas(64, 64); for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++) { float d = Mathf.Sqrt((x - 31.5f) * (x - 31.5f) + (y - 31.5f) * (y - 31.5f)); if (d < 31.5f) discArt.Put(x, y, d > 28 ? new Color32(43, 30, 46, 255) : new Color32(255, 255, 255, 200)); } return discArt; }
 
     static readonly Dictionary<string, PxCanvas> badgeArt = new Dictionary<string, PxCanvas>();
@@ -362,8 +396,11 @@ public sealed partial class Game
             float age = now - t.t, inn = Mathf.Clamp01(age / 0.35f), outt = Mathf.Clamp01((t.life - age) / 0.35f);
             bool basar = t.kind == "basar", hungry = t.kind == "hungry";
             var st = basar ? sPopBasar : hungry ? sPopHungry : sPop;
-            float w = Mathf.Min(460, vw - 32), bw = basar ? 46 : 38, textW = U(w - bw - 34);
-            float h = Mathf.Max(U(52), sPopText.CalcHeight(new GUIContent(t.text), textW) + U(basar ? 34 : 24));
+            float k = Mathf.Clamp(AtLeastCss(15, 15) / 15, 1, 2.6f); // bigger cards and words on a phone
+            var stText = k > 1 ? new GUIStyle(sPopText) { fontSize = Mathf.RoundToInt(sPopText.fontSize * k) } : sPopText;
+            var stWho = k > 1 ? new GUIStyle(sPopWho) { fontSize = PxSize(sPopWho.fontSize * k) } : sPopWho;
+            float w = Mathf.Min(460 * k, vw - 32), bw = (basar ? 46 : 38) * k, textW = U(w - bw - 34 * k);
+            float h = Mathf.Max(U(52 * k), stText.CalcHeight(new GUIContent(t.text), textW) + U((basar ? 34 : 24) * k));
             float drop = (1 - inn) * U(-18) + (1 - outt) * U(-14); // drops in from above, floats up as it fades
             var r = new Rect(sx + U((vw - w) / 2), sy + U(ty + 44) + drop, U(w), h);
             ty += h / UiScale + 8;
@@ -371,7 +408,7 @@ public sealed partial class Game
             GUI.color = new Color(oldC.r, oldC.g, oldC.b, oldC.a * Mathf.Min(inn * 2, outt));
             GUI.Box(r, GUIContent.none, st);
             // the icon badge, bobbing (a hungry buuz wobbles, a sparkle twinkles)
-            var br = new Rect(r.x + U(10), r.y + (r.height - U(bw)) / 2 - U(2) + Mathf.Round(Mathf.Sin(age * 5) * U(2)), U(bw), U(bw));
+            var br = new Rect(r.x + U(10 * k), r.y + (r.height - U(bw)) / 2 - U(2) + Mathf.Round(Mathf.Sin(age * 5) * U(2)), U(bw), U(bw));
             GUI.DrawTexture(br, Tex(Badge(basar ? "#f7c646" : hungry ? "#f08a6e" : "#9fd6ff")));
             var icon = basar ? Px.BankharFace(1) : Emo.Icon(hungry ? "buuz" : "sparkles");
             if (icon != null)
@@ -379,12 +416,12 @@ public sealed partial class Game
                 var m = GUI.matrix;
                 if (hungry) GUIUtility.RotateAroundPivot(Mathf.Sin(age * 16) * 12 * Mathf.Max(0, 1 - age / 1.4f), br.center);
                 if (!basar && !hungry) GUIUtility.ScaleAroundPivot(Vector2.one * (0.9f + 0.1f * Mathf.Sin(age * 7)), br.center);
-                float pad = U(basar ? 5 : 8); GUI.DrawTexture(new Rect(br.x + pad, br.y + pad, br.width - 2 * pad, br.height - 2 * pad), Tex(icon), ScaleMode.ScaleToFit);
+                float pad = U((basar ? 5 : 8) * k); GUI.DrawTexture(new Rect(br.x + pad, br.y + pad, br.width - 2 * pad, br.height - 2 * pad), Tex(icon), ScaleMode.ScaleToFit);
                 GUI.matrix = m;
             }
-            float tx = br.xMax + U(12), tw = r.xMax - tx - U(14);
-            if (basar) GUI.Label(new Rect(tx, r.y + U(4), tw, U(16)), Loc.L("БАСАР", "BASAR"), sPopWho);
-            GUI.Label(new Rect(tx, r.y + U(basar ? 18 : 4), tw, r.height - U(basar ? 24 : 12)), t.text, sPopText);
+            float tx = br.xMax + U(12 * k), tw = r.xMax - tx - U(14 * k);
+            if (basar) GUI.Label(new Rect(tx, r.y + U(4 * k), tw, U(16 * k)), Loc.L("БАСАР", "BASAR"), stWho);
+            GUI.Label(new Rect(tx, r.y + U((basar ? 18 : 4) * k), tw, r.height - U((basar ? 24 : 12) * k)), t.text, stText);
             // how long it stays: a thin line along the bottom that runs out
             Color line = Px.Col(basar ? "#e5a157" : hungry ? "#e14b3d" : "#c99a5a"); line.a = GUI.color.a;
             Box(new Rect(r.x + U(12), r.yMax - U(8), (r.width - U(24)) * Mathf.Clamp01(1 - age / t.life), U(2)), line);
