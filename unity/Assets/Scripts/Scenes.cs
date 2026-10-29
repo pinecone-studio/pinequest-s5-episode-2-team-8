@@ -185,14 +185,21 @@ public static class Scenes
         else R(x, 25, y, 70, 1, K.wood);
         R(x, 95, y - 1, 3, 3, "#8a8a99"); P(x, 98, y, "#8a8a99"); R(x, 22, y - 1, 4, 1, K.red); R(x, 22, y + 1, 4, 1, K.red);
     }
+    static void Bent(PxCanvas x, int y, int b)
+    {
+        Line(x, 25, y, 60, y + b, K.wood); Line(x, 60, y + b, 95, y, K.wood);
+        R(x, 95, y - 1, 3, 3, "#8a8a99"); P(x, 98, y, "#8a8a99"); R(x, 22, y - 1, 4, 1, K.red); R(x, 22, y + 1, 4, 1, K.red);
+    }
     public static void Story(PxCanvas x, SceneState st, float t)
     {
         string ch = st.ch ?? "wolf";
         if (ch == "arrows")
         {
             R(x, 0, 0, W, H, "#f6dca8"); R(x, 0, 0, W, 3, "#c99257"); R(x, 0, 77, W, 3, "#c99257");
-            if (st.broken) Arrow(x, 16, true);
-            for (int i = 0; i < 5; i++) Arrow(x, 40 + i * 4, false);
+            // the one arrow bends as you pull and snaps (sub 1); the bundle of five only gives a little and never breaks
+            if (st.broken || st.sub >= 1) Arrow(x, 16, true); else if (st.focus != "bundle") Bent(x, 16, Js.Round(st.pull * 4));
+            int give = st.focus == "bundle" ? Js.Round(st.pull * 1.5) + (t - st.fx < 0.25f ? 1 : 0) : 0;
+            for (int i = 0; i < 5; i++) if (give > 0) Bent(x, 40 + i * 4, give); else Arrow(x, 40 + i * 4, false);
             R(x, 50, 38, 3, 20, K.woodD); R(x, 68, 38, 3, 20, K.woodD);
             return;
         }
@@ -210,11 +217,13 @@ public static class Scenes
             for (int y = 62; y < 74; y++) { int off = Js.Round(Math.Sin(y / 2.0) * 4); R(x, 0, y, W, 1, y % 3 != 0 ? "#4aa6e2" : "#93d4f6"); P(x, ((off + 60 + y * 5) % W + W) % W, y, "#e6f7ff"); }
             var g = GerSprite("#e8dfc8", "#e14b3d"); x.BlitScaled(g, 14, 42, 22, 22);
             float fx = (t * 20) % 140 - 10; int fy = 62 - Js.Round(Math.Abs(Math.Sin(t * 3)) * 8); Ell(x, (int)fx, fy, 3, 1, "#8fbf4a");
+            for (int i = 0; i < Js.Round(st.layers); i++) { Ell(x, 42 + i * 8, 58, 3, 1, "#8fbf4a"); P(x, 44 + i * 8, 58, K.eye); } // the fish you caught, on the bank
         }
         else
         {
-            R(x, 59, 16, 2, 46, K.woodD); Blob(x, 60, 15, 2, 2, K.gold, K.goldD);
-            for (int i = 0; i < 9; i++) { int sw = Js.Round(Math.Sin(t * 3 + i) * 1.5); Line(x, 60, 18, Js.Round(46 + i * 3.5 + sw), 34 + (i % 3), "#ffffff"); }
+            int top = 16 + Js.Round((1 - Math.Min(1, st.sub + st.pull / 3)) * 30); // raised a third with each push
+            R(x, 59, top, 2, 62 - top, K.woodD); Blob(x, 60, top - 1, 2, 2, K.gold, K.goldD);
+            for (int i = 0; i < 9; i++) { int sw = Js.Round(Math.Sin(t * 3 + i) * 1.5); Line(x, 60, top + 2, Js.Round(46 + i * 3.5 + sw), top + 18 + (i % 3), "#ffffff"); }
             string[] cols = { "#3f76db", "#e14b3d", "#2ea35f", "#9466e0", "#e9a91f" };
             for (int i = 0; i < 26; i++) { double cx = 8 + i * 4.2; int cy = 66 + (i % 3); R(x, cx, cy, 2, 4, cols[i % 5]); R(x, cx, cy - 2, 2, 2, "#edbb93"); }
         }
