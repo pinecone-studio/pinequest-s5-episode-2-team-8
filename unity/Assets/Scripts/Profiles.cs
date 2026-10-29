@@ -383,7 +383,7 @@ public sealed partial class Game
                     if (id == "learn") g.Open(new LearnPage()); else if (id == "achievements") g.Open(new AchievementsPage()); else if (id == "family") g.OpenFamily();
                 });
                 GUI.DrawTexture(new Rect(r.center.x - g.U(11), r.y + g.U(5), g.U(22), g.U(22)), g.Tex(icon), ScaleMode.ScaleToFit);
-                GUI.Label(new Rect(r.x, r.y + g.U(29), r.width, g.U(16)), name, new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(11)), alignment = TextAnchor.MiddleCenter, wordWrap = false, normal = { textColor = Px.Col(on ? "#2f6bff" : "#6b7280") } });
+                GUI.Label(new Rect(r.x, r.y + g.U(29), r.width, g.U(16)), name, new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(11)), alignment = TextAnchor.MiddleCenter, wordWrap = false, clipping = TextClipping.Clip, normal = { textColor = Px.Col(on ? "#2f6bff" : "#6b7280") } });
             }
         }
     }

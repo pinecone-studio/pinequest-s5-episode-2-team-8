@@ -70,7 +70,7 @@ public sealed partial class Game
                     var r = GUILayoutUtility.GetRect(g.U(100), g.U(40), GUILayout.ExpandWidth(true));
                     if (GUI.Button(r, "", on ? g.sSel : g.sBtn)) g.Later(() => { if (on) picked.RemoveAll(x => x.name == p.name); else { if (picked.Count >= 3) picked.RemoveAt(0); picked.Add(p); } });
                     GUI.DrawTexture(new Rect(r.x + g.U(6), r.center.y - g.U(12), g.U(24), g.U(24)), g.Tex(p.face));
-                    GUI.Label(new Rect(r.x + g.U(34), r.y, r.width - g.U(36), r.height), p.name, new GUIStyle(on ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
+                    GUI.Label(new Rect(r.x + g.U(34), r.y, r.width - g.U(36), r.height), p.name, new GUIStyle(on ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false, clipping = TextClipping.Clip });
                 }
                 g.PadRow(i + cols - Mathf.Min(list.Count, i + cols), 100, 40);
                 GUILayout.EndHorizontal();
@@ -236,14 +236,19 @@ public sealed partial class Game
             live.ShowAt(new Rect(r.x + pad, r.y + pad, iw, ih));
             float y = r.y + pad + ih + g.U(10);
             var ic = Emo.Icon(l["icon"].S); if (ic != null) GUI.DrawTexture(new Rect(r.x + pad, y + g.U(2), g.U(20), g.U(20)), g.Tex(ic), ScaleMode.ScaleToFit);
-            GUI.Label(new Rect(r.x + pad + g.U(26), y, iw - g.U(26), g.U(26)), l["title"].T.ToString(), new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(18)), wordWrap = false });
+            string tt = l["title"].T.ToString(); float titleAW = iw - g.U(26);
+            var titleSt = new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(18)), wordWrap = false, clipping = TextClipping.Clip };
+            float tw0 = titleSt.CalcSize(new GUIContent(tt)).x; if (tw0 > titleAW) titleSt.fontSize = Mathf.Max(Mathf.RoundToInt(g.U(9)), Mathf.FloorToInt(titleSt.fontSize * titleAW / tw0));   // a long Mongolian title shrinks to fit the card
+            GUI.Label(new Rect(r.x + pad + g.U(26), y, titleAW, g.U(26)), tt, titleSt);
             GUI.Label(new Rect(r.x + pad, y + g.U(30), iw, dh), l["desc"].T.ToString(), ds);
             GUI.color = saved;
+            float tagMaxX = r.xMax - pad;   // tags are clipped to the card so a long one never spills off the right edge
             float tx = r.x + pad, ty = r.yMax - pad - g.U(24);
             void Tag(string text, string col)
             {
-                var ts = new GUIStyle(g.sWhite) { font = g.sLabel.font, fontSize = Mathf.RoundToInt(g.U(11)), normal = { textColor = Px.Col(col) } };
-                float tw = ts.CalcSize(new GUIContent(text)).x + g.U(4); GUI.Label(new Rect(tx, ty, tw, g.U(22)), text, ts); tx += tw + g.U(6);
+                var ts = new GUIStyle(g.sWhite) { font = g.sLabel.font, fontSize = Mathf.RoundToInt(g.U(11)), wordWrap = false, clipping = TextClipping.Clip, normal = { textColor = Px.Col(col) } };
+                float tw = ts.CalcSize(new GUIContent(text)).x + g.U(4); if (tx + tw > tagMaxX) return;   // ran out of room; skip the rest
+                GUI.Label(new Rect(tx, ty, Mathf.Min(tw, tagMaxX - tx), g.U(22)), text, ts); tx += tw + g.U(6);
             }
             if (locked) Tag("🔒 " + Loc.L("Түгжээтэй", "Locked"), "#8a6d3b");
             else Tag(pr != null && pr.done ? "✓ " + Loc.L("Сурсан", "Learned") : Loc.L("Шинэ", "New"), pr != null && pr.done ? "#2e7d32" : "#344054");
