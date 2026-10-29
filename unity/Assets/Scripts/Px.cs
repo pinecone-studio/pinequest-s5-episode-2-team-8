@@ -660,7 +660,7 @@ public static partial class Px
     /** dir: 0 front, 1 left, 2 right, 3 back. frame: 0 stands, 1 and 2 walk. */
     public static PxCanvas Char(Look look, int dir, int frame)
     {
-        string key = string.Join("|", "c", look.deel, look.skin, look.hat, look.face, look.neck, dir, frame);
+        string key = string.Join("|", "c", look.deel, look.skin, look.hat, look.face, look.neck, look.gender, dir, frame);
         if (cache.TryGetValue(key, out var hit)) return hit;
         PxCanvas outc;
         if (dir == 1) { var r = Char(look, 2, frame); outc = new PxCanvas(16, 28); outc.Blit(r, 0, 0, true); }
@@ -708,6 +708,14 @@ public static partial class Px
                 else foreach (var (a, b) in new[] { (5, 10), (6, 10), (7, 10), (5, 12), (6, 12), (7, 12), (5, 11), (7, 11), (9, 10), (10, 10), (11, 10), (9, 12), (10, 12), (11, 12), (9, 11), (11, 11), (8, 11) }) P(x, a, b, K.outl);
             }
             if (look.face == "sun") { if (side) R(x, 10, 10, 3, 2, K.outl); else { R(x, 5, 10, 3, 2, K.outl); R(x, 9, 10, 3, 2, K.outl); P(x, 8, 10, K.outl); P(x, 6, 10, "#5b6b8a"); P(x, 10, 10, "#5b6b8a"); } }
+        }
+        // a girl's two long braids, tied with red at the ends
+        if (look.Girl)
+        {
+            void Braid(int bx2, int top, int len) { R(x, bx2, top, 2, len, K.hair); for (int i = top + 1; i < top + len; i += 2) P(x, bx2 + (i / 2) % 2, i, K.hairL); R(x, bx2, top + len, 2, 1, K.red); }
+            if (front) { Braid(3, 9, 10); Braid(12, 9, 10); }
+            else if (side) Braid(4, 10, 9);
+            else { Braid(5, 12, 8); Braid(10, 12, 8); }
         }
         // hats
         switch (look.hat)

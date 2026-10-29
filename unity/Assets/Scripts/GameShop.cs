@@ -14,7 +14,7 @@ public sealed partial class Game
     void Equip(string slot, string val)
     {
         var l = V.look;
-        switch (slot) { case "deel": l.deel = val; break; case "hat": l.hat = val; break; case "face": l.face = val; break; case "neck": l.neck = val; break; case "pet": l.pet = val; break; case "skin": l.skin = val; break; }
+        switch (slot) { case "deel": l.deel = val; break; case "hat": l.hat = val; break; case "face": l.face = val; break; case "neck": l.neck = val; break; case "pet": l.pet = val; break; case "skin": l.skin = val; break; case "gender": l.gender = val; break; }
         V.Save(); Sfx.Tap();
     }
     string Worn(string slot) { var l = V.look; switch (slot) { case "deel": return l.deel; case "hat": return l.hat; case "face": return l.face; case "neck": return l.neck; case "pet": return l.pet; } return null; }
@@ -89,6 +89,9 @@ public sealed partial class Game
             x.BlitScaled(Px.Char(V.look, dir, 0), 36, 20, 64, 112);
             if (!string.IsNullOrEmpty(V.look.pet)) { var a = Px.Animal(V.look.pet, (int)(t / 0.3f) % 2); x.BlitScaled(a, 104, 148 - a.H * 3, a.W * 3, a.H * 3); }
             live.Show(g, 150);
+            GUILayout.Label(Loc.L("Би бол", "I am a"), g.sSmall);
+            int gi = g.Chips(new[] { Loc.L("Хүү", "Boy"), Loc.L("Охин", "Girl") }, V.look.Girl ? 1 : 0, 70);
+            if (gi >= 0) g.Later(() => g.Equip("gender", gi == 1 ? "girl" : null));
             GUILayout.Label(Loc.L("Арьсны өнгө", "Skin tone"), g.sSmall);
             GUILayout.BeginHorizontal(); foreach (var sk in Rules.SKINS) if (g.Swatch(Px.Col(sk), V.look.skin == sk)) { var s2 = sk; g.Later(() => g.Equip("skin", s2)); } GUILayout.EndHorizontal();
             foreach (var (title, slot) in new[] { (Loc.L("Дээл", "Deel"), "deel"), (Loc.L("Малгай", "Hat"), "hat"), (Loc.L("Нүүр", "Face"), "face"), (Loc.L("Хүзүү", "Neck"), "neck"), (Loc.L("Тэжээвэр", "Pet"), "pet") })

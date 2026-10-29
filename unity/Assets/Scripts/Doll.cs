@@ -51,7 +51,7 @@ public sealed class Doll
         armL.localRotation = Quaternion.AngleAxis(-s * 28, Vector3.right); armR.localRotation = Quaternion.AngleAxis(s * 28, Vector3.right);
     }
 
-    static string Key(Look l) => string.Join("|", l.deel, l.skin, l.hat, l.face, l.neck);
+    static string Key(Look l) => string.Join("|", l.deel, l.skin, l.hat, l.face, l.neck, l.gender);
 
     // ---------------------------------------------------------------- the pieces, in the doll's own space
     static string[] Deel(Look l) => Px.DEEL.TryGetValue(l.deel ?? "", out var d) ? d : Px.DEEL["blue"];
@@ -78,6 +78,11 @@ public sealed class Doll
             B(s * 0.27f, -0.06f, 1.2f, 0.03f, 0.3f, 0.26f, hair);    // over the ears
             B(s * 0.11f, 0.235f, 1.2f, 0.07f, 0.02f, 0.09f, Px.Col(Px.K.eye));
             B(s * 0.18f, 0.235f, 1.12f, 0.07f, 0.01f, 0.04f, Px.Col(Px.K.blush));
+        }
+        if (l.Girl) foreach (int s in new[] { -1, 1 })                // a girl's two braids down her back, tied with red
+        {
+            B(s * 0.17f, -0.22f, 0.66f, 0.1f, 0.1f, 0.5f, hair);
+            B(s * 0.17f, -0.22f, 0.6f, 0.11f, 0.11f, 0.06f, Px.Col(Px.K.red));
         }
         if (l.face == "glasses") { foreach (int s in new[] { -1, 1 }) B(s * 0.11f, 0.245f, 1.17f, 0.13f, 0.02f, 0.14f, Px.Col(Px.K.outl)); }
         else if (l.face == "sun") B(0, 0.245f, 1.18f, 0.4f, 0.02f, 0.1f, Px.Col("#2b2b3a"));

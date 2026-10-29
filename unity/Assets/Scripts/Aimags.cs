@@ -302,6 +302,9 @@ public sealed partial class Game
                 GUI.Label(new Rect(pv.center.x + g.U(10), pv.center.y - g.U(26), pv.width / 2 - g.U(16), g.U(28)), V.name, new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(20)), wordWrap = false });
                 GUI.Label(new Rect(pv.center.x + g.U(10), pv.center.y + g.U(2), pv.width / 2 - g.U(16), g.U(22)), string.Join(" · ", new[] { e?.name.ToString(), Aimags.ById(aimag)?.name.ToString() }.Where(s => !string.IsNullOrEmpty(s))), new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(13)), wordWrap = false });
                 g.Gap(10);
+                GUILayout.Label(Loc.L("Би бол", "I am a"), g.sSmall);
+                int gi = g.Chips(new[] { Loc.L("Хүү", "Boy"), Loc.L("Охин", "Girl") }, look.Girl ? 1 : 0, 70);
+                if (gi >= 0) g.Later(() => { look.gender = gi == 1 ? "girl" : null; Sfx.Tap(); });
                 GUILayout.Label(Loc.L("Арьсны өнгө", "Skin tone"), g.sSmall);
                 GUILayout.BeginHorizontal(); foreach (var sk in Rules.SKINS) if (g.Swatch(Px.Col(sk), look.skin == sk)) { var s2 = sk; g.Later(() => { look.skin = s2; Sfx.Tap(); }); } GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
                 GUILayout.Label(Loc.L("Дээл", "Deel"), g.sSmall);
@@ -325,7 +328,7 @@ public sealed partial class Game
                 Basar(g, Loc.L("Нутагт хамтдаа явцгаая! Аймгийн паспортоор Монголоор аялж, нутгаа ч бас олоорой.", "Let’s go to Nutag together! Travel Mongolia with your aimag passport and find your home province too."));
                 Nav(g, 2, () =>
                 {
-                    V.eth = eth; V.aimag = aimag; V.charAt = SaveData.NowMs(); V.look.deel = look.deel; V.look.skin = look.skin; V.look.hat = look.hat; V.Save();
+                    V.eth = eth; V.aimag = aimag; V.charAt = SaveData.NowMs(); V.look.deel = look.deel; V.look.skin = look.skin; V.look.hat = look.hat; V.look.gender = look.gender; V.Save();
                     g.CheckAchievements(true); g.Close();
                     g.Toast(Loc.L("Нутагт тавтай морил!", "Welcome to Nutag!"));
                     if (!V.tips && V.tutorialSeen > 0) g.Open(new TipsModal());

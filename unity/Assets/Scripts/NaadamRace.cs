@@ -41,7 +41,7 @@ public sealed partial class Game
             D = FINISH_IN_LAYER + TILE * (1 + C.laps);   // a longer course for the older horses; the finish lines up with the picture's
             L = Enumerable.Range(0, 4).Select(i => Art.Get("naadam_race_" + i)).ToArray();
             var hs = g.V.horse;
-            me = new Rider { name = g.MyName, me = true, look = new Look { deel = g.V.look.deel, skin = g.V.look.skin, hat = g.V.look.hat ?? "mongol", coat = hs.coat }, x = 40, y = 154, ty = 154 };
+            me = new Rider { name = g.MyName, me = true, look = new Look { deel = g.V.look.deel, skin = g.V.look.skin, hat = g.V.look.hat ?? "mongol", coat = hs.coat, gender = g.V.look.gender }, x = 40, y = 154, ty = 154 };
             riders.Add(me);
             var names = Rules.RIDERS.OrderBy(_ => Random.value).Take(5).ToArray(); var coats = Px.COATS.Keys.ToArray(); string[] hats = { null, "mongol", "cap", "fur" };
             float pace = C.pace * 13.5f + Mathf.Min(6, hs.wins * 0.8f);
