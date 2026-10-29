@@ -38,7 +38,9 @@ public static class Scenes
         Bg(x, t);
         int s = st.stage; float q = st.sub; const string felt = "#e8dfc8", white = "#fbfbf6", wood = "#c99257", woodD = "#8a5a33";
         if (s >= 1) { R(x, 27, 63, 66, 3, K.woodD); R(x, 28, 63, 64, 1, K.woodL); }
-        if (s >= 4) { R(x, 56, 31, 2, 33, woodD); R(x, 62, 31, 2, 33, woodD); }
+        // stage 4: the toono is lifted on its two posts (sub 0 on the floor, 1 up); while it waits it bobs with the timing needle (temp)
+        int ty = s == 4 && q < 1 ? Js.Round(54 - 26 * q - st.temp * 3) : 28;
+        if (s >= 4) { R(x, 56, ty + 3, 2, 64 - ty - 3, woodD); R(x, 62, ty + 3, 2, 64 - ty - 3, woodD); }
         if (s >= 2 && s < 6)
         {
             int w = s == 2 ? Js.Round(60 * q) : 60;
@@ -56,9 +58,15 @@ public static class Scenes
             for (int y = 31; y <= 46; y++) { double a = (y - 31) / 15.0; int l = Js.Round(54 - 24 * a), r = Js.Round(66 + 24 * a); R(x, l, y, r - l, 1, s >= 7 ? white : felt); P(x, l, y, "#9a8f78"); P(x, r - 1, y, "#9a8f78"); }
             if (s >= 7) { R(x, 30, 46, 60, 2, "#3f76db"); for (int X = 31; X < 90; X += 4) P(x, X, 46, "#f7c646"); R(x, 30, 62, 60, 1, "#3f76db"); }
         }
-        if (s >= 4) { R(x, 52, 28, 16, 3, K.woodD); R(x, 53, 29, 14, 1, K.gold); }
+        if (s >= 4) { R(x, 52, ty, 16, 3, K.woodD); R(x, 53, ty + 1, 14, 1, K.gold); }
         if (s >= 3) { R(x, 54, 49, 12, 15, K.outl); R(x, 55, 50, 10, 14, K.red); R(x, 56, 51, 8, 5, K.orange); R(x, 59, 51, 2, 13, K.redD); P(x, 57, 53, K.gold); P(x, 62, 53, K.gold); }
-        if (s >= 8) { foreach (int y in new[] { 50, 55, 60 }) { R(x, 30, y, 24, 1, woodD); R(x, 66, y, 24, 1, woodD); } Line(x, 54, 31, 32, 46, woodD); Line(x, 66, 31, 88, 46, woodD); }
+        if (s >= 8) // the ropes go on one by one as you pull them tight (sub), then the two over the roof
+        {
+            int ropes = s == 8 ? Js.Round(3 * q) : 3, sag = s == 8 && q < 1 ? Js.Round(st.pull * 2) : 0;
+            for (int j = 0; j < ropes; j++) { int y = 50 + j * 5; R(x, 30, y, 24, 1, woodD); R(x, 66, y, 24, 1, woodD); }
+            if (ropes < 3 && sag > 0) { int y = 50 + ropes * 5; R(x, 30, y + 2 - sag, 24, 1, woodD); R(x, 66, y + 2 - sag, 24, 1, woodD); } // the next rope, being pulled up into place
+            if (ropes >= 3) { Line(x, 54, 31, 32, 46, woodD); Line(x, 66, 31, 88, 46, woodD); }
+        }
         if (s >= 9)
         {
             R(x, 63, 20, 2, 9, "#5a5a66");
