@@ -504,6 +504,17 @@ public sealed partial class Game
                     else { bounceK = k; bounceFrom = e.mousePosition - dragOff; bounceT = Time.time; if (!tray.Contains(e.mousePosition)) g.Later(() => { Sfx.Bad(); say = Loc.L("Гэрэлтэж буй газар руу чирээрэй", "Drag it onto the glowing spot"); }); }
                 }
             }
+            if (!Gone() && dragK < 0) // until you pick one up: a hand goes from the tray up to the glowing spot, its path dotted, and the job is written on the picture
+            {
+                float ph = Time.time % 1.8f / 1.8f, u = Mathf.SmoothStep(0, 1, Mathf.Clamp01((ph - 0.12f) / 0.65f)), al = ph < 0.12f ? ph / 0.12f : ph > 0.85f ? (1 - ph) / 0.15f : 1;
+                Vector2 from = new Vector2(tray.center.x, tray.y), to = zone.center, hp = Vector2.Lerp(from, to, u);
+                for (int k = 1; k <= 8; k++) { float q = k / 9f; if (q > u) break; var dp = Vector2.Lerp(from, to, q); g.Box(new Rect(dp.x - g.U(2), dp.y - g.U(2), g.U(4), g.U(4)), new Color(1, 1, 1, 0.7f * al)); }
+                var hand = Emo.Icon("👆") ?? Emo.Icon("✋"); var oc = GUI.color; GUI.color = new Color(1, 1, 1, al);
+                if (hand != null) GUI.DrawTexture(new Rect(hp.x - g.U(10), hp.y - g.U(4), g.U(32), g.U(32)), g.Tex(hand)); GUI.color = oc;
+                var band = new Rect(sceneRect.x, sceneRect.y, sceneRect.width, g.U(24)); g.Box(band, new Color(0, 0, 0, 0.45f));
+                string job = pick ? (opts.Exists(o => o.Has("img")) ? Loc.L("Тавиураас зөв хэсгийг гэрэлтэж буй газар руу чир", "Drag the right part from the tray onto the glowing spot") : Loc.L("Зөв хариултыг гэрэлтэж буй газар руу чир", "Drag the right answer onto the glowing spot")) : s["label"].T.ToString();
+                GUI.Label(band, "↑ " + job, new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter, normal = { textColor = Color.white } });
+            }
             if (dragK >= 0) { var r = Home(dragK); var c = dragPos - dragOff; ghostR = new Rect(c.x - r.width * 0.55f, c.y - r.height * 0.55f, r.width * 1.1f, r.height * 1.1f); ghostT = Label(dragK); ghostImg = Img(dragK); } // drawn last, above everything
             if (!Gone()) g.Small(pick ? (opts.Exists(o => o.Has("img")) ? Loc.L("Зөв хэсгийг зураг дээрх гэрэлтэж буй газар руу чир", "Drag the right part onto the glowing spot") : Loc.L("Зөв хариултыг зураг дээрх гэрэлтэж буй газар руу чир", "Drag the right answer onto the glowing spot")) : $"{tapN} / {s["n"].I} · " + Loc.L("Чирж тавь", "Drag it into place"));
         }
@@ -523,9 +534,20 @@ public sealed partial class Game
                 amount = Mathf.Clamp01((dir == "side" ? Mathf.Abs(d.x) : dir == "down" ? d.y : -d.y) / len);
             }
             var icon = Emo.Icon(s["icon"].S) ?? Emo.Icon("✋");
-            float ky = dir == "down" ? amount * g.U(LEN) * 0.6f : dir == "up" ? -amount * g.U(LEN) * 0.6f : 0, kx = s["alt"].B ? (side == "l" ? -r.width * 0.22f : side == "r" ? r.width * 0.22f : 0) : 0;
-            if (dir == "side" && dragStart.HasValue) kx += Mathf.Clamp(e.mousePosition.x - dragStart.Value.x, -g.U(LEN), g.U(LEN)) * 0.6f; // the hand follows a sideways drag
-            var oc = GUI.color; GUI.color = new Color(1, 1, 1, dragStart.HasValue ? 1 : 0.55f + 0.35f * Mathf.Sin(Time.time * 4)); // it pulses until you start
+            // until you start, a hand shows the move: where to begin (for turns, the side that is next) and which way to drag, with its path dotted
+            bool demo = !dragStart.HasValue && tapN < need;
+            string at = s["alt"].B ? (dragStart.HasValue ? side : lastSide == "l" ? "r" : "l") : null;
+            float bx = at == "l" ? -r.width * 0.22f : at == "r" ? r.width * 0.22f : dir == "side" ? -g.U(LEN) * 0.3f : 0, kx = bx;
+            float ky = dir == "down" ? amount * g.U(LEN) * 0.6f : dir == "up" ? -amount * g.U(LEN) * 0.6f : 0, alpha = 1;
+            if (dir == "side" && dragStart.HasValue) kx += g.U(LEN) * 0.3f + Mathf.Clamp(e.mousePosition.x - dragStart.Value.x, -g.U(LEN), g.U(LEN)) * 0.6f; // the hand follows a sideways drag
+            if (demo)
+            {
+                float ph = Time.time % 1.6f / 1.6f, m = Mathf.SmoothStep(0, 1, Mathf.Clamp01((ph - 0.1f) / 0.65f)) * g.U(LEN) * 0.6f;
+                if (dir == "side") kx += m; else ky += dir == "down" ? m : -m;
+                alpha = ph < 0.1f ? ph / 0.1f : ph > 0.85f ? (1 - ph) / 0.15f : 1;
+                for (int k = 1; k <= 6; k++) { float q = k / 7f; var dp = new Vector2(r.center.x + Mathf.Lerp(bx, kx, q), r.center.y + Mathf.Lerp(0, ky, q)); g.Box(new Rect(dp.x - g.U(2), dp.y - g.U(2), g.U(4), g.U(4)), new Color(1, 1, 1, 0.75f * alpha)); }
+            }
+            var oc = GUI.color; GUI.color = new Color(1, 1, 1, alpha);
             GUI.DrawTexture(new Rect(r.center.x - g.U(20) + kx, r.center.y - g.U(20) + ky, g.U(40), g.U(40)), g.Tex(icon)); GUI.color = oc;
             // what to do, along the top of the picture, and how many done, along its bottom, each on a dark band
             var top = new Rect(r.x, r.y, r.width, g.U(24)); g.Box(top, new Color(0, 0, 0, 0.45f));
