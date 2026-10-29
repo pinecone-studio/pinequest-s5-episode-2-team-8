@@ -1,6 +1,6 @@
 // Өв соёлын сургууль: hands-on heritage lessons. Each lesson = fun steps -> Basar's quiz -> a real-life family activity.
 // Goal: a child can say "Mom, Dad, let's build a Mongolian ger together!" and actually know how. Ported from js/learn/lessons.js
-// (the lessons themselves are in Resources/Data/lessons.json; the pictures are drawn by Scenes.cs).
+// (the lessons themselves are in LessonData.cs; the pictures are drawn by Scenes.cs).
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,7 +9,7 @@ using UnityEngine;
 
 public static class Lessons
 {
-    public static J ALL => Data.Get("lessons");
+    public static J ALL => LessonData.ALL;
     public static J ById(string id) => ALL.FirstOrDefault(l => l["id"].S == id) ?? ALL[0];
     public static int Count => ALL.Count;
     /** Applies a lesson step's `set` (or a lesson's `final`) to the scene: { stage: 9 }, { focus: "bokh" }, { tsatsal: true }… */

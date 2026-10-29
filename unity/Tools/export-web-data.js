@@ -1,5 +1,5 @@
 /* Copies the content of the web version of Naadamy into the Unity project, so both always tell the same stories:
-   - data (questions, lessons, provinces, facts…) as JSON in Assets/Resources/Data
+   - data (questions, provinces, facts…) as JSON in Assets/Resources/Data
    - pixel art that is drawn by the web version's own code (province trip maps, animals, Nomin…) as PNGs in Assets/Resources/Art
    Run it from the repo root after changing the web content:  node unity/Tools/export-web-data.js */
 const fs = require('fs'), path = require('path'), vm = require('vm'), { Canvas, toPNG } = require('./fakecanvas');
@@ -33,8 +33,6 @@ load('js/seasons.js');
 save('seasons', plain(TG.seasons.SEASONS));
 
 TG.scenes = {}; // the lesson pictures are drawn by Scenes.cs
-load('js/learn/lessons.js');
-save('lessons', plain(TG.learn.LESSONS));
 
 load('js/data.js');
 save('people', plain({ STORY_PROMPTS: TG.STORY_PROMPTS }));
