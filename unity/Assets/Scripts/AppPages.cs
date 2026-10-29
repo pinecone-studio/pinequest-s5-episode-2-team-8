@@ -105,8 +105,8 @@ public sealed partial class Game
             g.Text(next != null ? Loc.L($"Дараагийнх: “{next["family"]["what"].T.mn}”. Хүүхэд тань “{next["title"].T.mn}” хичээлээр бэлтгэнэ.", $"Next up: “{next["family"]["what"].T.en}”. Your child prepares in the “{next["title"].T.en}” lesson.") : Loc.L("Бүх гэр бүлийн ажлыг хамт хийжээ. Гайхалтай!", "You have done every family activity together. Wonderful!"));
             g.Small(Loc.L("Хүүхэд “Тоглохоо боль” гэхэд “Ээж ээ, хамтдаа гэр барьцгаая!” гэж хариулдаг болох нь бидний зорилго.", "Our goal: when you say “stop playing”, your child answers “Mom, let’s build a ger together!”"));
             GUILayout.EndVertical();
-            g.Stats((Loc.L("Сурсан хичээл", "Lessons learned"), $"{done}/{nl}"), (Loc.L("Гараараа сурсан", "Learned by hand"), $"{GerRules.Done(child).Count}/{GerRules.HANDS_ON.Count}"), (Loc.L("Басарын асуулт", "Basar quiz"), $"{child.quizRight}/{child.quizTotal}"), (Loc.L("Амжилт", "Badges"), $"{child.ach.Count}/{Achievements.LIST.Count}"));
-            GUILayout.BeginVertical(g.sPanel);
+            g.Gap(12); g.Stats((Loc.L("Сурсан хичээл", "Lessons learned"), $"{done}/{nl}"), (Loc.L("Гараараа сурсан", "Learned by hand"), $"{GerRules.Done(child).Count}/{GerRules.HANDS_ON.Count}"), (Loc.L("Басарын асуулт", "Basar quiz"), $"{child.quizRight}/{child.quizTotal}"), (Loc.L("Амжилт", "Badges"), $"{child.ach.Count}/{Achievements.LIST.Count}"));
+            g.Gap(12); GUILayout.BeginVertical(g.sPanel);
             GUILayout.Label($"<b>{child.name}: {Loc.L("хичээлүүд", "lessons")}</b>", g.sTitle);
             var ca = Aimags.ById(child.aimag); if (ca != null) g.Small(ca.name + " · " + ca.fact);
             foreach (var l in Lessons.ALL)
@@ -119,12 +119,8 @@ public sealed partial class Game
             }
             g.Small(Loc.L($"Басараас {child.basarAsked} асуулт асуусан. ", $"Asked Basar {child.basarAsked} questions. ") + (Basar.ai ? Loc.L("Басар AI (Claude) ухаантай ажиллаж байна.", "Basar is running with AI (Claude).") : Loc.L("Басар офлайн мэдлэгээр ажиллаж байна.", "Basar is using offline knowledge.")));
             GUILayout.EndVertical();
-            LearnedReport(g, child);
-            GUILayout.BeginVertical(g.sPanel);
-            GUILayout.Label("<b>" + Loc.L("Тохиргоо, хүртээмж", "Settings & accessibility") + "</b>", g.sTitle);
-            if (g.Btn(Loc.L("Тохиргоо нээх", "Open settings"))) g.Later(() => g.Open(new SettingsModal()));
-            GUILayout.EndVertical();
-            GUILayout.BeginVertical(g.sPanel);
+            g.Gap(12); LearnedReport(g, child);
+            g.Gap(12); GUILayout.BeginVertical(g.sPanel);
             GUILayout.Label("<b>" + Loc.L("Гэр бүлийн гишүүд", "Family members") + "</b>", g.sTitle);
             foreach (var f in app.family.ToList())
             {
@@ -139,7 +135,7 @@ public sealed partial class Game
             GUILayout.EndHorizontal();
             g.Small(Loc.L("Нэр (ж: Нагац эгч)", "Name (e.g. Auntie)"));
             GUILayout.EndVertical();
-            GUILayout.BeginVertical(g.sPanel);
+            g.Gap(12); GUILayout.BeginVertical(g.sPanel);
             GUILayout.Label("<b>" + Loc.L("Хүүхдүүд", "Children") + "</b>", g.sTitle);
             foreach (var k in kids)
             {
@@ -150,9 +146,17 @@ public sealed partial class Game
             }
             if (g.Btn("+ " + Loc.L("Хүүхэд нэмэх", "Add a child"))) g.Later(() => { g.LogOut(); });
             GUILayout.EndVertical();
-            FamilyCard(g, kids);
+            g.Gap(12); FamilyCard(g, kids);
+            g.Gap(12); EmailCard(g);
+            g.Gap(12); PinCard(g);
+            g.Gap(12);
+            GUILayout.BeginVertical(g.sPanel);
+            GUILayout.Label("<b>" + Loc.L("Тохиргоо, хүртээмж", "Settings & accessibility") + "</b>", g.sTitle);
+            if (g.Btn(Loc.L("Тохиргоо нээх", "Open settings"))) g.Later(() => g.Open(new SettingsModal()));
+            GUILayout.EndVertical();
+            g.Gap(8);
             if (g.Btn(Loc.L("Бидний зорилго, шударга үнэ", "Our mission & fair pricing"))) g.Later(() => g.Open(new AboutPage()));
-            if (g.Btn(Loc.L("Бүх өгөгдлийг устгах", "Erase all data"), false, 34)) g.Later(() => g.Open(new ConfirmModal(Loc.L("Бүх өгөгдлийг устгах уу?", "Erase all data?"), Loc.L("Профайл, ахиц, тохиргоо устна.", "Profiles, progress and settings will be erased."), () => { PlayerPrefs.DeleteAll(); PlayerPrefs.Save(); g.App = new AppState(); g.V = null; g.CloseAll(); })));
+            g.Gap(12); Danger(g);
         }
         // the family code: made here, then each child is added with their 3 pictures so they can log in on other devices
         bool busy, needsPin; string joinCode = "", famErr = "", membersCode; List<J> members;
@@ -237,8 +241,6 @@ public sealed partial class Game
             }
             if (famErr != "" && !mailErr) GUILayout.Label($"<color=#e14b3d>{famErr}</color>", g.sLabel);
             GUILayout.EndVertical();
-            EmailCard(g);
-            PinCard(g);
         }
         // the weekly email for the grown-ups (Family.Email): -1 not known yet, 0 none, 1 waiting for its confirm link, 2 confirmed
         int mail = -1; string mailText = ""; bool mailErr; // mailErr: famErr is the email's, shown in its card
@@ -279,7 +281,7 @@ public sealed partial class Game
         }
         Action RemoveEmail(Game g) => () => g.Open(new ConfirmModal(Loc.L("Имэйлийг зогсоох уу?", "Stop the weekly email?"), Loc.L("Имэйл хаягийг серверээс устгана. Дараа нь дахин нэмж болно.", "The address is deleted from the server. You can add one again later."),
             () => WithPin(g, pin => Run(g, Family.Email(g, pin, null, r => Done(g, r, Loc.L("Имэйлийг зогсоолоо", "The weekly email is stopped"), null, true)), true))));
-        /** The grown-up PIN: change it (here and for the family), and delete everything the family has on the server. */
+        /** The grown-up PIN: change it (here and for the family). */
         void PinCard(Game g)
         {
             var app = g.App; bool fam = !string.IsNullOrEmpty(app.familyCode);
@@ -294,12 +296,21 @@ public sealed partial class Game
                     if (fam && !needsPin) Run(g, Family.SetPin(g, next, old, null, r => Done(g, r, Loc.L("ПИН код солигдлоо", "The PIN is changed"))));
                     else Run(g, ChangeHere(g, old, next));
                 }, true)))));
+            GUILayout.EndVertical();
+        }
+        /** One danger zone: wipe this device, or delete the family from the server. */
+        void Danger(Game g)
+        {
+            var app = g.App; bool fam = !string.IsNullOrEmpty(app.familyCode);
+            GUILayout.BeginVertical(g.sPanel);
+            GUILayout.Label("<b><color=#e14b3d>" + Loc.L("Аюултай хэсэг", "Danger zone") + "</color></b>", g.sTitle);
+            g.Small(Loc.L("Профайл, ахиц, тохиргоо зөвхөн энэ утаснаас устна. Сервер дээрх гэр бүлд нөлөөлөхгүй.", "Profiles, progress and settings are erased from this device only. The family on the server is not touched."));
+            if (g.Btn(Loc.L("Энэ төхөөрөмжийг цэвэрлэх", "Erase this device"), false, 36)) g.Later(() => g.Open(new ConfirmModal(Loc.L("Энэ төхөөрөмжийг цэвэрлэх үү?", "Erase this device?"), Loc.L("Профайл, ахиц, тохиргоо устна.", "Profiles, progress and settings will be erased."), () => { PlayerPrefs.DeleteAll(); PlayerPrefs.Save(); g.App = new AppState(); g.V = null; g.CloseAll(); })));
             if (fam)
             {
-                g.Gap(6);
-                GUILayout.Label("<b>" + Loc.L("Гэр бүлийн бүх өгөгдлийг устгах", "Delete all family data") + "</b>", g.sLabel);
-                g.Small(Loc.L("Сервер дээрх гэр бүлийн код болон хүүхэд бүрийн зоос, XP, хувцас, хадгалсан ахиц, бусад төхөөрөмжийн нэвтрэх эрх, Нутаг дахь гэр, чатын мөрийг устгана. Буцаах боломжгүй. Энэ төхөөрөмж дээрх профайлууд үлдэнэ.", "Deletes the family code from the server and, for every child, the coins, XP, clothes, cloud save, other devices' logins, their ger in Nutag and their chat lines. This can't be undone. The profiles on this device stay."));
-                if (g.Btn(Loc.L("Гэр бүлийн бүх өгөгдлийг устгах", "Delete all family data"), false, 36, !busy)) g.Later(() => g.Open(new EraseModal(this)));
+                g.Gap(10);
+                g.Small(Loc.L("Сервер дээрх гэр бүлийн код болон хүүхэд бүрийн зоос, XP, хувцас, хадгалсан ахиц, нэвтрэх эрх, Нутаг дахь гэр, чатын мөрийг устгана. Буцаах боломжгүй. Энэ төхөөрөмж дээрх профайлууд үлдэнэ.", "Deletes the family code from the server and, for every child, the coins, XP, clothes, cloud save, other devices' logins, their ger in Nutag and their chat lines. This can't be undone. The profiles on this device stay."));
+                if (g.Btn(Loc.L("Гэр бүлийг серверээс устгах", "Delete family from server"), false, 36, !busy)) g.Later(() => g.Open(new EraseModal(this)));
             }
             GUILayout.EndVertical();
         }

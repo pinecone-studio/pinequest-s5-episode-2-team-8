@@ -238,8 +238,7 @@ public sealed partial class Game
             x.Fill(Px.Col("#e8dcc0"));
             sp.art?.Invoke(x, t, s);
             DrawKind(g, x, t);
-            GUILayout.BeginHorizontal(); GUILayout.Label("<b>" + sp.title + "</b>", g.sTitle); GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
+            GUILayout.Label("<b>" + sp.title + "</b>", g.sTitle, GUILayout.ExpandWidth(true)); // full width, so a long title wraps instead of squeezing
             float maxH = Mathf.Min(g.U(330), Screen.height * 0.5f);
             var r = live.Show(g, maxH);
             if (Event.current.type == EventType.Repaint) abs = new Rect(GUIUtility.GUIToScreenPoint(r.position), r.size);
@@ -268,13 +267,13 @@ public sealed partial class Game
                     GUILayout.BeginHorizontal(); GUILayout.FlexibleSpace();
                     for (int i = row * cols; i < Mathf.Min(n, row * cols + cols); i++)
                     {
-                        var o = sp.options[i]; var br = GUILayoutUtility.GetRect(g.U(92), g.U(84), GUILayout.Width(g.U(92)));
+                        var o = sp.options[i]; var br = GUILayoutUtility.GetRect(g.U(92), g.U(96), GUILayout.Width(g.U(92)));
                         if (e.type == EventType.MouseDown && e.button == 0 && !picking && br.Contains(e.mousePosition)) { dragI = i; downPos = dragPos = e.mousePosition; dragMoved = false; e.Use(); }
                         bool away = (dragI == i && dragMoved) || (picking && pickI == i);
                         float hop = i == s.sel && !away ? -Mathf.Abs(Mathf.Sin(t * 7)) * g.U(4) : 0; var old = GUI.color; if (away) GUI.color = new Color(1, 1, 1, 0.35f);
                         GUI.Box(new Rect(br.x, br.y + hop, br.width, br.height), GUIContent.none, i == s.sel ? g.sSel : g.sBtn);
                         if (o.icon != null) GUI.DrawTexture(new Rect(br.center.x - g.U(18), br.y + g.U(6) + hop, g.U(36), g.U(36)), g.Tex(o.icon));
-                        GUI.Label(new Rect(br.x + 2, br.y + g.U(44) + hop, br.width - 4, g.U(38)), o.label.ToString(), new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, wordWrap = true });
+                        GUI.Label(new Rect(br.x + 2, br.y + g.U(44) + hop, br.width - 4, g.U(50)), o.label.ToString(), new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, wordWrap = true, fontSize = g.Ts(10.5f) });
                         GUI.color = old;
                     }
                     GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();

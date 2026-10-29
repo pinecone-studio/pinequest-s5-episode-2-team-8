@@ -271,7 +271,7 @@ public sealed partial class Game
         protected override string Tab => "learn";
         readonly J l; readonly string id; readonly SceneState st = new SceneState(); readonly Live live = new Live(Scenes.W, Scenes.H); readonly Action<PxCanvas, SceneState, float> draw;
         WithPicker picker; List<Player> players = new List<Player>(); string mode = "solo"; int i, turn;
-        string say; bool solved; List<J> opts; readonly HashSet<int> wrong = new HashSet<int>();
+        string say; bool solved; List<J> opts; int dragK = -1, bounceK = -1; Vector2 dragPos, dragOff, bounceFrom; float bounceT = -9, popT = -9; Rect sceneRect; Vector2 lscroll; GUIStyle trayLab; Rect ghostR; string ghostT; readonly HashSet<int> wrong = new HashSet<int>();
         int tapN; float gauge; bool heating, gaugeOk; float t0; bool tfDone; string side, lastSide; Vector2? dragStart; bool dragDone; string altMsg;
         QuizRun quiz; bool finished; (int right, int n, int[] tally) result; (int coins, int xp, int level) reward; bool first, rewarded;
         public LessonPage(string id)
@@ -280,13 +280,14 @@ public sealed partial class Game
             picker = new WithPicker(Loc.L($"“{l["title"].T.mn}” хичээлийг хэнтэй үзэх вэ?", $"Who are you doing “{l["title"].T.en}” with?"), (m, p) => { mode = m; players = p; picker = null; Show(I); });
         }
         protected override string Title => l["title"].T.ToString();
+        protected override bool Shell => false;
         protected override void Header(Game g) { if (GUILayout.Button(Loc.L("Асуух", "Ask"), g.sBtn, GUILayout.Height(g.U(40)))) g.Later(() => g.Open(new BasarChat(g, Loc.L($"Вуф! Бид “{l["title"].T.mn}” хичээл үзэж байна. Ойлгомжгүй юм байвал асуугаарай!", $"Woof! We’re doing “{l["title"].T.en}”. Ask me anything you’re unsure about!"), null))); }
         bool Multi => players.Count > 1;
         J Step => i < l["steps"].Count ? l["steps"][i] : null;
         string Tp(J s) => s["type"].S;
         void Show(Game g)
         {
-            say = null; solved = false; wrong.Clear(); tapN = 0; gaugeOk = false; heating = false; tfDone = false; lastSide = null; altMsg = null; dragStart = null;
+            say = null; solved = false; dragK = bounceK = -1; popT = -9; lscroll = Vector2.zero; wrong.Clear(); tapN = 0; gaugeOk = false; heating = false; tfDone = false; lastSide = null; altMsg = null; dragStart = null;
             if (i >= l["steps"].Count) { StartQuiz(g); return; }
             var s = Step;
             if (s.Has("ch")) st.ch = s["ch"].S; st.broken = s["broken"].B;
@@ -352,25 +353,36 @@ public sealed partial class Game
                 GUILayout.FlexibleSpace(); GUILayout.BeginVertical(g.sPanel); picker.Draw(g); GUILayout.EndVertical(); GUILayout.FlexibleSpace();
                 GUILayout.EndArea(); return;
             }
-            base.Draw(g);
+            if (finished || quiz != null) { base.Draw(g); return; }
+            // full screen while a lesson runs: only the close button, the progress dots, the scene and the instruction
+            g.Box(new Rect(0, 0, Screen.width, Screen.height), Px.Col(Bg));
+            var sf = Screen.safeArea; float fw = Mathf.Min(sf.width - g.U(16), g.U(1000));
+            GUILayout.BeginArea(new Rect(sf.x + (sf.width - fw) / 2, Screen.height - sf.yMax + g.U(6), fw, sf.height - g.U(12)));
+            GUILayout.BeginHorizontal(); if (GUILayout.Button("←", g.sBtn, GUILayout.Width(g.U(44)), GUILayout.Height(g.U(36)))) g.Later(g.Close); if (GUILayout.Button("?", g.sBtn, GUILayout.Width(g.U(44)), GUILayout.Height(g.U(36)))) g.Later(() => g.Open(new BasarChat(g, Loc.L($"Вуф! Бид “{l["title"].T.mn}” хичээл үзэж байна. Ойлгомжгүй юм байвал асуугаарай!", $"Woof! We’re doing “{l["title"].T.en}”. Ask me anything you’re unsure about!"), null)));
+            GUILayout.Label(Dots(), g.sLabel, GUILayout.Height(g.U(36))); GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
+            ghostT = null; Body(g);
+            if (ghostT != null) { g.Box(new Rect(ghostR.x + g.U(3), ghostR.y + g.U(4), ghostR.width, ghostR.height), new Color(0, 0, 0, 0.25f)); GUI.Box(ghostR, "", g.sSel); GUI.Label(ghostR, ghostT, trayLab); }
+            GUILayout.EndArea();
         }
+        string Dots() { int n = l["steps"].Count; return string.Concat(Enumerable.Range(0, n).Select(k => k < i ? "<color=#2ea35f>●</color>" : k == i ? "<color=#3f76db>●</color>" : "○")) + (i >= n ? " <color=#3f76db>?</color>" : " ?"); }
         protected override void Body(Game g)
         {
-            // progress dots, then the scene picture (tap it for the "zones" steps)
-            int n = l["steps"].Count;
-            GUILayout.Label(string.Concat(Enumerable.Range(0, n).Select(k => k < i ? "<color=#2ea35f>●</color>" : k == i ? "<color=#3f76db>●</color>" : "○")) + (i >= n ? " <color=#3f76db>?</color>" : " ?"), g.sLabel);
+            bool run = !finished && quiz == null;
+            if (!run) GUILayout.Label(Dots(), g.sLabel);
             draw(live.c, st, Time.time);
-            var rr = live.Show(g, Mathf.Min(260, Screen.height / g.UiScale * 0.42f));
+            var rr = live.Show(g, run ? Screen.height / g.UiScale * (Screen.height / g.UiScale < 560 ? 0.38f : 0.46f) : Mathf.Min(260, Screen.height / g.UiScale * 0.42f)); sceneRect = rr;
             var e = Event.current; var s = Step;
             if (s != null && Tp(s) == "zones" && !solved && e.type == EventType.MouseDown && rr.Contains(e.mousePosition))
             {
                 var p = live.Pick(e.mousePosition); string z = Scenes.ZoneAt(p.x, p.y); e.Use();
                 if (z != null) g.Later(() => { st.hl = z; st.hlBad = z != s["zone"].S; if (z == s["zone"].S) Success(s); else { Sfx.Bad(); say = Loc.L("Тэнд биш. Дахиад оролдоорой!", "Not there. Try again!"); g.StartCoroutine(ClearHl()); } });
             }
+            if (run && s != null && s.Has("drop") && (Tp(s) == "pick" || Tp(s) == "tap")) DropTray(g, s);
+            if (run) lscroll = g.BeginScroll(lscroll);
             GUILayout.BeginVertical(g.sPanel);
             if (finished) { Done(g); GUILayout.EndVertical(); return; }
             if (quiz != null) { GUILayout.Label("<b>" + Loc.L("Басарын шалгалт", "Basar’s check") + "</b>", g.sTitle); g.Small(Loc.L("3 асуултад хариулаарай.", "Answer 3 questions.")); quiz.Draw(g); GUILayout.EndVertical(); return; }
-            if (s == null) { GUILayout.EndVertical(); return; }
+            if (s == null) { GUILayout.EndVertical(); g.EndScroll(); return; }
             string ty = Tp(s);
             if (Multi)
             {
@@ -382,6 +394,7 @@ public sealed partial class Game
             switch (ty)
             {
                 case "learn": case "story": if (g.Btn(Loc.L("Цааш →", "Next →"), true, 48)) g.Later(() => Next(g)); break;
+                case "pick" when s.Has("drop"): break;
                 case "pick":
                     for (int k = 0; k < opts.Count; k++)
                     {
@@ -400,19 +413,11 @@ public sealed partial class Game
                         break;
                     }
                 case "zones": if (!solved) g.Small(Loc.L("Дээрх зураг дээр дар", "Tap the picture above")); break;
+                case "tap" when s.Has("drop"): break;
                 case "tap":
                     {
                         int need = s["n"].I;
-                        if (g.Btn($"{s["label"].T}   {tapN} / {need}", true, 52, tapN < need)) g.Later(() =>
-                        {
-                            if (tapN >= need) return; tapN++;
-                            string field = s["field"].S;
-                            if (field == null || field == "sub") st.sub = tapN / (float)need;
-                            if (field != null) Lessons.SetFloat(st, field, tapN / (float)need * (s.Has("scale") ? s["scale"].F : 1));
-                            if (s["roll"].B) { var l2 = (st.sides ?? new string[0]).ToList(); l2.Add(new[] { "horse", "camel", "sheep", "goat" }[UnityEngine.Random.Range(0, 4)]); st.sides = l2.Skip(Mathf.Max(0, l2.Count - 4)).ToArray(); }
-                            if (s["tone"].B) Sfx.Chime(); else Sfx.Tap();
-                            if (tapN >= need) Success(s);
-                        });
+                        if (g.Btn($"{s["label"].T}   {tapN} / {need}", true, 52, tapN < need)) g.Later(() => TapOnce(s));
                         break;
                     }
                 case "drag": DragPad(g, s); break;
@@ -439,6 +444,59 @@ public sealed partial class Game
             if (say != null) Basar(g, say);
             if (solved && ty != "learn" && ty != "story" && g.Btn(Loc.L("Цааш →", "Next →"), true, 48)) g.Later(() => Next(g));
             GUILayout.EndVertical();
+            if (run) g.EndScroll();
+        }
+        void TapOnce(J s)
+        {
+            int need = s["n"].I; if (tapN >= need) return; tapN++;
+            string field = s["field"].S;
+            if (field == null || field == "sub") st.sub = tapN / (float)need;
+            if (field != null) Lessons.SetFloat(st, field, tapN / (float)need * (s.Has("scale") ? s["scale"].F : 1));
+            if (s["roll"].B) { var l2 = (st.sides ?? new string[0]).ToList(); l2.Add(new[] { "horse", "camel", "sheep", "goat" }[UnityEngine.Random.Range(0, 4)]); st.sides = l2.Skip(Mathf.Max(0, l2.Count - 4)).ToArray(); }
+            if (s["tone"].B) Sfx.Chime(); else Sfx.Tap();
+            if (tapN >= need) Success(s);
+        }
+        /** Drag and drop: the parts (pick: the answers, tap: one part to place again and again) sit in a tray; drag one onto the glowing spot in the picture. Wrong spot = it bounces back with a hint. */
+        void DropTray(Game g, J s)
+        {
+            var d = s["drop"]; bool pick = Tp(s) == "pick"; float sc = sceneRect.width / Scenes.W;
+            var zone = new Rect(sceneRect.x + d[0].F * sc, sceneRect.y + d[1].F * sc, d[2].F * sc, d[3].F * sc);
+            var e = Event.current; float since = Time.time - popT;
+            if (!solved) { float a = 0.55f + 0.35f * Mathf.Sin(Time.time * 5), th = g.U(3); var col = dragK >= 0 && zone.Contains(dragPos) ? new Color(0.35f, 0.9f, 0.4f, 0.55f) : new Color(1, 0.9f, 0.3f, 0.18f + 0.12f * a); g.Box(zone, col); var c = new Color(1, 0.85f, 0.15f, a); g.Box(new Rect(zone.x, zone.y, zone.width, th), c); g.Box(new Rect(zone.x, zone.yMax - th, zone.width, th), c); g.Box(new Rect(zone.x, zone.y, th, zone.height), c); g.Box(new Rect(zone.xMax - th, zone.y, th, zone.height), c); }
+            if (since < 0.5f) { var pr = zone; float gr = since * g.U(60); pr = new Rect(pr.x - gr, pr.y - gr, pr.width + gr * 2, pr.height + gr * 2); var c = new Color(0.4f, 1, 0.5f, 0.8f * (1 - since * 2)); float th = g.U(4); g.Box(new Rect(pr.x, pr.y, pr.width, th), c); g.Box(new Rect(pr.x, pr.yMax - th, pr.width, th), c); g.Box(new Rect(pr.x, pr.y, th, pr.height), c); g.Box(new Rect(pr.xMax - th, pr.y, th, pr.height), c); }
+            int count = pick ? opts.Count : 1; var tray = GUILayoutUtility.GetRect(10, g.U(58), GUILayout.ExpandWidth(true));
+            float cw = Mathf.Min(g.U(230), (tray.width - g.U(6) * (count - 1)) / count), total = cw * count + g.U(6) * (count - 1);
+            Rect Home(int k) => new Rect(tray.x + (tray.width - total) / 2 + k * (cw + g.U(6)), tray.y + g.U(4), cw, tray.height - g.U(8));
+            string Label(int k) => pick ? opts[k]["t"].T.ToString() : s["label"].T.ToString();
+            bool Gone() => solved || (!pick && tapN >= s["n"].I);
+            GUI.Box(tray, "", g.sBtn);
+            var lab = trayLab ?? (trayLab = new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = true, fontSize = Mathf.Max(10, Mathf.RoundToInt(g.U(13))) });
+            for (int k = 0; k < count; k++)
+            {
+                if (Gone() || k == dragK) continue;
+                var r = Home(k); bool bouncing = k == bounceK && Time.time - bounceT < 0.25f;
+                if (bouncing) { float u = (Time.time - bounceT) / 0.25f; u = 1 - (1 - u) * (1 - u); var c0 = Vector2.Lerp(bounceFrom, r.center, u); r = new Rect(c0.x - r.width / 2, c0.y - r.height / 2, r.width, r.height); }
+                bool bad = pick && wrong.Contains(k); var old = GUI.color; if (bad) GUI.color = new Color(1, 1, 1, 0.45f);
+                GUI.Box(r, "", g.sBtn); GUI.Label(r, (bad ? "X " : "") + Label(k), lab); GUI.color = old;
+                if (e.type == EventType.MouseDown && !bad && !bouncing && r.Contains(e.mousePosition) && dragK < 0) { dragK = k; dragOff = e.mousePosition - r.center; dragPos = e.mousePosition; e.Use(); }
+            }
+            if (dragK >= 0)
+            {
+                if (e.type == EventType.MouseDrag) { dragPos = e.mousePosition; e.Use(); }
+                else if (e.type == EventType.MouseLeaveWindow || (e.rawType == EventType.MouseUp && e.type != EventType.MouseUp)) { bounceK = dragK; bounceFrom = dragPos - dragOff; bounceT = Time.time; dragK = -1; }
+                else if (e.type == EventType.MouseUp)
+                {
+                    int k = dragK; dragK = -1; e.Use();
+                    if (zone.Contains(e.mousePosition))
+                    {
+                        if (!pick || opts[k]["ok"].B) { popT = Time.time; g.Later(() => { if (pick) Success(s); else { TapOnce(s); } }); }
+                        else { wrong.Add(k); bounceK = k; bounceFrom = e.mousePosition - dragOff; bounceT = Time.time; g.Later(() => { Sfx.Bad(); say = Loc.L("Вуф! Энэ нь тэнд таарахгүй. Дахиад бодоод үз", "Woof! That doesn’t fit there. Think again"); }); }
+                    }
+                    else { bounceK = k; bounceFrom = e.mousePosition - dragOff; bounceT = Time.time; if (!tray.Contains(e.mousePosition)) g.Later(() => { Sfx.Bad(); say = Loc.L("Гэрэлтэж буй газар руу чирээрэй", "Drag it onto the glowing spot"); }); }
+                }
+            }
+            if (dragK >= 0) { var r = Home(dragK); var c = dragPos - dragOff; ghostR = new Rect(c.x - r.width * 0.55f, c.y - r.height * 0.55f, r.width * 1.1f, r.height * 1.1f); ghostT = Label(dragK); } // drawn last, above everything
+            if (!Gone()) g.Small(pick ? Loc.L("Зөв хариултыг зураг дээрх гэрэлтэж буй газар руу чир", "Drag the right answer onto the glowing spot") : $"{tapN} / {s["n"].I} · " + Loc.L("Чирж тавь", "Drag it into place"));
         }
         System.Collections.IEnumerator ClearHl() { yield return new WaitForSeconds(0.7f); if (!solved) st.hl = null; }
         static void Basar(Game g, string t) { GUILayout.BeginHorizontal(g.sBtn); g.IconAt(Px.BankharFace(1), 32); GUILayout.Label(t, g.sLabel); GUILayout.EndHorizontal(); }

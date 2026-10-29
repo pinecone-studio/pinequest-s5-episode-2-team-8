@@ -310,7 +310,7 @@ public sealed partial class Game
             string mk = o.kind == "npcq" ? NpcMark(o.id) : o.kind == "emee" && V.emee.visits == 0 ? "!" : o.kind == "historian" && HistoryReady() ? "!" : "";
             if (mk != "") Outlined(p.x, p.y - 9 * ArtPx + Mathf.Round(Mathf.Sin(t * 5.5f + o.x) * 2) * ArtPx / 2, mk, ts * 1.6f, mk == "?" ? green : gold);
         }
-        if (V.lot.i >= 0) { var o = World.objects.Find(q => q.kind == "lot" && q.i == V.lot.i); var p = PxGui(o.x * T + 24, o.y * T - 4); Outlined(p.x, p.y, MyName, ts, gold); }
+        if (V.lot.i >= 0) { var o = World.objects.Find(q => q.kind == "lot" && q.i == V.lot.i); var p = GerTop(o); Outlined(p.x, p.y, Loc.L("Миний гэр", "My ger"), ts, gold); }
         { var p = PxGui(dgx * T + 8, dgy * T - 4); Outlined(p.x, p.y, Loc.L("Басар", "Basar"), ts * 0.8f, gold); if (dogBubble != null) Outlined(p.x + 5 * ArtPx, p.y - 6 * ArtPx + Mathf.Round(Mathf.Sin(t * 5.5f) * 2) * ArtPx / 2, "!", ts * 1.6f, gold); }
         MyLabel(ts);
         if (race != null) RaceLabels(ts);
@@ -602,6 +602,18 @@ public sealed partial class Game
         }
         var jr = UR(right - 56, vh - 12 - 56, 56, 56); if (Round(jr, null)) Jump(); GUI.Label(new Rect(jr.x, jr.y, jr.width, jr.height - U(4)), "↑", new GUIStyle(sBig) { fontSize = Mathf.RoundToInt(U(28)), normal = { textColor = Px.Col("#4a2a12") } }); GlowAt("jump", jr); right -= 64;
         var rr = UR(right - 56, vh - 12 - 56, 56, 56); if (Round(rr, Emo.Icon("🏃"), null, runLock ? sSel : sChip)) runLock = !runLock; GlowAt("run", rr); right -= 64;
+        // Basar's fact: its own card, bottom right above the button bar (the tallest button is 86 high), slides in from the right edge, out again after 12 s; a tap opens him
+        if (dogBubble != null && modal == null)
+        {
+            float age = Time.time - dogBubble.t0, sl = BackOut(Mathf.Clamp01(age / 0.4f)) * Mathf.Clamp01((12 - age) / 0.4f), cwid = Mathf.Min(300, vw - 20), tW = U(cwid - 46 - 34);
+            string ft = dogBubble.fact.ToString(); float ch = Mathf.Max(U(52), sPopText.CalcHeight(new GUIContent(ft), tW) + U(34));
+            var cr = new Rect(U(vw) - (U(cwid) + U(10)) * sl, U(vh - 12 - 86 - 10) - ch, U(cwid), ch);
+            GUI.Box(cr, GUIContent.none, sPopBasar);
+            var cb = new Rect(cr.x + U(10), cr.y + (ch - U(46)) / 2, U(46), U(46)); GUI.DrawTexture(cb, Tex(Badge("#f7c646"))); GUI.DrawTexture(new Rect(cb.x + U(5), cb.y + U(5), cb.width - U(10), cb.height - U(10)), Tex(Px.BankharFace(1)), ScaleMode.ScaleToFit);
+            GUI.Label(new Rect(cb.xMax + U(12), cr.y + U(4), tW, U(16)), Loc.L("БАСАР", "BASAR"), sPopWho);
+            GUI.Label(new Rect(cb.xMax + U(12), cr.y + U(18), tW, ch - U(24)), ft, sPopText);
+            Ui(cr); if (GUI.Button(cr, GUIContent.none, GUIStyle.none)) Later(() => OpenBasar());
+        }
         // bottom middle: your milk and the dairy foods you made. Tap a food to eat it.
         var have = Rules.DAIRY_ORDER.Where(k => V.Have(k) > 0).ToList();
         float left = moreOpen ? 126 : 68, room = right - left;
