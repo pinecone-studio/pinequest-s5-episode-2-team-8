@@ -168,6 +168,11 @@ def bust(c, expr='happy', talk=0, blink=False):
     cv.poly(face, skin)
     cv.poly([(88, 56), (94, 58), (93 + jaw, 70), (90 + jaw, 84), (84 + jaw, 95), (76, 100), (86, 84), (88, 70)], skin_d)
     cv.oline(face, 2.2)
+    # Keep the dialogue cast distinct, while giving every face Bolormaa's warm, softly lit finish.
+    rose = tuple(round(skin[i] * 0.84 + rgb('#dc766b')[i] * 0.16) for i in range(3))
+    cv.ell(46, 80, 4.5, 2.3, rose)
+    cv.ell(84, 78, 3.4, 2.0, tuple(round(skin_d[i] * 0.7 + rose[i] * 0.3) for i in range(3)))
+    cv.ell(54, 48, 3.0, 1.2, tuple(round(skin[i] * 0.7 + rgb('#fff0d7')[i] * 0.3) for i in range(3)))
     cv.ell(31, 76, 5, 8, skin); cv.ell(32, 77, 2.4, 4.5, skin_d); cv.oell(31, 76, 5, 8, 2.0)               # the ear we see
     # the features
     ek, (bi, bo), mk = FACE[expr]
@@ -202,6 +207,8 @@ def bust(c, expr='happy', talk=0, blink=False):
         cv.poly(top, hair); cv.oline(top, 2.2)
         for pts in ([(42, 24), (54, 34)], [(62, 12), (66, 30)], [(76, 16), (86, 34)]): cv.line(pts, 1.6)
         cv.line([(50, 14), (70, 12), (90, 28)], 1.4, hair_l)
+        cv.line([(40, 29), (44, 23), (50, 19)], 1.2, hair_d)
+        cv.line([(79, 19), (85, 25), (89, 32)], 1.2, hair_d)
     if do == 'braids':   # two thick braids hanging in front of the shoulders
         for x0, top, w in ((22, 84, 9), (98, 92, 7)):
             for y in range(top, 146, 9):

@@ -79,6 +79,11 @@ def head(c, p, e, open_, blink):
     c.ellipse(cx + rx, cy + 3, 1.5, ry - 4, skd, only_on=True)
     c.ellipse(cx - rx + 4, cy + 4, 2.5, 1.5, skl, only_on=True)                     # cheekbone
     c.ellipse(cx + rx - 5, cy + 4, 2.5, 1.5, sks, only_on=True)
+    # Soft, warm cheek color ties the narrated cast to Bolormaa's expressive portrait style.
+    cheek = mix(sk, '#e88070', 0.2 if fem else 0.12)
+    c.ellipse(cx - 6, cy + 7, 2.2, 1.0, cheek, only_on=True)
+    c.ellipse(cx + 7, cy + 7, 2.0, 1.0, mix(sks, cheek, 0.55), only_on=True)
+    c.ellipse(cx - 3, fy + 2, 2.0, 1.0, skl, only_on=True)
     if fem:
         c.ellipse(cx - rx + 4, cy + 6, 2, 1, mix(sk, '#e88070', 0.35), only_on=True)
         c.ellipse(cx + rx - 4, cy + 6, 2, 1, mix(sks, '#e88070', 0.35), only_on=True)
@@ -111,6 +116,7 @@ def head(c, p, e, open_, blink):
                 c.px(ix, ey, '#ffb060')      # “fire in his eyes”
             else:
                 c.px(ix, ey - (1 if wide else 0), '#6a4a3a')
+            c.px(ix - 1, ey - 1 - (1 if wide else 0), '#fff6e5')  # a small catchlight in every open eye
             c.line(xa, ey - 1 - (1 if wide else 0), xb, ey - 1 - (1 if wide else 0), OUT)   # the upper lid
             c.px(xb + (1 if side > 0 else 0) if side > 0 else xa - 1, ey - 2 - (1 if wide else 0), OUT)  # outer corner flick
             if e in ('smile',):
