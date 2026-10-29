@@ -146,6 +146,17 @@ function cleanEarned(earned) {
   return { d: earned.d, coins: count(earned.coins), xp: count(earned.xp) };
 }
 
+const BOARD_SEEN_MS = 30 * 24 * 60 * 60 * 1000; // a room's board counts the players who joined it in the last 30 days
+/** Leaderboard rows ({ id, xp, ...shown }) ranked by XP (equal XP, equal rank): the first `top` and the player `me`, without
+ *  ids. The same order as the PostgreSQL queries. */
+function rankRows(rows, me, top) {
+  rows.sort((a, b) => b.xp - a.xp || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  let rank = 0;
+  return rows.map((row, i) => ({ row, rank: i && rows[i - 1].xp === row.xp ? rank : (rank = i + 1), n: i + 1 }))
+    .filter(({ row, n }) => n <= top || row.id === me)
+    .map(({ row: { id, ...shown }, rank: place }) => ({ rank: place, ...shown, ...(id === me ? { me: true } : {}) }));
+}
+
 function isRecord(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -165,6 +176,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
   const familyFile = path.join(dataDir, 'families.json');
   const deviceTicketFile = path.join(dataDir, 'device-tickets.json');
   const erasedFile = path.join(dataDir, 'erased.json');
+  const roomPlayersFile = path.join(dataDir, 'room-players.json');
 
   if (!databaseUrl) {
     return {
@@ -246,7 +258,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         const ids = new Set(family.members.map((member) => member.id));
         const wallets = readLegacyFile(walletFile, 'player wallets'), progress = readLegacyFile(progressFile, 'player progress');
         const identities = readIdentityFile(identityFile), devices = readLegacyFile(deviceTicketFile, 'device tickets'), rooms = readLegacyFile(dataFile);
-        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now();
+        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now(), seen = readLegacyFile(roomPlayersFile, 'room players');
         for (const [id, when] of Object.entries(erased)) if (!(at - when < ERASED_KEEP_MS)) delete erased[id];
         for (const id of ids) Object.defineProperty(erased, id, { value: at, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(erasedFile, erased); // first: no device can take an erased id again, even if a later write fails
@@ -260,6 +272,8 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           fs.writeFileSync(temporaryFile, JSON.stringify(rooms));
           fs.renameSync(temporaryFile, dataFile);
         }
+        for (const players of Object.values(seen)) if (isRecord(players)) for (const id of ids) delete players[id];
+        writeIdentityFile(roomPlayersFile, seen);
         delete families[code];
         writeIdentityFile(familyFile, families);
         return outcome.result;
@@ -348,6 +362,39 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       async startRealtime() {},
       async listPresence() { return []; },
       async erasedAmong() { return []; }, // one process: nothing can be erased behind its back
+      /** Remembers that this player joined the room, with the name and look shown on its board. */
+      async noteRoomPlayer(roomCode, { id, name, look }) {
+        if (!ROOM_CODE.test(roomCode || '') || !PLAYER_ID.test(id || '')) return;
+        const all = readLegacyFile(roomPlayersFile, 'room players'), at = Date.now();
+        for (const [code, players] of Object.entries(all)) { // forget the players not seen for 30 days, and rooms left empty
+          if (isRecord(players)) for (const [key, entry] of Object.entries(players)) if (!(isRecord(entry) && at - entry.at < BOARD_SEEN_MS)) delete players[key];
+          if (!isRecord(players) || !Object.keys(players).length) delete all[code];
+        }
+        const seen = Object.hasOwn(all, roomCode) ? all[roomCode] : {};
+        Object.defineProperty(seen, id, { value: { name, look, at }, writable: true, configurable: true, enumerable: true });
+        Object.defineProperty(all, roomCode, { value: seen, writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(roomPlayersFile, all);
+      },
+      /** The room's players of the last 30 days by XP: the top 10 and `me` ({ rank, name, look, xp, me? }). */
+      async roomBoard(roomCode, me) {
+        const all = readLegacyFile(roomPlayersFile, 'room players'), wallets = readLegacyFile(walletFile, 'player wallets');
+        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now();
+        const seen = Object.hasOwn(all, roomCode) && isRecord(all[roomCode]) ? all[roomCode] : {};
+        const rows = Object.entries(seen).filter(([id, entry]) => isRecord(entry) && at - entry.at < BOARD_SEEN_MS && Object.hasOwn(wallets, id)
+          && !(Object.hasOwn(erased, id) && at - erased[id] < ERASED_KEEP_MS))
+          .map(([id, entry]) => ({ id, name: entry.name, look: entry.look, xp: cleanWallet(wallets[id]).xp }));
+        return rankRows(rows, me, 10);
+      },
+      /** The children of `me`'s family by XP ({ rank, name, avatar, xp, me? }), or null when `me` is in no family. */
+      async familyBoard(me) {
+        const families = readLegacyFile(familyFile, 'families'), wallets = readLegacyFile(walletFile, 'player wallets');
+        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now();
+        const family = Object.values(families).map(cleanFamily).find((f) => f.members.some((m) => m.id === me));
+        if (!family) return null;
+        const rows = family.members.filter((m) => !(Object.hasOwn(erased, m.id) && at - erased[m.id] < ERASED_KEEP_MS))
+          .map((m) => ({ id: m.id, name: m.name, avatar: m.avatar, xp: Object.hasOwn(wallets, m.id) ? cleanWallet(wallets[m.id]).xp : 0 }));
+        return rankRows(rows, me, Infinity);
+      },
       async registerPresence() { return null; },
       async updatePresence() {},
       async removePresence() {},
@@ -449,11 +496,23 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             erased_at timestamptz NOT NULL DEFAULT now()
           )
         `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_room_players (
+            room_code text NOT NULL,
+            player_id text NOT NULL,
+            name text NOT NULL,
+            look jsonb NOT NULL DEFAULT '{}'::jsonb,
+            seen_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (room_code, player_id)
+          )
+        `); // who joined each room, for its leaderboard
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_players_room_idx ON naadamy_players (room_code)');
+        await client.query('CREATE INDEX IF NOT EXISTS naadamy_room_players_player_idx ON naadamy_room_players (player_id)');
+        await client.query("DELETE FROM naadamy_room_players WHERE seen_at < now() - interval '30 days'"); // not shown any more: forgotten at each start
         // Supabase serves every public table over its REST API to anyone with the project's anon key. Row level security with
         // no policies closes that door; the server connects as the tables' owner, which RLS does not apply to.
         for (const table of ['naadamy_rooms', 'naadamy_players', 'naadamy_identities', 'naadamy_wallets', 'naadamy_wallet_ops', 'naadamy_player_progress',
-          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased']) {
+          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased', 'naadamy_room_players']) {
           await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
         }
         for (const [code, state] of Object.entries(legacy)) {
@@ -574,6 +633,42 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       const result = await pool.query("SELECT id FROM naadamy_erased WHERE id = ANY($1::text[]) AND erased_at > now() - interval '30 days'", [ids]);
       return result.rows.map((row) => row.id);
     },
+    async noteRoomPlayer(roomCode, { id, name, look }) {
+      if (!ROOM_CODE.test(roomCode || '') || !PLAYER_ID.test(id || '')) return;
+      await pool.query(
+        `INSERT INTO naadamy_room_players (room_code, player_id, name, look, seen_at) VALUES ($1, $2, $3, $4::jsonb, now())
+         ON CONFLICT (room_code, player_id) DO UPDATE SET name = EXCLUDED.name, look = EXCLUDED.look, seen_at = EXCLUDED.seen_at`,
+        [roomCode, id, name, JSON.stringify(look || {})],
+      );
+    },
+    async roomBoard(roomCode, me) { // one query: rank everyone, keep the top 10 and me
+      const result = await pool.query(
+        `SELECT name, look, xp, place, me FROM (
+           SELECT r.name, r.look, w.xp, r.player_id = $2 AS me, rank() OVER (ORDER BY w.xp DESC) AS place,
+             row_number() OVER (ORDER BY w.xp DESC, r.player_id) AS n
+           FROM naadamy_room_players r JOIN naadamy_wallets w ON w.id = r.player_id
+           WHERE r.room_code = $1 AND r.seen_at > now() - interval '30 days'
+             AND NOT EXISTS (SELECT 1 FROM naadamy_erased e WHERE e.id = r.player_id AND e.erased_at > now() - interval '30 days')
+         ) ranked WHERE n <= 10 OR me ORDER BY n`,
+        [roomCode, me],
+      );
+      return result.rows.map((row) => ({ rank: Number(row.place), name: row.name, look: row.look, xp: Number(row.xp), ...(row.me ? { me: true } : {}) }));
+    },
+    async familyBoard(me) { // one query: me's (oldest) family, its children with their wallets' XP
+      const result = await pool.query(
+        `SELECT m->>'name' AS name, m->'avatar' AS avatar, COALESCE(w.xp, 0) AS xp, m->>'id' = $1 AS me,
+           rank() OVER (ORDER BY COALESCE(w.xp, 0) DESC) AS place
+         FROM (SELECT members FROM naadamy_families WHERE members @> jsonb_build_array(jsonb_build_object('id', $1::text))
+               ORDER BY created_at, code LIMIT 1) f
+         CROSS JOIN LATERAL jsonb_array_elements(f.members) m
+         LEFT JOIN naadamy_wallets w ON w.id = m->>'id'
+         WHERE NOT EXISTS (SELECT 1 FROM naadamy_erased e WHERE e.id = m->>'id' AND e.erased_at > now() - interval '30 days')
+         ORDER BY place, m->>'id'`,
+        [me],
+      );
+      if (!result.rows.length) return null;
+      return result.rows.map((row) => ({ rank: Number(row.place), name: row.name, avatar: Number(row.avatar) || 0, xp: Number(row.xp), ...(row.me ? { me: true } : {}) }));
+    },
     async addDeviceTicket(id, ticket) {
       if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) throw new Error('Invalid device ticket');
       const client = await pool.connect();
@@ -650,6 +745,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         await client.query('DELETE FROM naadamy_player_tickets WHERE player_id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_identities WHERE id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_players WHERE id = ANY($1::text[])', [ids]);
+        await client.query('DELETE FROM naadamy_room_players WHERE player_id = ANY($1::text[])', [ids]);
         await client.query("DELETE FROM naadamy_erased WHERE erased_at < now() - interval '30 days'");
         await client.query(
           'INSERT INTO naadamy_erased (id) SELECT unnest($1::text[]) ON CONFLICT (id) DO UPDATE SET erased_at = now()', [ids]);
