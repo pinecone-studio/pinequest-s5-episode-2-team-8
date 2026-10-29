@@ -59,7 +59,7 @@ public sealed partial class Game
         // on the left; Bolormaa stands beside the box from head to toe, her face and pose following what she says
         bool guide = d.who != "basar";
         float k = Mathf.Clamp(AtLeastCss(16, 15) / 16, 1, 2.6f); // on a phone the box, its words and its answers grow to a readable size
-        float w = Mathf.Min(vw - 16, 720 * k), pad = 12 * k, pic = (guide ? 112 : 72) * Mathf.Min(k, 1.5f), tx = pad * 2 + pic, tw = w - tx - pad;   // Bolormaa's portrait (56×72 pixels, ×2)
+        float w = Mathf.Min(vw - 16, 720 * k), pad = 12 * k, pic = (guide ? 112 : 72) * Mathf.Min(k, 1.5f), tx = pad * 2 + pic, tw = w - tx - pad;   // Bolormaa's 112×144 reference portrait
         var st = new GUIStyle(sPixel) { wordWrap = true, alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16 * k)), normal = { textColor = Color.white } }; // the story box is pixel text, as on the web
         var opt = k > 1 ? new GUIStyle(sOpt) { fontSize = PxSize(sOpt.fontSize * k) } : sOpt;
         float line = 24 * k, th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
