@@ -32,3 +32,11 @@
 - Өгөгдлийн баримтыг эх сурвалжтай нь тулгах (`review_not_in_md.md`).
 - Тоглоомд ашиглахаас өмнө сургалтад ороогүй асуултаар шалгах (алхам D).
 - Өөр сонголт: том model-ийг (cloud API) баталгаатай баримтаар хангах.
+
+## Ollama-аар ажиллуулах
+```
+cd ml/naadamy-finetune
+ollama create naadamy -f Modelfile   # Modelfile-д FROM замаа GGUF файл руугаа засна
+node ollama_example.mjs "Бөх гэж юу вэ?"
+```
+`ollama_example.mjs`: backend-ээс `/api/chat` дуудах жишээ (`askTeacher(question)`), `OLLAMA_URL`, `OLLAMA_MODEL` env-ээр тохируулна. Багийн server-т холбоогүй.
