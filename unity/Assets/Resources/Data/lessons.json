@@ -2493,6 +2493,41 @@
         ]
       },
       {
+        "type": "drag",
+        "stage": 0,
+        "set": {
+          "focus": "bokh"
+        },
+        "dir": "side",
+        "alt": true,
+        "n": 4,
+        "icon": "💪",
+        "label": {
+          "mn": "Түлх!",
+          "en": "Push!"
+        },
+        "title": {
+          "mn": "Барилд!",
+          "en": "Wrestle!"
+        },
+        "text": {
+          "mn": "Бөхчүүд бие биенийхээ мөрнөөс барьж барилдана. Зүүн, баруун тийш ээлжлэн түлхэж өрсөлдөгчөө унага!",
+          "en": "Wrestlers grip each other by the shoulders. Push left and right in turn to topple your rival!"
+        },
+        "altHint": {
+          "mn": "Нөгөө тийш нь түлх!",
+          "en": "Push the other way!"
+        },
+        "low": {
+          "mn": "Хүчтэй түлх!",
+          "en": "Push harder!"
+        },
+        "after": {
+          "mn": "Унагалаа! Өвдөг, тохой газар хүрвэл унасанд тооцно.",
+          "en": "Down he goes! A wrestler loses when a knee or elbow touches the ground."
+        }
+      },
+      {
         "type": "pick",
         "set": {
           "focus": "bokh"
@@ -2530,6 +2565,37 @@
         ]
       },
       {
+        "type": "drag",
+        "set": {
+          "focus": "bokh"
+        },
+        "field": "flick",
+        "dir": "up",
+        "alt": true,
+        "n": 4,
+        "icon": "👐",
+        "label": {
+          "mn": "Далавчаа дэлгэ",
+          "en": "Spread your wings"
+        },
+        "title": {
+          "mn": "Бүргэдийн жүжиг",
+          "en": "The eagle dance"
+        },
+        "text": {
+          "mn": "Ялсан бөх бүргэд шиг далавчаа дэлгэн дэвж бүжиглэдэг. Хоёр гараа ээлжлэн дээш дэв!",
+          "en": "The winner dances with his arms spread like an eagle’s wings. Flap them up, left and right in turn!"
+        },
+        "altHint": {
+          "mn": "Нөгөө далавчаа!",
+          "en": "The other wing!"
+        },
+        "low": {
+          "mn": "Өндөр дэв!",
+          "en": "Flap higher!"
+        }
+      },
+      {
         "type": "pick",
         "set": {
           "focus": "horse"
@@ -2565,6 +2631,41 @@
             "ok": false
           }
         ]
+      },
+      {
+        "type": "drag",
+        "stage": 0,
+        "set": {
+          "focus": "horse"
+        },
+        "dir": "down",
+        "alt": true,
+        "n": 6,
+        "icon": "✊",
+        "label": {
+          "mn": "Морио хурдлуул",
+          "en": "Urge the horse on"
+        },
+        "title": {
+          "mn": "Уралдаа!",
+          "en": "Race!"
+        },
+        "text": {
+          "mn": "Хүүхэд уяачид “Гийнгоо!” гэж дуулж морио хурдлуулдаг. Жолоогоо зүүн, баруун гараараа ээлжлэн сэгсэр!",
+          "en": "Child jockeys sing “Giingoo!” to urge their horses on. Shake the reins with your left and right hands in turn!"
+        },
+        "altHint": {
+          "mn": "Нөгөө гараараа!",
+          "en": "Other hand!"
+        },
+        "low": {
+          "mn": "Хүчтэй!",
+          "en": "Harder!"
+        },
+        "after": {
+          "mn": "Түрүүллээ! Наадмын хурдан морины уралдаан 10–28 км зайд явагддаг.",
+          "en": "You won! Naadam horse races run 10 to 28 km across the steppe."
+        }
       },
       {
         "type": "pick",
@@ -2639,6 +2740,31 @@
             "ok": false
           }
         ]
+      },
+      {
+        "type": "timing",
+        "stage": 0,
+        "set": {
+          "focus": "archer"
+        },
+        "lo": 0.45,
+        "hi": 0.6,
+        "label": {
+          "mn": "Харва!",
+          "en": "Shoot!"
+        },
+        "title": {
+          "mn": "Сур харваа",
+          "en": "Archery"
+        },
+        "text": {
+          "mn": "Нумаа татаад зүү ногоон хэсэгт ирэхэд “Харва!” дар.",
+          "en": "Draw the bow and tap “Shoot!” when the needle reaches the green zone."
+        },
+        "after": {
+          "mn": "Онолоо! Уухай!",
+          "en": "A hit! Uukhai!"
+        }
       },
       {
         "type": "tf",

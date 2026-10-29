@@ -290,11 +290,17 @@ public static class Scenes
         R(x, 0, 30, W, 6, "#5a361c"); for (int i = 0; i < 30; i++) R(x, 2 + i * 4, 31 + (i % 2), 2, 2, crowd[i % 4]);
         float Fade(string k) => f != null && f != k ? 0.35f : 1;
         x.Alpha = Fade("bokh");
-        x.BlitScaled(Wrestler("#d8342b", "#edbb93", f == "bokh" && (int)Math.Floor(t * 2) % 2 != 0 ? "push" : "grip", 0), 4, 38, 20, 30);
-        x.BlitScaled(Wrestler("#2b5bd8", "#d9a06e", "grip", 0), 24, 38, 20, 30, true);
-        x.Alpha = Fade("horse"); int hx = 46 + (f == "horse" ? Js.Round((t * 12) % 20) : 0);
-        x.Blit(Horse("chestnut", f == "horse" ? 1 + (int)Math.Floor(t * 10) % 4 : 0, true), hx, 48); x.Blit(Char(new Look { deel = "gold", skin = "#EDBB93", hat = "cap" }, 2, 0), hx + 6, 33);
-        x.Alpha = Fade("archer"); x.Blit(Char(new Look { deel = "green", skin = "#D9A06E", hat = "mongol" }, 2, 0), 92, 40); Line(x, 106, 46, 106, 58, K.woodD); Line(x, 106, 46, 104, 52, K.white); Line(x, 104, 52, 106, 58, K.white);
+        // you push (pull, side) until the blue wrestler falls (sub 1), then flap like an eagle (flick)
+        int sway = f == "bokh" ? (st.side == "l" ? -1 : 1) * Js.Round(st.pull * 3) : 0; bool won = f == "bokh" && st.sub >= 1;
+        x.BlitScaled(Wrestler("#d8342b", "#edbb93", f == "bokh" && (st.pull > 0.3f || (!won && (int)Math.Floor(t * 2) % 2 != 0)) ? "push" : "grip", 0), 4 + sway, 38, 20, 30);
+        if (won) x.BlitScaled(Wrestler("#2b5bd8", "#d9a06e", "grip", 0), 24, 56, 26, 12, true); // down on the grass
+        else x.BlitScaled(Wrestler("#2b5bd8", "#d9a06e", "grip", 0), 24 + sway, 38, 20, 30, true);
+        x.Alpha = Fade("horse"); bool run = f == "horse" && (st.pull > 0 || t - st.fx < 0.5f); int hx = f == "horse" ? 36 + Js.Round(st.sub * 34) : 46; // each shake of the reins gallops it on
+        x.Blit(Horse("chestnut", run ? 1 + (int)Math.Floor(t * 10) % 4 : 0, true), hx, 48); x.Blit(Char(new Look { deel = "gold", skin = "#EDBB93", hat = "cap" }, 2, 0), hx + 6, 33);
+        x.Alpha = Fade("archer"); x.Blit(Char(new Look { deel = "green", skin = "#D9A06E", hat = "mongol" }, 2, 0), 92, 40); Line(x, 106, 46, 106, 58, K.woodD);
+        int draw = f == "archer" && st.sub < 1 ? Js.Round(st.temp * 3) : 0; Line(x, 106, 46, 104 - draw, 52, K.white); Line(x, 104 - draw, 52, 106, 58, K.white); // the string pulls back with the needle
+        R(x, 112, 60, 6, 3, K.red); R(x, 113, 59, 4, 1, K.white); // the surs target
+        if (f == "archer" && st.sub >= 1) Line(x, 108, 54, 114, 59, K.woodD);
         x.Alpha = 1;
     }
 
