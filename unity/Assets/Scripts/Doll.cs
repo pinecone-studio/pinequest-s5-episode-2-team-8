@@ -60,27 +60,62 @@ public sealed class Doll
     static void BodyBoxes(Look l)
     {
         var dl = Deel(l); Color D = Px.Col(dl[0]), DD = Px.Col(dl[1]), DL = Px.Col(dl[2]), S = Px.Col(Skin(l)), hair = Px.Col(Px.K.hair);
-        // the deel: a long robe, wider at the hem, with its gold sash and the diagonal front opening
+        // The deel: a shaped wrap coat, with a broad sash, a bright knot and fine gold edging.
         B(0, 0, 0.24f, 0.56f, 0.4f, 0.3f, DD);
         B(0, 0, 0.54f, 0.5f, 0.36f, 0.5f, D);
-        B(0, 0, 0.66f, 0.52f, 0.38f, 0.08f, Px.Col(Px.K.gold));
-        for (int i = 0; i < 4; i++) B(0.08f - i * 0.06f, 0.19f, 0.98f - i * 0.07f, 0.07f, 0.02f, 0.07f, DL);
+        B(0, 0.2f, 0.65f, 0.46f, 0.035f, 0.075f, Px.Col(Px.K.goldD));
+        B(0, 0.224f, 0.66f, 0.43f, 0.018f, 0.035f, Px.Col(Px.K.gold));
+        B(0, 0.238f, 0.655f, 0.085f, 0.025f, 0.09f, Px.Col(Px.K.orange));
+        B(0, 0.256f, 0.66f, 0.035f, 0.018f, 0.04f, Px.Col(Px.K.gold));
+        B(0, 0.19f, 0.3f, 0.45f, 0.025f, 0.035f, Px.Col(Px.K.goldD));
+        for (int i = 0; i < 5; i++) B(0.14f - i * 0.07f, 0.195f, 0.98f - i * 0.07f, 0.045f, 0.025f, 0.055f, i % 2 == 0 ? DL : Px.Col(Px.K.gold));
         // neck things
         if (l.neck == "scarf") B(0, 0, 0.98f, 0.4f, 0.32f, 0.08f, Px.Col(Px.K.red));
         else if (l.neck == "khadag") { B(0, 0, 0.98f, 0.42f, 0.34f, 0.05f, Px.Col(Px.K.light)); B(0.12f, 0.19f, 0.62f, 0.06f, 0.02f, 0.36f, Px.Col(Px.K.light)); B(-0.12f, 0.19f, 0.62f, 0.06f, 0.02f, 0.36f, Px.Col(Px.K.light)); }
         else if (l.neck == "medal") { B(0, 0.19f, 0.8f, 0.1f, 0.03f, 0.1f, Px.Col(Px.K.gold)); B(0, 0.18f, 0.9f, 0.04f, 0.02f, 0.1f, Px.Col(Px.K.blue)); }
-        // the head: big and round-ish, as in the pixel art, with hair, eyes and rosy cheeks
-        B(0, 0, 1.04f, 0.5f, 0.46f, 0.48f, S);
-        B(0, -0.03f, 1.38f, 0.54f, 0.5f, 0.16f, hair);               // hair on top
-        B(0, -0.22f, 1.08f, 0.54f, 0.06f, 0.42f, hair);              // and at the back
+        // A softly shaped face with the large, warm eyes and neat layered hair from Bolormaa's portrait.
+        Color skinShade = Px.Col(Px.Shade(Skin(l), -0.16f));
+        Color skinLight = Px.Col(Px.Shade(Skin(l), 0.14f));
+        Color hairLight = Px.Col(Px.Shade(Px.K.hair, 0.24f));
+        Color iris = Px.Col("#70452f"), pupil = Px.Col("#241820"), white = Px.Col("#fff6e9");
+        bool braids = string.IsNullOrEmpty(l.hat) || l.hat == "flower";
+        B(0, 0, 1.04f, 0.48f, 0.46f, 0.48f, S);
+        B(0, 0.235f, 0.9f, 0.34f, 0.025f, 0.16f, skinShade);        // soft jaw shadow
+        B(0, -0.03f, 1.38f, 0.54f, 0.5f, 0.16f, hair);              // rounded crown
+        B(0, -0.22f, 1.08f, 0.54f, 0.06f, 0.42f, hair);             // back of the hair
+        B(-0.12f, 0.238f, 1.315f, 0.23f, 0.025f, 0.045f, hairLight); // swept fringe
+        B(0.1f, 0.239f, 1.3f, 0.18f, 0.024f, 0.04f, hairLight);
         foreach (int s in new[] { -1, 1 })
         {
-            B(s * 0.27f, -0.06f, 1.2f, 0.03f, 0.3f, 0.26f, hair);    // over the ears
-            B(s * 0.11f, 0.235f, 1.2f, 0.07f, 0.02f, 0.09f, Px.Col(Px.K.eye));
-            B(s * 0.18f, 0.235f, 1.12f, 0.07f, 0.01f, 0.04f, Px.Col(Px.K.blush));
+            B(s * 0.27f, -0.06f, 1.2f, 0.03f, 0.3f, 0.26f, hair);    // soft side locks
+            if (braids)
+            {
+                B(s * 0.28f, 0.08f, 0.83f, 0.09f, 0.12f, 0.29f, hair); // Bolormaa's long braid silhouette
+                B(s * 0.28f, 0.146f, 0.85f, 0.045f, 0.025f, 0.23f, hairLight);
+                for (int r = 0; r < 3; r++)
+                    B(s * (0.28f + (r % 2 == 0 ? 0.02f : -0.02f)), 0.16f, 0.91f - r * 0.075f, 0.055f, 0.022f, 0.045f, r % 2 == 0 ? hair : hairLight);
+            }
+            B(s * 0.3f, -0.055f, 1.2f, 0.075f, 0.03f, 0.1f, S);   // ears
+            B(s * 0.19f, 0.258f, 1.08f, 0.065f, 0.018f, 0.045f, skinLight); // cheek light
+            B(s * 0.115f, 0.267f, 1.2f, 0.092f, 0.035f, 0.115f, white);
+            B(s * 0.105f, 0.292f, 1.2f, 0.052f, 0.025f, 0.084f, iris);
+            B(s * 0.105f, 0.311f, 1.195f, 0.029f, 0.018f, 0.061f, pupil);
+            B(s * 0.12f, 0.324f, 1.225f, 0.018f, 0.012f, 0.022f, white); // eye shine
+            B(s * 0.115f, 0.266f, 1.29f, 0.105f, 0.025f, 0.035f, hair); // shaped brows
         }
-        if (l.face == "glasses") { foreach (int s in new[] { -1, 1 }) B(s * 0.11f, 0.245f, 1.17f, 0.13f, 0.02f, 0.14f, Px.Col(Px.K.outl)); }
-        else if (l.face == "sun") B(0, 0.245f, 1.18f, 0.4f, 0.02f, 0.1f, Px.Col("#2b2b3a"));
+        B(0, 0.29f, 1.08f, 0.045f, 0.05f, 0.075f, skinLight);    // small lit nose
+        B(0, 0.282f, 0.975f, 0.115f, 0.025f, 0.035f, Px.Col("#8e4b4b")); // gentle smile
+        B(0, 0.298f, 0.948f, 0.065f, 0.018f, 0.018f, skinLight);
+        if (l.face == "glasses")
+        {
+            foreach (int s in new[] { -1, 1 })
+            {
+                B(s * 0.115f, 0.308f, 1.2f, 0.15f, 0.025f, 0.16f, Px.Col(Px.K.outl));
+                B(s * 0.115f, 0.325f, 1.2f, 0.105f, 0.014f, 0.115f, Px.Col("#8bd4ef"));
+            }
+            B(0, 0.322f, 1.2f, 0.055f, 0.02f, 0.025f, Px.Col(Px.K.outl));
+        }
+        else if (l.face == "sun") B(0, 0.29f, 1.18f, 0.44f, 0.035f, 0.12f, Px.Col("#2b2b3a"));
         Hat(l.hat);
     }
 
