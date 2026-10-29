@@ -871,6 +871,22 @@
         }
       },
       {
+        "type": "zones",
+        "zone": "door",
+        "title": {
+          "mn": "Гэрийн хаалга",
+          "en": "The ger door"
+        },
+        "text": {
+          "mn": "Гэрийн хаалга урд зүг рүү харсан байдаг. Хаалгыг нь дар.",
+          "en": "The ger door faces south. Tap the door."
+        },
+        "after": {
+          "mn": "Хаалганы доод модыг босго гэдэг. Босго гэрийн аз жаргалыг хамгаалдаг гэж үздэг.",
+          "en": "The wooden step at the bottom of the door is the threshold (bosgo). It is said to guard the home’s good fortune."
+        }
+      },
+      {
         "type": "tf",
         "answer": false,
         "title": {
@@ -951,57 +967,35 @@
         }
       },
       {
-        "type": "pick",
+        "type": "zones",
+        "zone": "west",
         "title": {
           "mn": "Гэр дотор ямар чигээр явах вэ?",
           "en": "Which way do you walk inside?"
         },
         "text": {
-          "mn": "Нар явахтай адил…",
-          "en": "Like the sun travels…"
+          "mn": "Гэрт нар зөв (цагийн зүүний дагуу) алхана. Хаалгаар орж ирээд эхлээд аль тал руугаа явах вэ? Зураг дээр дар.",
+          "en": "In a ger you walk sunwise (clockwise), the way the sun goes. In through the door, which side do you go to first? Tap it in the picture."
         },
-        "options": [
-          {
-            "t": {
-              "mn": "Нар зөв (цагийн зүүний дагуу)",
-              "en": "Sunwise (clockwise)"
-            },
-            "ok": true
-          },
-          {
-            "t": {
-              "mn": "Нар буруу",
-              "en": "Against the sun"
-            },
-            "ok": false
-          },
-          {
-            "t": {
-              "mn": "Голоор нь шууд",
-              "en": "Straight through the middle"
-            },
-            "ok": false
-          }
-        ],
         "after": {
-          "mn": "Нар зөв эргэх нь сайн сайхныг бэлгэддэг.",
-          "en": "Moving sunwise is a sign of good fortune."
+          "mn": "Зөв! Хаалгаар орж ирээд баруун тал, хоймор, тэгээд зүүн талаар нар зөв эргэнэ.",
+          "en": "Right! In through the door, along the west side, past the khoimor, then round the east side, like the sun."
         }
       },
       {
-        "type": "tf",
-        "answer": true,
+        "type": "zones",
+        "zone": "hearth",
         "title": {
-          "mn": "Зөв үү, буруу юу?",
-          "en": "True or false?"
+          "mn": "Хоёр багана",
+          "en": "The two posts"
         },
         "text": {
-          "mn": "Хоёр баганын дундуур гарч болохгүй.",
-          "en": "You should not walk between the two posts."
+          "mn": "Голомтын хажууд гэрийн тооныг тулсан хоёр багана бий. Тэдгээрийн дундуур хэзээ ч гарч болохгүй. Тэр газрыг дар.",
+          "en": "Beside the hearth, two posts hold up the toono. You must never walk between them. Tap that place."
         },
         "after": {
-          "mn": "Зөв! Баганыг түшиж, дундуур нь гарахгүй.",
-          "en": "Right! Don’t lean on the posts or walk between them."
+          "mn": "Тийм! Багана бол гэрийн тулгуур. Хоёр баганын дундуур гарахгүй, тойрч явдаг.",
+          "en": "Yes! The posts hold the ger up. Never cross between them: walk around."
         }
       },
       {
