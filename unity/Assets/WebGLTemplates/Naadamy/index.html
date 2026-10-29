@@ -13,22 +13,19 @@
     .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px;
       box-sizing: border-box; text-align: center; font: 700 18px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fff; }
     #loading { z-index: 3; overflow: hidden; isolation: isolate; gap: 0; padding: 24px;
-      background: linear-gradient(180deg, #748eb9 0%, #c7a17f 51%, #d9aa72 68%, #7d8a5b 100%); }
-    #loading::before { content: ''; position: absolute; z-index: -2; width: clamp(100px, 17vw, 210px); aspect-ratio: 1; left: 68%; top: 12%; border-radius: 50%;
-      background: radial-gradient(circle at 36% 34%, #fff2c6 0 7%, #f9d88c 35%, #eeb770 72%); box-shadow: 0 0 70px 24px rgba(255, 218, 149, .24); }
-    .ridge { position: absolute; z-index: -1; left: -5%; width: 110%; bottom: 0; pointer-events: none; }
-    .ridge-far { height: 42%; background: #71805f; opacity: .82; clip-path: polygon(0 52%, 10% 43%, 19% 50%, 29% 22%, 38% 40%, 49% 18%, 59% 43%, 70% 27%, 80% 45%, 90% 19%, 100% 42%, 100% 100%, 0 100%); }
-    .ridge-near { height: 29%; background: linear-gradient(180deg, #53694b, #344b40); clip-path: polygon(0 37%, 12% 25%, 22% 44%, 34% 20%, 45% 48%, 58% 25%, 72% 45%, 83% 22%, 100% 37%, 100% 100%, 0 100%); }
+      background: #718dbb; image-rendering: pixelated; }
+    .landscape { position: absolute; z-index: -1; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
     .load-card { width: min(430px, 100%); box-sizing: border-box; padding: clamp(24px, 5vw, 38px); display: flex; flex-direction: column; align-items: center; gap: 14px;
-      border: 1px solid rgba(255, 241, 206, .38); border-radius: 24px; background: linear-gradient(145deg, rgba(35, 43, 67, .77), rgba(32, 45, 60, .58));
-      box-shadow: 0 22px 70px rgba(26, 33, 49, .3), inset 0 1px rgba(255,255,255,.16); backdrop-filter: blur(10px); }
-    .brand-mark { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 15px; color: #46351f; font-size: 24px;
-      background: linear-gradient(145deg, #ffe7a1, #f0bd5e); box-shadow: 0 5px 18px rgba(248, 202, 112, .24); }
-    .load-title { margin: 0; color: #fff2cf; font-size: clamp(26px, 5vw, 34px); line-height: 1.1; letter-spacing: .12em; text-shadow: 0 2px 16px rgba(255, 218, 149, .24); }
-    .load-subtitle { margin: 0; color: rgba(255,255,255,.92); font-size: 16px; }
-    .load-note { margin: 0; color: rgba(255,255,255,.66); font-size: 12px; font-weight: 500; }
-    #bar { width: min(320px, 70vw); height: 12px; border: 1px solid rgba(255, 255, 255, .22); border-radius: 99px; background: rgba(9, 20, 37, .46); overflow: hidden; }
-    #fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f4c466, #ffe6a0); box-shadow: 0 0 14px rgba(255, 221, 142, .5); transition: width .2s; }
+      border: 4px solid #211b2d; outline: 3px solid #f4cd76; background: #29233b;
+      box-shadow: 8px 8px 0 #211b2d, 0 14px 36px rgba(20, 25, 39, .3); }
+    .brand-mark { width: 44px; height: 44px; display: grid; place-items: center; color: #44331e; font-size: 25px;
+      background: #f4cf78; border: 3px solid #211b2d; box-shadow: 3px 3px 0 #211b2d; }
+    .load-title { margin: 0; color: #ffe29a; font-size: clamp(28px, 5vw, 38px); line-height: 1.1; letter-spacing: .04em;
+      text-shadow: 3px 3px 0 #211b2d; }
+    .load-subtitle { margin: 0; color: #fff7df; font-size: 16px; text-shadow: 2px 2px 0 #211b2d; }
+    .load-note { margin: 0; color: #c9d9c2; font-size: 12px; font-weight: 500; }
+    #bar { width: min(320px, 70vw); height: 14px; border: 3px solid #171725; background: #111a2c; overflow: hidden; image-rendering: pixelated; }
+    #fill { width: 0; height: 100%; background: repeating-linear-gradient(90deg, #f4c466 0 12px, #ffe6a0 12px 16px); transition: width .2s; }
     #turn { display: none; z-index: 4; background: linear-gradient(180deg, #718ab1, #d8ab72 68%, #526b4a); }
     #turn b { font-size: 48px; }
     @media (orientation: portrait) and (pointer: coarse) { #turn { display: flex; } }
@@ -37,10 +34,26 @@
 <body>
   <canvas id="unity-canvas" tabindex="-1"></canvas>
   <div id="loading" class="screen">
-    <div class="ridge ridge-far"></div><div class="ridge ridge-near"></div>
+    <svg class="landscape" viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" shape-rendering="crispEdges" aria-hidden="true">
+      <rect width="320" height="180" fill="#718dbb" />
+      <rect y="80" width="320" height="18" fill="#f2b978" />
+      <rect y="98" width="320" height="12" fill="#e5a96e" />
+      <rect x="224" y="24" width="32" height="8" fill="#ffe6a0" /><rect x="216" y="32" width="48" height="8" fill="#ffe6a0" />
+      <rect x="224" y="40" width="32" height="8" fill="#ffe6a0" />
+      <path d="M0 111h36V95h20V83h16V71h16V83h16v16h24V83h16V67h16V55h16V67h16v16h20v16h24v12h28v38H0z" fill="#8d8d72" />
+      <path d="M0 124h24v-9h24v-8h24v8h24v9h32v-10h24v-9h24v9h24v10h24v-8h24v8h48v34H0z" fill="#77845b" />
+      <path d="M0 139h40v-8h24v8h32v10h24v-8h32v8h24v-10h24v10h32v-8h24v8h40v31H0z" fill="#526a49" />
+      <path d="M0 162h48v-7h24v7h40v8h32v-8h24v8h40v-8h32v8h24v-8h56v18H0z" fill="#344b40" />
+      <rect x="42" y="119" width="34" height="18" fill="#332b37" /><path d="M38 120l21-17 22 17z" fill="#8b463c" />
+      <rect x="47" y="123" width="24" height="14" fill="#e0ad71" /><rect x="55" y="128" width="8" height="9" fill="#30283a" />
+      <rect x="44" y="117" width="30" height="3" fill="#eacb87" />
+      <rect x="130" y="116" width="3" height="3" fill="#f4d28d" /><rect x="201" y="126" width="3" height="3" fill="#f4d28d" />
+      <rect x="282" y="114" width="3" height="3" fill="#f4d28d" /><rect x="104" y="143" width="4" height="4" fill="#91a66a" />
+      <rect x="248" y="151" width="4" height="4" fill="#91a66a" />
+    </svg>
     <div class="load-card">
       <div class="brand-mark" aria-hidden="true">✦</div>
-      <h1 class="load-title">НААДАМЫ</h1>
+      <h1 class="load-title">Naadamy</h1>
       <p class="load-subtitle">Naadamy is loading…</p>
       <div id="bar" role="progressbar" aria-label="Loading"><div id="fill"></div></div>
       <p class="load-note">A little village is waking up</p>
