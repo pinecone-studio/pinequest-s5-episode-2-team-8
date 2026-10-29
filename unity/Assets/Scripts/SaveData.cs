@@ -22,7 +22,7 @@ public sealed class Look
 [Serializable] public sealed class EmeeSave { public int visits, perfect; }
 /** Your own ger on one of the 8 lots. */
 /** Building a ger by hand: how many steps are done, its plot, the parts in hand and the wool on its way to felt. */
-[Serializable] public sealed class GerSave { public int stage, lot = -1, wool, fluff, mats, mistakes; public bool perfect; public List<KV> parts = new List<KV>(); }
+[Serializable] public sealed class GerSave { public int stage, lot = -1, wool, fluff, mats, mistakes; public bool perfect; public List<KV> parts = new List<KV>(); public List<int> poles = new List<int>(); } // poles: roof poles in so far in the isometric build (slots round the crown, in order)
 [Serializable] public sealed class LotSave { public int i = -1; public string roof = "blue", door = "red"; public List<string> furn = new List<string>(); }
 
 /** Progress in one heritage lesson. */
