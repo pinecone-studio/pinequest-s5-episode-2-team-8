@@ -19,8 +19,7 @@ public static partial class Bodies
         for (int ty = 0; ty < World.H; ty++) for (int tx = 0; tx < World.W; tx++)
         {
             char ch = World.g[ty, tx];
-            if (ch == 'f') Fence(tx, ty);
-            else if (ch == 'r') Rock(tx, ty);
+            if (ch == 'r') Rock(tx, ty); // (fences are pictures, like the buildings: FenceRuns)
             else if (ch == 'd') Dock(tx, ty);
         }
         Flags();
@@ -487,7 +486,39 @@ public static partial class Bodies
             cap = null;
             list.Add((art, px, py, depth, at));
         }
+        foreach (var run in FenceRuns()) // the wooden fences, painted like the buildings so they share their outline and shading
+        {
+            cap = new List<(Vector3, Vector3, Vector3, Vector3, Color)>();
+            foreach (var (tx, ty) in run) Fence(tx, ty);
+            float mx = 0, my = 0; foreach (var (tx, ty) in run) { mx += tx + 0.5f; my += ty + 0.5f; }
+            var at = new Vector3(mx / run.Count, -my / run.Count, 0);
+            var (art, px, py, depth) = Paint(cap, at);
+            cap = null;
+            list.Add((art, px, py, depth, at));
+        }
         return list;
+    }
+    /** The fence tiles cut into straight runs: each row of fence across, then what is left of each column down. One straight
+     *  picture each, like a wall, so someone in a pen is wholly in front of or behind each side of it. */
+    static List<List<(int x, int y)>> FenceRuns()
+    {
+        var runs = new List<List<(int, int)>>(); var used = new HashSet<(int, int)>();
+        bool F(int x, int y) => World.At(x, y) == 'f';
+        for (int ty = 0; ty < World.H; ty++) for (int tx = 0; tx < World.W; tx++)
+        {
+            if (!F(tx, ty) || F(tx - 1, ty) || !F(tx + 1, ty)) continue; // the start of a row of at least two
+            var run = new List<(int, int)>();
+            for (int x = tx; F(x, ty); x++) { run.Add((x, ty)); used.Add((x, ty)); }
+            runs.Add(run);
+        }
+        for (int tx = 0; tx < World.W; tx++) for (int ty = 0; ty < World.H; ty++)
+        {
+            if (!F(tx, ty) || used.Contains((tx, ty)) || (F(tx, ty - 1) && !used.Contains((tx, ty - 1)))) continue; // the start of what is left of a column
+            var run = new List<(int, int)>();
+            for (int y = ty; F(tx, y) && !used.Contains((tx, y)); y++) { run.Add((tx, y)); used.Add((tx, y)); }
+            runs.Add(run);
+        }
+        return runs;
     }
 
     /** Paints quads (world points) as seen by the isometric camera, at 16 pixels a tile; pivot: where the point at lands in the picture. */
