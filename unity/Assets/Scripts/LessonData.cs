@@ -45,10 +45,10 @@ public static class LessonData
                     ["title"] = T("1. Шалаа тавь", "1. Lay the floor"),
                     ["text"] = T("Тэгш газар сонгоод эхлээд шалаа тавина. Доорх тавиураас зөв хэсгийг сонгоод гэрэлтэж буй газар руу чирээрэй.", "Pick flat ground and lay the floor first. Pick the right part from the tray below and drag it onto the glowing spot."),
                     ["options"] = A(
-                        new D { ["t"] = T("Шал", "Floor"), ["ok"] = true },
-                        new D { ["t"] = T("Хана", "Walls (khana)"), ["ok"] = false },
-                        new D { ["t"] = T("Хаалга", "Door"), ["ok"] = false },
-                        new D { ["t"] = T("Тооно", "Crown (toono)"), ["ok"] = false }
+                        new D { ["t"] = T("Шал", "Floor"), ["img"] = "part:shal", ["ok"] = true },
+                        new D { ["t"] = T("Хана", "Walls (khana)"), ["img"] = "part:khana", ["ok"] = false },
+                        new D { ["t"] = T("Хаалга", "Door"), ["img"] = "part:khaalga", ["ok"] = false },
+                        new D { ["t"] = T("Тооно", "Crown (toono)"), ["img"] = "part:toono", ["ok"] = false }
                     ),
                     ["after"] = T("Зөв! Тэгш газар шалаа тавьснаар гэр тэгш, бат бөх болно.", "Right! A level floor keeps the ger straight and strong."),
                     ["drop"] = A(27, 60, 66, 7),
@@ -61,10 +61,10 @@ public static class LessonData
                     ["title"] = T("2. Ханаа авчир", "2. Bring the walls"),
                     ["text"] = T("Хана бол эвхэгддэг модон сараалж. Эвхээтэй ханыг шалан дээр чирж тавь.", "The khana is a folding wooden lattice. Drag the folded walls onto the floor."),
                     ["options"] = A(
-                        new D { ["t"] = T("Хана", "Walls (khana)"), ["ok"] = true },
-                        new D { ["t"] = T("Хаалга", "Door"), ["ok"] = false },
-                        new D { ["t"] = T("Тооно", "Crown (toono)"), ["ok"] = false },
-                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["ok"] = false }
+                        new D { ["t"] = T("Хана", "Walls (khana)"), ["img"] = "part:khana", ["ok"] = true },
+                        new D { ["t"] = T("Хаалга", "Door"), ["img"] = "part:khaalga", ["ok"] = false },
+                        new D { ["t"] = T("Тооно", "Crown (toono)"), ["img"] = "part:toono", ["ok"] = false },
+                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["img"] = "part:uni", ["ok"] = false }
                     ),
                     ["after"] = T("Хана эвхээтэй ирлээ. Одоо дэлгэе!", "The walls are here, still folded. Now let’s open them!"),
                     ["drop"] = A(30, 46, 60, 18),
@@ -89,10 +89,10 @@ public static class LessonData
                     ["title"] = T("3. Хаалгаа тавь", "3. Put in the door"),
                     ["text"] = T("Хоёр ханын дунд хаалгаа уяна. Хаалгыг урд талын гэрэлтэж буй газар руу чирээрэй.", "The door is tied between two walls. Drag it onto the glowing spot at the front."),
                     ["options"] = A(
-                        new D { ["t"] = T("Хаалга", "Door"), ["ok"] = true },
-                        new D { ["t"] = T("Тооно", "Crown (toono)"), ["ok"] = false },
-                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["ok"] = false },
-                        new D { ["t"] = T("Эсгий", "Felt"), ["ok"] = false }
+                        new D { ["t"] = T("Хаалга", "Door"), ["img"] = "part:khaalga", ["ok"] = true },
+                        new D { ["t"] = T("Тооно", "Crown (toono)"), ["img"] = "part:toono", ["ok"] = false },
+                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["img"] = "part:uni", ["ok"] = false },
+                        new D { ["t"] = T("Эсгий", "Felt"), ["img"] = "part:esgii", ["ok"] = false }
                     ),
                     ["after"] = T("Хаалгыг урагш харуулдаг: нар сайн тусаж, хойд зүгийн хүйтэн салхинаас хамгаалагдана.", "The door faces south: the sun shines in and the cold north wind stays out."),
                     ["drop"] = A(52, 47, 16, 18),
@@ -105,10 +105,10 @@ public static class LessonData
                     ["title"] = T("4. Тоонгоо авчир", "4. Bring the crown"),
                     ["text"] = T("Гэрийн “нүд” болох дугуй тооно хоёр баганатай. Тоонгоо шалны голд чирж тавь.", "The round toono, the ger’s “eye”, stands on two posts. Drag it to the middle of the floor."),
                     ["options"] = A(
-                        new D { ["t"] = T("Тооно", "Crown (toono)"), ["ok"] = true },
-                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["ok"] = false },
-                        new D { ["t"] = T("Эсгий", "Felt"), ["ok"] = false },
-                        new D { ["t"] = T("Бүрээс", "White cover"), ["ok"] = false }
+                        new D { ["t"] = T("Тооно", "Crown (toono)"), ["img"] = "part:toono", ["ok"] = true },
+                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["img"] = "part:uni", ["ok"] = false },
+                        new D { ["t"] = T("Эсгий", "Felt"), ["img"] = "part:esgii", ["ok"] = false },
+                        new D { ["t"] = T("Бүрээс", "White cover"), ["img"] = "part:buurees", ["ok"] = false }
                     ),
                     ["after"] = T("Тоонгоо авчирлаа. Одоо хоёр хүн хамт өргөнө!", "The toono is here. Now two people lift it together!"),
                     ["drop"] = A(48, 50, 24, 12),
@@ -132,10 +132,10 @@ public static class LessonData
                     ["title"] = T("5. Униа авчир", "5. Bring the roof poles"),
                     ["text"] = T("Тооноос хана хүртэл униа тавина. Униа гэр рүү чирээрэй.", "The uni go from the toono down to the walls. Drag the poles onto the ger."),
                     ["options"] = A(
-                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["ok"] = true },
-                        new D { ["t"] = T("Эсгий", "Felt"), ["ok"] = false },
-                        new D { ["t"] = T("Бүрээс", "White cover"), ["ok"] = false },
-                        new D { ["t"] = T("Бүслүүр", "Ropes"), ["ok"] = false }
+                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["img"] = "part:uni", ["ok"] = true },
+                        new D { ["t"] = T("Эсгий", "Felt"), ["img"] = "part:esgii", ["ok"] = false },
+                        new D { ["t"] = T("Бүрээс", "White cover"), ["img"] = "part:buurees", ["ok"] = false },
+                        new D { ["t"] = T("Бүслүүр", "Ropes"), ["img"] = "part:buslvvr", ["ok"] = false }
                     ),
                     ["after"] = T("Унь бэлэн. Одоо нэг нэгээр нь тооно руу шургуулъя!", "The poles are here. Now push them into the toono one by one!"),
                     ["drop"] = A(32, 30, 56, 17),
@@ -162,10 +162,10 @@ public static class LessonData
                     ["title"] = T("6. Эсгийгээр бүрэ", "6. Wrap it in felt"),
                     ["text"] = T("Хана, униа дулаан эсгийгээр бүрнэ. Доорх тавиураас зөв хэсгийг сонгоод гэрэлтэж буй газар руу чирээрэй.", "Felt goes over the walls and the roof to keep it warm. Pick the right part from the tray below and drag it onto the glowing spot."),
                     ["options"] = A(
-                        new D { ["t"] = T("Эсгий", "Felt"), ["ok"] = true },
-                        new D { ["t"] = T("Бүрээс", "White cover"), ["ok"] = false },
-                        new D { ["t"] = T("Бүслүүр", "Ropes"), ["ok"] = false },
-                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["ok"] = false }
+                        new D { ["t"] = T("Эсгий", "Felt"), ["img"] = "part:esgii", ["ok"] = true },
+                        new D { ["t"] = T("Бүрээс", "White cover"), ["img"] = "part:buurees", ["ok"] = false },
+                        new D { ["t"] = T("Бүслүүр", "Ropes"), ["img"] = "part:buslvvr", ["ok"] = false },
+                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["img"] = "part:uni", ["ok"] = false }
                     ),
                     ["after"] = T("Хонины ноосоор хийсэн эсгий өвлийн хүйтэнд дулаан байлгадаг.", "Felt made from sheep’s wool keeps out the winter cold."),
                     ["drop"] = A(30, 30, 60, 35),
@@ -177,10 +177,10 @@ public static class LessonData
                     ["title"] = T("7. Бүрээсээ хуч", "7. Put on the cover"),
                     ["text"] = T("Эсгийн гадуур цагаан бүрээс хучиж борооноос хамгаална. Доорх тавиураас зөв хэсгийг сонгоод гэрэлтэж буй газар руу чирээрэй.", "The white cover goes over the felt to keep the rain out. Pick the right part from the tray below and drag it onto the glowing spot."),
                     ["options"] = A(
-                        new D { ["t"] = T("Бүрээс", "White cover"), ["ok"] = true },
-                        new D { ["t"] = T("Бүслүүр", "Ropes"), ["ok"] = false },
-                        new D { ["t"] = T("Эсгий", "Felt"), ["ok"] = false },
-                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["ok"] = false }
+                        new D { ["t"] = T("Бүрээс", "White cover"), ["img"] = "part:buurees", ["ok"] = true },
+                        new D { ["t"] = T("Бүслүүр", "Ropes"), ["img"] = "part:buslvvr", ["ok"] = false },
+                        new D { ["t"] = T("Эсгий", "Felt"), ["img"] = "part:esgii", ["ok"] = false },
+                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["img"] = "part:uni", ["ok"] = false }
                     ),
                     ["after"] = T("Цагаан бүрээс бороо, нарнаас хамгаалж, гэрийг гоё харагдуулдаг.", "The white cover protects from rain and sun and makes the ger shine."),
                     ["drop"] = A(30, 30, 60, 35),
@@ -193,10 +193,10 @@ public static class LessonData
                     ["title"] = T("8. Бүслүүрээ авчир", "8. Bring the ropes"),
                     ["text"] = T("Гурван бүслүүрийг гэрийн гадуур ороож уяна. Бүслүүрийг гэр рүү чирээрэй.", "Three ropes are tied round the ger. Drag the ropes onto the ger."),
                     ["options"] = A(
-                        new D { ["t"] = T("Бүслүүр", "Ropes"), ["ok"] = true },
-                        new D { ["t"] = T("Бүрээс", "White cover"), ["ok"] = false },
-                        new D { ["t"] = T("Эсгий", "Felt"), ["ok"] = false },
-                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["ok"] = false }
+                        new D { ["t"] = T("Бүслүүр", "Ropes"), ["img"] = "part:buslvvr", ["ok"] = true },
+                        new D { ["t"] = T("Бүрээс", "White cover"), ["img"] = "part:buurees", ["ok"] = false },
+                        new D { ["t"] = T("Эсгий", "Felt"), ["img"] = "part:esgii", ["ok"] = false },
+                        new D { ["t"] = T("Унь", "Roof poles (uni)"), ["img"] = "part:uni", ["ok"] = false }
                     ),
                     ["after"] = T("Одоо бүслүүр бүрийг чангалъя!", "Now pull each rope tight!"),
                     ["drop"] = A(30, 46, 60, 18),
