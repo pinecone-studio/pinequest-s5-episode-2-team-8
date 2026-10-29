@@ -31,6 +31,7 @@ public sealed partial class Game
             Item("✍️", Loc.L("Монгол бичгийн академи", "Mongol script academy"), () => g.Open(new BichigPage()));
             Item("🐕", Loc.L("Басартай ярилцах", "Talk with Basar"), () => g.OpenBasar());
             Item("🏅", Loc.L("Миний амжилтууд", "My achievements"), () => g.Open(new AchievementsPage()));
+            Item("🏆", Loc.L("Шилдэгүүд", "Leaderboard"), () => g.Open(new BoardModal()));
             Item("🛂", Loc.L("Аймгийн паспорт", "Aimag passport"), () => g.Open(new PassportPage()));
             Item("👕", Loc.L("Хувцас", "Wardrobe"), () => g.Open(new WardrobeModal()));
             Item("🎨", Loc.L("Дүрээ өөрчлөх", "Change my character"), () => g.Open(new CreatePage(false)));
