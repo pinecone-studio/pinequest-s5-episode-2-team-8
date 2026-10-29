@@ -87,6 +87,10 @@ public static class Family
             case "join-locked": return Loc.L($"Нэгдэх гэж олон удаа буруу ПИН код орууллаа. {Wait(r["wait"].I)} дараа дахин оролдоорой.", $"Too many wrong PINs when joining. Please try again in {Wait(r["wait"].I)}.");
             case "recovery-locked": return Loc.L($"Сэргээх код олон удаа буруу орууллаа. {Wait(r["wait"].I)} дараа дахин оролдоорой.", $"Too many wrong recovery codes. Please try again in {Wait(r["wait"].I)}.");
             case "confirm": return Loc.L("Гэр бүлийн код таарсангүй. Яг адилхан бичээрэй.", "The family code didn't match. Type it exactly.");
+            case "email-off": return Loc.L("Энэ сервер дээр имэйл тайлан хараахан асаагүй байна.", "Email reports aren't turned on on this server yet.");
+            case "email-busy": return Loc.L($"Өнөөдөр хэт олон баталгаажуулах имэйл илгээлээ. {Wait(r["wait"].I)} дараа дахин оролдоорой.", $"Too many confirmation emails today. Please try again in {Wait(r["wait"].I)}.");
+            case "email-failed": return Loc.L("Имэйл илгээж чадсангүй. Хаягаа шалгаад дараа дахин оролдоорой.", "The email could not be sent. Check the address and try again later.");
+            case "email-invalid": return Loc.L("Имэйл хаяг буруу байх шиг байна. Жишээ нь: name@gmail.com", "That email address doesn't look right. For example: name@gmail.com");
             default: return Loc.L("Алдаа гарлаа. Дахин оролдоорой.", "Something went wrong. Try again.");
         }
     }
@@ -173,6 +177,21 @@ public static class Family
             done(r);
         });
 
+    /** Looks like an email address (something@something.xx, no spaces): the server checks it for real. */
+    public static bool EmailOk(string e)
+    {
+        e = (e ?? "").Trim(); int at = e.IndexOf('@'), dot = e.LastIndexOf('.');
+        return e.Length <= 254 && !e.Any(char.IsWhiteSpace) && at > 0 && at == e.LastIndexOf('@') && dot > at + 1 && dot < e.Length - 1;
+    }
+    /** The weekly email for the grown-ups (PROTOCOL.md, "Parent email"), with the PIN: `email` gets a confirm mail (set-email),
+     *  null forgets the address (remove-email). The masked address the server shows is kept for the dashboard. */
+    public static IEnumerator Email(Game g, string typedPin, string email, Action<J> done) =>
+        Ask(g, email != null ? "set-email" : "remove-email", PinField("pin", typedPin) + PinField("email", email?.Trim()), r =>
+        {
+            if (r["ok"].B) { g.App.emailTo = email != null ? r["email"]["to"].S ?? "" : ""; g.App.emailFam = g.App.familyCode ?? ""; g.App.Save(); }
+            done(r["reason"].S == "invalid" && email != null ? Fail("email-invalid") : r);
+        });
+
     /** A grown-up's change to any child of the family, from this device (which plays as one of its children): new pictures
      *  ("pictures", for a child who forgot them) or taking a child out ("remove"), both with the PIN. This device leaves the
      *  family when none of its children are in it any more. */
@@ -212,7 +231,8 @@ public static class Family
             if (string.IsNullOrWhiteSpace(p.server)) p.server = server.Trim();
             p.Save();
             if (!known) g.App.profiles.Add(pid);
-            g.App.familyCode = r["code"].S; g.App.server = server.Trim(); g.App.Save();
+            g.App.familyCode = r["code"].S; g.App.server = server.Trim();
+            g.App.emailTo = r["email"]["to"].S ?? ""; g.App.emailFam = r["code"].S; g.App.Save(); // the weekly email's masked address: only login shows it
             done(r, p);
         });
     }

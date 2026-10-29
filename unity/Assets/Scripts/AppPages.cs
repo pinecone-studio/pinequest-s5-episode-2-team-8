@@ -171,7 +171,7 @@ public sealed partial class Game
                 joinCode = GUILayout.TextField(joinCode, 9, new GUIStyle(g.sBtn) { alignment = TextAnchor.MiddleLeft }, GUILayout.MinHeight(g.U(38)));
                 if (GUILayout.Button(Loc.L("Нэгдэх", "Join"), g.sPrimary, GUILayout.Width(g.U(100)), GUILayout.MinHeight(g.U(38))) && !busy) g.Later(() =>
                 {
-                    string code = Family.Clean(joinCode);
+                    string code = Family.Clean(joinCode); mailErr = false;
                     if (code.Length != 8) { famErr = Loc.L("8 үсэг, тоотой кодоо бичээрэй", "Write the 8-letter code"); return; }
                     busy = true; famErr = "";
                     g.StartCoroutine(Family.Post(Family.ServerOf(g, g.V), "{\"act\":\"members\",\"code\":" + J.Quote(code) + "}", r =>
@@ -200,6 +200,8 @@ public sealed partial class Game
                         if (membersCode != c) return;
                         if (r["reason"].S == "no-family" && c == app.familyCode) { Family.Gone(g, null); membersCode = null; return; } // erased, or its last child taken out
                         members = r["ok"].B ? r["members"].ToList() : new List<J>(); needsPin = r["needsPin"].B;
+                        var em = r["email"]; mail = !r["ok"].B ? -1 : !em.IsObject ? 0 : em["confirmed"].B ? 2 : 1; // members shows only { confirmed }
+                        if (mail == 0 && app.emailFam == c) { app.emailTo = ""; app.Save(); } // stopped from a report's link, or on another device
                     }));
                 }
                 if (members == null) g.Small(Loc.L("Ачаалж байна…", "Loading…"));
@@ -233,10 +235,50 @@ public sealed partial class Game
                     g.EndRow();
                 }
             }
-            if (famErr != "") GUILayout.Label($"<color=#e14b3d>{famErr}</color>", g.sLabel);
+            if (famErr != "" && !mailErr) GUILayout.Label($"<color=#e14b3d>{famErr}</color>", g.sLabel);
             GUILayout.EndVertical();
+            EmailCard(g);
             PinCard(g);
         }
+        // the weekly email for the grown-ups (Family.Email): -1 not known yet, 0 none, 1 waiting for its confirm link, 2 confirmed
+        int mail = -1; string mailText = ""; bool mailErr; // mailErr: famErr is the email's, shown in its card
+        void EmailCard(Game g)
+        {
+            var app = g.App; bool fam = !string.IsNullOrEmpty(app.familyCode);
+            string to = app.emailFam == app.familyCode ? app.emailTo : "";
+            GUILayout.BeginVertical(g.sPanel);
+            GUILayout.Label("<b>" + Loc.L("Том хүнд долоо хоног бүр имэйл", "Weekly email for grown-ups") + "</b>", g.sTitle);
+            g.Small(Loc.L("Долоо хоногт нэг удаа хүүхэд бүрийн авсан XP, дуусгасан хичээл, шинэ амжилтыг имэйлээр илгээнэ. Хүссэн үедээ зогсоож болно.", "Once a week: each child's XP, finished lessons and new badges, by email. You can stop it any time."));
+            if (!fam) g.Small(Loc.L("Эхлээд дээр гэр бүлийн код үүсгээрэй.", "Make a family code above first."));
+            else if (mail < 0) g.Small(Loc.L("Ачаалж байна…", "Loading…"));
+            else if (mail == 2)
+            {
+                GUILayout.Label("<color=#2ea35f>√</color> " + (to != "" ? to : Loc.L("Имэйл хаяг баталгаажсан", "The address is confirmed")), g.sLabel);
+                if (g.Btn(Loc.L("Имэйлийг зогсоох", "Stop the email"), false, 36, !busy)) g.Later(RemoveEmail(g));
+            }
+            else
+            {
+                if (mail == 1)
+                {
+                    GUILayout.Label((to != "" ? to + ": " : "") + Loc.L("Имэйлээ шалгаад доторх товчийг дарна уу.", "Check your inbox and press the button in the email."), g.sLabel);
+                    if (g.Btn(Loc.L("Дарсан, дахин шалгах", "Done, check again"), false, 36, !busy)) g.Later(() => membersCode = null);
+                    g.Small(Loc.L("Имэйл ирээгүй бол хаягаа дахин бичээд илгээгээрэй:", "No email? Write the address again and send it:"));
+                }
+                mailText = g.Field(mailText, 254, "name@gmail.com");
+                if (g.Btn(busy ? "…" : mail == 1 ? Loc.L("Дахин илгээх", "Send again") : Loc.L("Баталгаажуулах имэйл илгээх", "Send confirmation"), true, 40, !busy)) g.Later(() =>
+                {
+                    string e = mailText.Trim();
+                    if (!Family.EmailOk(e)) { famErr = Family.Why(J.Parse("{\"reason\":\"email-invalid\"}")); mailErr = true; return; }
+                    WithPin(g, pin => Run(g, Family.Email(g, pin, e, r => Done(g, r, r["email"]["confirmed"].B ? Loc.L("Энэ хаяг аль хэдийн баталгаажсан", "This address is already confirmed")
+                        : Loc.L("Имэйл илгээлээ. Доторх товчийг дарж баталгаажуулаарай.", "Email sent. Press the button in it to confirm."), null, true)), true));
+                });
+                if (mail == 1 && g.Btn(Loc.L("Имэйл хаягийг арилгах", "Remove the address"), false, 36, !busy)) g.Later(RemoveEmail(g));
+            }
+            if (famErr != "" && mailErr) GUILayout.Label($"<color=#e14b3d>{famErr}</color>", g.sLabel);
+            GUILayout.EndVertical();
+        }
+        Action RemoveEmail(Game g) => () => g.Open(new ConfirmModal(Loc.L("Имэйлийг зогсоох уу?", "Stop the weekly email?"), Loc.L("Имэйл хаягийг серверээс устгана. Дараа нь дахин нэмж болно.", "The address is deleted from the server. You can add one again later."),
+            () => WithPin(g, pin => Run(g, Family.Email(g, pin, null, r => Done(g, r, Loc.L("Имэйлийг зогсоолоо", "The weekly email is stopped"), null, true)), true))));
         /** The grown-up PIN: change it (here and for the family), and delete everything the family has on the server. */
         void PinCard(Game g)
         {
@@ -305,7 +347,7 @@ public sealed partial class Game
             AskPin(g, Loc.L("Гэр бүлийн ПИН кодоо оруулаарай:", "Enter the family PIN:"));
         }
         void AskPin(Game g, string text) => g.Open(new PinModal(Loc.L("Том хүний ПИН код", "Grown-up PIN"), text, pin => { Family.pin = typedPin = pin; pinAct?.Invoke(pin); }));
-        void Run(Game g, System.Collections.IEnumerator request) { busy = true; famErr = ""; g.StartCoroutine(request); }
+        void Run(Game g, System.Collections.IEnumerator request, bool email = false) { busy = true; famErr = ""; mailErr = email; g.StartCoroutine(request); }
         /** A family request answered: a toast, or why not; a new recovery code is shown once. A refused PIN (this device's may be
          *  out of date: changed on another device) is asked again; with `keepPin`, a re-typed one that worked becomes this
          *  device's PIN. */
