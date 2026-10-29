@@ -304,6 +304,15 @@ public static class Scenes
     public static void Shagai(PxCanvas x, SceneState st, float t)
     {
         R(x, 0, 0, W, H, "#8a4b1f"); R(x, 6, 6, W - 12, H - 12, "#c8483c"); R(x, 10, 10, W - 20, H - 20, "#e9a24a");
+        if (st.focus == "shoot") // knucklebone shooting: flick the piece up the board at three target bones; each hit (sub) knocks one off
+        {
+            R(x, 50, 8, 20, 66, K.woodD); R(x, 51, 9, 18, 64, K.wood);
+            int down = Js.Round(st.sub * 3); float fly = t - st.fx;
+            for (int i = 0; i < 3; i++) { int X = 53 + i * 5; if (i < down) { P(x, X + 1 + (i - 1) * 4, 4, "#f4e6c4"); P(x, X + 2 + (i - 1) * 4, 5, "#8a6a42"); } else Blob(x, X + 2, 13, 2, 2, "#f4e6c4", "#8a6a42"); }
+            int py = fly < 0.35f ? Js.Round(62 - fly / 0.35f * 48) : 62 + Js.Round(st.pull * 6);
+            R(x, 58, py, 4, 3, "#f4e6c4"); P(x, 59, py, "#ffffff");
+            return;
+        }
         for (int i = 0; i < 4; i++)
         {
             string side = st.sides != null && i < st.sides.Length ? st.sides[i] : null; int X = 18 + i * 24, Y = 30 + (i % 2) * 6;

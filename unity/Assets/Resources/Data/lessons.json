@@ -2364,7 +2364,7 @@
         "n": 4,
         "roll": true,
         "label": {
-          "mn": "Шагай хаях",
+          "mn": "Шагай шидэх",
           "en": "Throw a shagai"
         },
         "title": {
@@ -2372,13 +2372,19 @@
           "en": "Throw the bones!"
         },
         "text": {
-          "mn": "4 удаа дарж дөрвөн шагайгаа хаяарай.",
-          "en": "Tap 4 times to throw four shagai."
+          "mn": "Дөрвөн шагайгаа эсгий дээр нэг нэгээр нь чирж шид!",
+          "en": "Drag four shagai onto the felt, one by one, to throw them!"
         },
         "after": {
           "mn": "Аль талаар нь буусныг харж тоолоорой!",
           "en": "See which side each one landed on!"
-        }
+        },
+        "drop": [
+          12,
+          12,
+          96,
+          44
+        ]
       },
       {
         "type": "pick",
@@ -2453,6 +2459,38 @@
         }
       },
       {
+        "type": "drag",
+        "stage": 0,
+        "set": {
+          "focus": "shoot"
+        },
+        "dir": "up",
+        "release": true,
+        "need": 0.7,
+        "n": 3,
+        "icon": "👆",
+        "label": {
+          "mn": "Шагай харвах",
+          "en": "Flick it"
+        },
+        "title": {
+          "mn": "Шагай харваач!",
+          "en": "Knucklebone shooting!"
+        },
+        "text": {
+          "mn": "Шагай харвааны үед модон тавцан дээгүүр жижиг “сум”-ыг хуруугаараа шувтлан харваж, цаадах шагайн байг унагадаг. Дээш татаад тавь!",
+          "en": "In knucklebone shooting you flick a small piece along a wooden board to knock down a target of shagai. Pull up and let go!"
+        },
+        "low": {
+          "mn": "Илүү хүчтэй харва!",
+          "en": "Flick harder!"
+        },
+        "after": {
+          "mn": "Онолоо! Шагай харвааг багаараа, дуу хөгжимтэй тоглодог.",
+          "en": "Hit! Knucklebone shooting is played in teams, with songs and cheering."
+        }
+      },
+      {
         "type": "pick",
         "title": {
           "mn": "Шагай харваа",
@@ -2484,7 +2522,10 @@
             },
             "ok": false
           }
-        ]
+        ],
+        "set": {
+          "focus": null
+        }
       },
       {
         "type": "tf",
