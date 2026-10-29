@@ -222,23 +222,31 @@ public sealed partial class Game
         void LessonCard(Game g, J l, float w)
         {
             string id = l["id"].S; var pr = g.V.learn.Find(x => x.id == id);
+            bool locked = !Game.LessonUnlocked(g, id);     // story mode: an earlier lesson is still open
             if (!thumbs.TryGetValue(id, out var live)) { thumbs[id] = live = new Live(Scenes.W, Scenes.H); var st = new SceneState { sub = 1 }; Lessons.Apply(st, l["final"]); Scenes.ByName(l["scene"].S)(live.c, st, 2); }
             float pad = g.U(14), iw = w - pad * 2, ih = iw * Scenes.H / Scenes.W;
             var ds = new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(13)), normal = { textColor = Px.Col("#6b4220") } }; float dh = Mathf.Max(g.U(60), ds.CalcHeight(new GUIContent(l["desc"].T.ToString()), iw)); // a long description makes the card taller
             var r = GUILayoutUtility.GetRect(w, ih + g.U(90) + dh, GUILayout.Width(w), GUILayout.Height(ih + g.U(90) + dh));
-            if (GUI.Button(r, "", g.sPanel)) g.Later(() => g.OpenLesson(id));
+            if (GUI.Button(r, "", g.sPanel))
+            {
+                if (locked) g.Later(() => g.Toast(Loc.L("Өмнөх хичээлийг эхлээд дуусга.", "Finish the earlier lesson first.")));
+                else g.Later(() => g.OpenLesson(id));
+            }
+            var saved = GUI.color; if (locked) GUI.color = new Color(saved.r, saved.g, saved.b, 0.45f);
             live.ShowAt(new Rect(r.x + pad, r.y + pad, iw, ih));
             float y = r.y + pad + ih + g.U(10);
             var ic = Emo.Icon(l["icon"].S); if (ic != null) GUI.DrawTexture(new Rect(r.x + pad, y + g.U(2), g.U(20), g.U(20)), g.Tex(ic), ScaleMode.ScaleToFit);
             GUI.Label(new Rect(r.x + pad + g.U(26), y, iw - g.U(26), g.U(26)), l["title"].T.ToString(), new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(18)), wordWrap = false });
             GUI.Label(new Rect(r.x + pad, y + g.U(30), iw, dh), l["desc"].T.ToString(), ds);
+            GUI.color = saved;
             float tx = r.x + pad, ty = r.yMax - pad - g.U(24);
             void Tag(string text, string col)
             {
                 var ts = new GUIStyle(g.sWhite) { font = g.sLabel.font, fontSize = Mathf.RoundToInt(g.U(11)), normal = { textColor = Px.Col(col) } };
                 float tw = ts.CalcSize(new GUIContent(text)).x + g.U(4); GUI.Label(new Rect(tx, ty, tw, g.U(22)), text, ts); tx += tw + g.U(6);
             }
-            Tag(pr != null && pr.done ? "✓ " + Loc.L("Сурсан", "Learned") : Loc.L("Шинэ", "New"), pr != null && pr.done ? "#2e7d32" : "#344054");
+            if (locked) Tag("🔒 " + Loc.L("Түгжээтэй", "Locked"), "#8a6d3b");
+            else Tag(pr != null && pr.done ? "✓ " + Loc.L("Сурсан", "Learned") : Loc.L("Шинэ", "New"), pr != null && pr.done ? "#2e7d32" : "#344054");
             if (pr != null && pr.family > 0) Tag(Loc.L("Хамт хийсэн", "Done together"), "#c2427e");
             if (id == "ger" && !(pr != null && pr.done)) Tag(Loc.L("Нутагт гэр барих эрх нээнэ", "Unlocks your own ger in Nutag"), "#c46d12");
         }

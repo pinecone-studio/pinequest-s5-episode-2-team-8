@@ -19,6 +19,8 @@ public sealed class AppState
     public string server = "", familyCode = "";   // the server this device last used, and its family code (Family.cs)
     public string emailTo = "", emailFam = "";     // the weekly email's masked address ("k***@gmail.com") and the family it is for (Family.Email)
     public string playMode = "";                   // "solo": play alone, never connect · "multi": connect and play with others (ModeModal)
+    public string gameMode = "";                   // "story": ordered chapters, locks later lessons · "roam": open heritage school (GameModeModal). Empty until the intro cinematic asks.
+    public bool introSeen;                         // the intro cinematic has already played once on this device, so the next login goes straight to the mode choice (IntroCinematicModal)
     // the device's grown-up PIN (DevicePin in Family.cs): only PBKDF2 hashes with their salts, the wrong tries and the lock
     public string pinHash = "", pinSalt = "", recHash = "", recSalt = "";
     public int pinFails, pinLocks; public long pinUntil;
