@@ -60,6 +60,9 @@ public sealed partial class Game
             GUILayout.BeginHorizontal(); g.Text(Loc.L("Дуу", "Sound")); GUILayout.FlexibleSpace();
             if (GUILayout.Button(g.App.sound ? Loc.L("Асаалттай", "On") : Loc.L("Унтраалттай", "Off"), g.App.sound ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) { g.App.sound = !g.App.sound; Sfx.On = g.App.sound; g.App.Save(); }
             GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal(); g.Text(Loc.L("Түүхийн яриа (дуу хоолой)", "Story voices (Mongolian)")); GUILayout.FlexibleSpace();
+            if (GUILayout.Button(g.App.voice ? Loc.L("Асаалттай", "On") : Loc.L("Унтраалттай", "Off"), g.App.voice ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) { g.App.voice = !g.App.voice; if (!g.App.voice) Voice.Stop(); g.App.Save(); }
+            GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal(); g.Text(Loc.L("Арын хөгжим", "Background music")); GUILayout.FlexibleSpace();
             if (GUILayout.Button(Music.On ? Loc.L("Асаалттай", "On") : Loc.L("Унтраалттай", "Off"), Music.On ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(36)))) Music.Toggle();
             GUILayout.EndHorizontal();

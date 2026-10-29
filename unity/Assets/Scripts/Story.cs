@@ -100,7 +100,7 @@ public sealed partial class Game
         public readonly List<Actor> actors = new List<Actor>();
         public Stage stage;
         // what is shown over it
-        sealed class Line { public string who, expr, text; public float shown, born; public bool done; public string[] choices; public int picked = -1; }
+        sealed class Line { public string who, expr, text; public float shown, born; public bool done; public string[] choices; public int picked = -1; public AudioClip clip; } // clip: the line spoken (Voice.cs)
         Line line; string titleBig, titleSmall; float titleT0 = -99, titleDur;
         string cardTitle, cardText, cardSrc; bool cardDone = true;
         float lb, lbTo = 1, fade = 1, fadeTo; Color fadeCol = Color.black;
@@ -127,7 +127,7 @@ public sealed partial class Game
             if (first) { var got = g.Reward(80, 120); g.Toast(Loc.L($"Бүлэг дууслаа! +{got.coins} зоос", $"Chapter finished! +{got.coins} coins")); g.Confetti(90); Sfx.Win(); }
             g.Later(g.Close);
         }
-        public override void Closed(Game g) { if (co != null) g.StopCoroutine(co); }
+        public override void Closed(Game g) { if (co != null) g.StopCoroutine(co); Voice.Stop(); }
 
         // ---------------------------------------------------------------- script commands
         public void Bg(string id, float cam = 0, string fx = null) { bgId = id; layers = Enumerable.Range(0, 4).Select(i => Art.Get($"story_{id}_{i}")).ToArray(); camX = camA = camB = cam; camT0 = -9; this.fx = fx; parts.Clear(); }
@@ -151,15 +151,17 @@ public sealed partial class Game
         public IEnumerator Say(string who, string expr, string mn, string en)
         {
             if (skipping) yield break;
-            var l = line = new Line { who = who, expr = expr, text = Loc.L(mn, en), born = Time.time };
+            var l = line = new Line { who = who, expr = expr, text = Loc.L(mn, en), born = Time.time, clip = Voice.Speak(who, mn) };
             while (!l.done && !skipping) yield return null;
+            if (l.clip != null) Voice.Stop();
             if (line == l) line = null;
         }
         /** A question with answers; lastPick is the answer's index. */
         public IEnumerator Ask(string who, string expr, Tx q, params Tx[] answers)
         {
-            var l = line = new Line { who = who, expr = expr, text = q.ToString(), born = Time.time, choices = answers.Select(a => a.ToString()).ToArray() };
+            var l = line = new Line { who = who, expr = expr, text = q.ToString(), born = Time.time, choices = answers.Select(a => a.ToString()).ToArray(), clip = Voice.Speak(who, q.mn) };
             while (!l.done) yield return null;
+            if (l.clip != null) Voice.Stop();
             lastPick = l.picked; if (line == l) line = null;
         }
         /** A parchment card with a fact from the sources, and where it is written. */
@@ -254,9 +256,10 @@ public sealed partial class Game
             {
                 int before = (int)l.shown; char c = l.text[Mathf.Min(before, l.text.Length - 1)];
                 float sp = 38; if (".!?…".IndexOf(c) >= 0) sp /= 6; else if (",—;:".IndexOf(c) >= 0) sp /= 3;
+                if (l.clip != null) sp = l.text.Length / Mathf.Max(0.5f, l.clip.length * 0.9f); // spoken: the words keep pace with the voice
                 l.shown = Mathf.Min(l.text.Length, l.shown + dt * sp);
                 string v = WHO.TryGetValue(l.who, out var w) ? w.voice : "guide";
-                for (int i = before; i < (int)l.shown; i++) if (char.IsLetterOrDigit(l.text[i]) && i % 3 == 0) Sfx.Blip(v, 1 + Mathf.Sin(i * 1.3f) * 0.05f);
+                if (l.clip == null) for (int i = before; i < (int)l.shown; i++) if (char.IsLetterOrDigit(l.text[i]) && i % 3 == 0) Sfx.Blip(v, 1 + Mathf.Sin(i * 1.3f) * 0.05f);
             }
             if (stage != null) { stage.Tick(this, dt); camX = stage.camX; }
             Weather(dt);
