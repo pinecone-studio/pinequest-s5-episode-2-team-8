@@ -10,9 +10,9 @@ using UnityEngine.Networking;
 public static class Family
 {
 #if UNITY_WEBGL && !UNITY_EDITOR
-    const string SCHEME = "https://"; // a web page served over https may only call https
+    public const string SCHEME = "https://"; // a web page served over https may only call https
 #else
-    const string SCHEME = "http://";  // node server.js on the local Wi-Fi
+    public const string SCHEME = "http://";  // node server.js on the local Wi-Fi
 #endif
     static string Url(string server) { string s = (server ?? "").Trim().TrimEnd('/'); if (s == "") return null; if (!s.StartsWith("http")) s = SCHEME + s; return s + "/api/family"; }
     static J Fail(string reason) => J.Parse("{\"ok\":false,\"reason\":" + J.Quote(reason) + "}");

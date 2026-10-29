@@ -7,7 +7,7 @@ using UnityEngine;
 [Serializable] public sealed class FamilyMember { public string id, mn, en; public int face; public Tx Name => new Tx(mn, string.IsNullOrEmpty(en) ? mn : en); }
 [Serializable] public sealed class Friend { public string name; public int face; }
 [Serializable] public sealed class LogEntry { public string d, k, id, pid; public long ts; }
-[Serializable] public sealed class Memory { public string id, pid, prompt, who, text, d, audio; public int whoFace; public long ts; }
+[Serializable] public sealed class Memory { public string id, pid, prompt, who, text, d, audio, cloud; public int whoFace; public long ts; }
 
 [Serializable]
 public sealed class AppState
@@ -33,6 +33,7 @@ public sealed class AppState
     public int familyStars;
     public List<LogEntry> log = new List<LogEntry>();
     public List<Memory> memories = new List<Memory>();
+    public List<string> voiceDel = new List<string>(); // voice clips deleted here while the server couldn't be reached: deleted there at the next sync
 
     public static AppState Load()
     {
