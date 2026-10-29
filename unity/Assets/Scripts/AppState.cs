@@ -17,6 +17,7 @@ public sealed class AppState
     public float musicVolume = 0.35f;
     public string activeId = "";
     public string server = "", familyCode = "";   // the server this device last used, and its family code (Family.cs)
+    public string emailTo = "", emailFam = "";     // the weekly email's masked address ("k***@gmail.com") and the family it is for (Family.Email)
     public string playMode = "";                   // "solo": play alone, never connect · "multi": connect and play with others (ModeModal)
     // the device's grown-up PIN (DevicePin in Family.cs): only PBKDF2 hashes with their salts, the wrong tries and the lock
     public string pinHash = "", pinSalt = "", recHash = "", recSalt = "";
@@ -35,7 +36,7 @@ public sealed class AppState
 
     public static AppState Load()
     {
-        try { string raw = PlayerPrefs.GetString(KEY, ""); if (raw != "") { var s = JsonUtility.FromJson<AppState>(raw); if (s != null) { s.server ??= ""; s.familyCode ??= ""; s.pinHash ??= ""; s.pinSalt ??= ""; s.recHash ??= ""; s.recSalt ??= ""; return s; } } }
+        try { string raw = PlayerPrefs.GetString(KEY, ""); if (raw != "") { var s = JsonUtility.FromJson<AppState>(raw); if (s != null) { s.server ??= ""; s.familyCode ??= ""; s.pinHash ??= ""; s.pinSalt ??= ""; s.recHash ??= ""; s.recSalt ??= ""; s.emailTo ??= ""; s.emailFam ??= ""; return s; } } }
         catch (Exception e) { Debug.LogWarning("Naadamy: could not read the app state. " + e.Message); }
         return new AppState();
     }
