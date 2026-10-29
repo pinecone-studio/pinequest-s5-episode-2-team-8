@@ -76,7 +76,8 @@ public sealed partial class Game
     public void PassGuard(string id, Action go) { if (PassLocked(id)) Open(new PassModal(id, go)); else go(); }
     static string Fmt(int n) => n.ToString("#,0", System.Globalization.CultureInfo.InvariantCulture) + "₮";
 
-    /** The travel pass: Nomin kindly explains it in front of the road barrier, and a grown-up can unlock every province. */
+    /** The travel pass: Bolormaa stands beside it and explains, the road barrier is down in front of the province, and a
+     *  card shows the price and what the pass opens. A grown-up unlocks it behind the parent check. */
     sealed class PassModal : Modal
     {
         readonly string id; readonly Action after; string say; bool done, later;
@@ -86,25 +87,53 @@ public sealed partial class Game
             var g = I; say = Loc.L($"Хөөе, {g.V.name}! Чи аль хэдийн {g.StampCount()} аймгаар аялчихлаа, ямар гоё вэ! Цааш хамт аялахын тулд Аймгийн аяллын эрх хэрэгтэй юм. Ээж, аавдаа үзүүлээд асуучих уу?",
                 $"Hey {g.V.name}! You’ve already explored {g.StampCount()} provinces, how wonderful! To keep travelling together we need the Aimag Travel Pass. Shall we show a grown-up?");
         }
-        readonly Live land = new Live(160, 80);
+        public override float Width => 560;
+        public override (string who, string face)? Speaker => ("bolormaa", done ? "laugh" : "happy");
+        readonly Live land = new Live(160, 70);
         public override void Draw(Game g)
         {
             var a = Aimags.ById(id);
+            GUILayout.Label(Loc.L($"Аймгийн паспорт · {g.StampCount()}/{Aimags.ORDER.Count} тамга", $"Aimag passport · {g.StampCount()}/{Aimags.ORDER.Count} stamps"), g.sKicker);
             g.Title(a != null ? Loc.L($"{a.name.mn} руу явах уу?", $"Off to {a.name.en}?") : Loc.L("Цааш аялах уу?", "Travel further?"));
-            Aimags.DrawLand(land.c, id, Time.time, 160, 80);
-            var bar = done ? "#5c9a36" : "#e14b3d"; Px.R(land.c, 10, 52, 140, 6, "#2b1e2e"); if (!done) for (int i = 0; i < 14; i++) Px.R(land.c, 11 + i * 10, 53, 9, 4, i % 2 != 0 ? "#ffffff" : bar); // the road barrier
-            g.Nomin(land.c, 112, 18, done ? "yay" : later ? "bye" : "wait");
-            land.Show(g, 150);
-            GUILayout.BeginVertical(g.sBtn); GUILayout.Label("<b>" + Loc.L("Болормаа", "Bolormaa") + ":</b> " + say, g.sLabel); GUILayout.EndVertical();
-            if (done) { if (g.Btn((a != null ? Loc.L($"{a.name.mn} руу аялах", $"Travel to {a.name.en}") : Loc.L("Аялах", "Travel")), true, 48)) g.Later(() => { g.Close(); after?.Invoke(); }); return; }
-            GUILayout.BeginVertical(g.sBtn);
-            GUILayout.Label($"<b>{Loc.L("Аймгийн аяллын эрх", "Aimag Travel Pass")} · {Fmt(PASS_PRICE)}</b> <size={g.Ts(10)}>{Loc.L("нэг удаа төлнө", "one-time")}</size>", g.sLabel);
-            int left = Aimags.ORDER.Count - PASS_FREE;
-            foreach (var t in new[] { Loc.L($"Үлдсэн {left} аймаг бүгд нээгдэнэ", $"Opens all {left} remaining provinces"), Loc.L("Аймаг бүрээр 3D-ээр аялна", "Travel every province in 3D"), Loc.L("Тамга бүрээр зоос, оноо", "Coins and XP for every stamp"), Loc.L("Нэг худалдан авалт = хөдөөгийн нэг хүүхдэд үнэгүй эрх", "Each pass = a free pass for one rural child") })
-                GUILayout.Label("• " + t, g.sSmall);
+            Aimags.DrawLand(land.c, id, Time.time, 160, 70);
+            if (!done) { Px.R(land.c, 10, 54, 140, 5, "#2b1e2e"); for (int i = 0; i < 14; i++) Px.R(land.c, 11 + i * 10, 55, 9, 3, i % 2 != 0 ? "#ffffff" : "#e14b3d"); } // the road barrier, gone once the pass is bought
+            land.Show(g, 120);
+            g.Gap(6);
+            GUILayout.Label(say, g.sLabel);
+            g.Gap(6);
+            if (done)
+            {
+                if (g.Btn(a != null ? Loc.L($"{a.name.mn} руу аялах", $"Travel to {a.name.en}") : Loc.L("Аялах", "Travel"), true, 48)) g.Later(() => { g.Close(); after?.Invoke(); });
+                return;
+            }
+            // the offer: what it is and what it costs, then what it opens
+            GUILayout.BeginVertical(g.sPanel);
+            GUILayout.BeginHorizontal();
+            g.IconAt(Px.Icon("ui:scroll"), 40); g.Gap(8);
+            GUILayout.BeginVertical();
+            GUILayout.Label("<b>" + Loc.L("Аймгийн аяллын эрх", "Aimag Travel Pass") + "</b>", g.sLabel);
+            GUILayout.Label(Loc.L("Нэг удаа төлнө · сарын төлбөргүй", "One-time payment · no subscription"), g.sSmall);
             GUILayout.EndVertical();
-            if (g.Btn(Loc.L($"Том хүнээс зөвшөөрөл авах · {Fmt(PASS_PRICE)}", $"Ask a grown-up · {Fmt(PASS_PRICE)}"), true, 48, !later)) g.Later(() => g.Open(new ParentGate(() => g.Open(new PayModal(this)))));
-            if (g.Btn(Loc.L("Дараа", "Maybe later"), false, 34, !later)) g.Later(() => { later = true; say = Loc.L("Зүгээр ээ! Бэлэн болохоор хамт аялцгаая. Тэр хооронд Нутагтаа тоглоод байя.", "That’s okay! We’ll travel together whenever you’re ready. Let’s play in Nutag for now."); g.StartCoroutine(CloseSoon(g)); });
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(Fmt(PASS_PRICE), new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleRight, wordWrap = false }, GUILayout.ExpandWidth(false));
+            GUILayout.EndHorizontal();
+            g.Gap(4);
+            int left = Aimags.ORDER.Count - PASS_FREE;
+            foreach (var (icon, line) in new[]
+            {
+                ("ui:ovoo", Loc.L($"Үлдсэн {left} аймаг бүгд нээгдэнэ", $"All {left} remaining provinces open")),
+                ("ui:horse", Loc.L("Аймаг бүрээр 3D-ээр аялна", "Travel every province in 3D")),
+                ("ui:coin", Loc.L("Тамга бүрт зоос, XP", "Coins and XP for every stamp")),
+                ("ui:star", Loc.L("Нэг эрх = хөдөөгийн нэг хүүхдэд үнэгүй эрх", "Each pass gives a free pass to a rural child")),
+            })
+            {
+                GUILayout.BeginHorizontal(); g.IconAt(Px.Icon(icon), 20); g.Gap(6); GUILayout.Label(line, g.sSmall); GUILayout.EndHorizontal();
+            }
+            GUILayout.EndVertical();
+            g.Gap(6);
+            if (g.Btn(Loc.L("Том хүнээс зөвшөөрөл авах", "Ask a grown-up to unlock"), true, 48, !later)) g.Later(() => g.Open(new ParentGate(() => g.Open(new PayModal(this)))));
+            if (g.Btn(Loc.L("Дараа", "Maybe later"), false, 36, !later)) g.Later(() => { later = true; say = Loc.L("Зүгээр ээ! Бэлэн болохоор хамт аялцгаая. Тэр хооронд Нутагтаа тоглоод байя.", "That’s okay! We’ll travel together whenever you’re ready. Let’s play in Nutag for now."); g.StartCoroutine(CloseSoon(g)); });
+            GUILayout.Label(Loc.L("Төлөхөөс өмнө том хүн эцэг эхийн шалгалтаар баталгаажуулна.", "A grown-up confirms with the parent check before anything is paid."), new GUIStyle(g.sKicker) { alignment = TextAnchor.MiddleCenter });
         }
         System.Collections.IEnumerator CloseSoon(Game g) { yield return new WaitForSeconds(1.5f); if (g.modal == this) g.Close(); }
         /** Payment goes through here. A real payment provider plugs in as Game.Charge; without one the purchase is recorded on this device after the parental gate. */
@@ -115,15 +144,38 @@ public sealed partial class Game
             say = Loc.L("Ура, баярлалаа! Одоо бүх Монголоор хамт аялна. Явцгаая!", "Hooray, thank you! Now we can travel all of Mongolia together. Let’s go!");
         }
     }
+    /** The grown-up's checkout: what is bought, for whom, the total, then pay or cancel. */
     sealed class PayModal : Modal
     {
         readonly PassModal pass; public PayModal(PassModal pass) { this.pass = pass; }
+        public override float Width => 480;
         public override void Draw(Game g)
         {
-            g.Title(Loc.L("Аймгийн аяллын эрх", "Aimag Travel Pass"));
-            g.Text(Loc.L($"{g.V.name}-д бүх аймгаар аялах эрх нээгдэнэ. Нэг удаагийн төлбөр: {Fmt(PASS_PRICE)}.", $"Unlocks every province for {g.V.name}. One-time payment: {Fmt(PASS_PRICE)}."));
+            GUILayout.Label(Loc.L("Том хүнд", "For the grown-up"), g.sKicker);
+            g.Title(Loc.L("Төлбөр", "Checkout"));
+            GUILayout.BeginVertical(g.sPanel);
+            GUILayout.BeginHorizontal();
+            g.IconAt(Px.Icon("ui:scroll"), 36); g.Gap(8);
+            GUILayout.BeginVertical();
+            GUILayout.Label("<b>" + Loc.L("Аймгийн аяллын эрх", "Aimag Travel Pass") + "</b>", g.sLabel);
+            GUILayout.Label(Loc.L($"{g.V.name}-д · бүх аймаг · нэг удаа", $"For {g.V.name} · every province · one-time"), g.sSmall);
+            GUILayout.EndVertical();
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(Fmt(PASS_PRICE), new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleRight, wordWrap = false }, GUILayout.ExpandWidth(false));
+            GUILayout.EndHorizontal();
+            g.Gap(6); var line = GUILayoutUtility.GetRect(10, g.U(1), GUILayout.ExpandWidth(true)); g.Box(line, new Color(0, 0, 0, 0.15f)); g.Gap(6);
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("<b>" + Loc.L("Нийт", "Total") + "</b>", g.sLabel);
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(Fmt(PASS_PRICE), new GUIStyle(g.sTitle) { alignment = TextAnchor.MiddleRight, wordWrap = false }, GUILayout.ExpandWidth(false));
+            GUILayout.EndHorizontal();
+            GUILayout.EndVertical();
+            g.Gap(4);
+            GUILayout.BeginHorizontal(); g.IconAt(Px.Icon("ui:lock"), 16); g.Gap(4);
+            GUILayout.Label(Loc.L("Нэг удаагийн төлбөр. Дахин төлбөр авахгүй.", "One-time payment. Nothing is charged again."), g.sKicker); GUILayout.EndHorizontal();
+            g.Gap(6);
             if (g.Btn(Loc.L($"{Fmt(PASS_PRICE)} төлөх", $"Pay {Fmt(PASS_PRICE)}"), true, 48)) g.Later(() => { g.Close(); if (Charge == null || Charge()) pass.Paid(g); else g.Toast(Loc.L("Төлбөр амжилтгүй боллоо. Дахин оролдоорой.", "The payment did not go through. Please try again.")); });
-            if (g.Btn(Loc.L("Болих", "Cancel"), false, 34)) g.Later(g.Close);
+            if (g.Btn(Loc.L("Болих", "Cancel"), false, 36)) g.Later(g.Close);
         }
     }
     /** A real payment provider (QPay, card, store billing) can be plugged in here; it returns true when the payment went through. */
