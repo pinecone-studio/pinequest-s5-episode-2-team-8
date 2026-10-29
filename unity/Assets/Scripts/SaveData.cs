@@ -11,6 +11,8 @@ using UnityEngine;
 public sealed class Look
 {
     public string deel = "blue", skin = "#F6D3B3", hat, face, neck, pet, title, ride, coat;
+    public string gender;   // "girl", or null for a boy (older saves have none)
+    public bool Girl => gender == "girl";
     public Look Copy() => (Look)MemberwiseClone();
 }
 [Serializable] public sealed class HorseSave { public string coat = "bay"; public int races, wins, top5, cls, spd = 1, sta = 1, best; public float dist; public List<KV> bests = new List<KV>(); }

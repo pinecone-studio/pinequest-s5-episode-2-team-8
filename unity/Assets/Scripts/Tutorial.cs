@@ -58,10 +58,12 @@ public sealed partial class Game
         // the story box, as on the web version: black with a white pixel border and white pixel text typing out. Basar sits in a portrait
         // on the left; Bolormaa stands beside the box from head to toe, her face and pose following what she says
         bool guide = d.who != "basar";
-        float w = Mathf.Min(vw - 16, 720), pad = 12, pic = guide ? 112 : 72, tx = pad * 2 + pic, tw = w - tx - pad;   // Bolormaa's portrait (56×72 pixels, ×2)
-        var st = new GUIStyle(sPixel) { wordWrap = true, alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16)), normal = { textColor = Color.white } }; // the story box is pixel text, as on the web
-        float th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
-        float h = Mathf.Max(guide ? pic * 72 / 56f + pad * 2 : pic + pad * 2, pad + 24 + th + (n > 0 ? 8 + n * 46 : 18) + pad);
+        float k = Mathf.Clamp(AtLeastCss(16, 15) / 16, 1, 2.6f); // on a phone the box, its words and its answers grow to a readable size
+        float w = Mathf.Min(vw - 16, 720 * k), pad = 12 * k, pic = (guide ? 112 : 72) * Mathf.Min(k, 1.5f), tx = pad * 2 + pic, tw = w - tx - pad;   // Bolormaa's portrait (56×72 pixels, ×2)
+        var st = new GUIStyle(sPixel) { wordWrap = true, alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16 * k)), normal = { textColor = Color.white } }; // the story box is pixel text, as on the web
+        var opt = k > 1 ? new GUIStyle(sOpt) { fontSize = PxSize(sOpt.fontSize * k) } : sOpt;
+        float line = 24 * k, th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
+        float h = Mathf.Max(guide ? pic * 72 / 56f + pad * 2 : pic + pad * 2, pad + line + th + (n > 0 ? (8 + n * 46) * k : 18 * k) + pad);
         float x = vw / 2 - w / 2, y = d.top ? (guide ? 120 : 60) : vh - h - 70;
         var r = UR(x, y, w, h); Ui(r);
         Box(r, Color.white); Box(UR(x + 3, y + 3, w - 6, h - 6), Px.Col("#08060e"));
@@ -81,13 +83,13 @@ public sealed partial class Game
             Box(UR(x + pad - 2, y + pad - 2, pic + 4, pic + 4), Color.white); Box(UR(x + pad, y + pad, pic, pic), Px.Col("#2b2140"));
             GUI.DrawTexture(UR(x + pad, y + pad, pic, pic), Tex(face));
         }
-        GUI.Label(UR(x + tx, y + pad - 2, tw, 24), d.name.ToUpper(), new GUIStyle(sPixel) { alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16)), normal = { textColor = Px.Col(d.who == "basar" ? "#e9a91f" : "#f7c646") } });
+        GUI.Label(UR(x + tx, y + pad - 2, tw, line), d.name.ToUpper(), new GUIStyle(sPixel) { alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16 * k)), normal = { textColor = Px.Col(d.who == "basar" ? "#e9a91f" : "#f7c646") } });
         string vis = d.text.Substring(0, Mathf.Min(d.text.Length, (int)d.shown));
-        GUI.Label(UR(x + tx, y + pad + 24, tw, th + 4), vis + "<color=#00000000>" + d.text.Substring(vis.Length) + "</color>", st);
-        if (!d.Typing && n == 0) GUI.Label(UR(x + w - 30, y + h - 28, 20, 20), (int)(Time.time * 2) % 2 == 0 ? "▼" : "", st);
+        GUI.Label(UR(x + tx, y + pad + line, tw, th + 4), vis + "<color=#00000000>" + d.text.Substring(vis.Length) + "</color>", st);
+        if (!d.Typing && n == 0) GUI.Label(UR(x + w - 30 * k, y + h - 28 * k, 20 * k, 20 * k), (int)(Time.time * 2) % 2 == 0 ? "▼" : "", st);
         if (n > 0 && !d.Typing)
             for (int i = 0; i < n; i++)
-                if (Button(UR(x + tx, y + pad + 24 + th + 8 + i * 46, tw, 40), d.choices[i], sOpt)) { int k = i; Later(() => { d.picked = k; d.done = true; if (dialog == d) dialog = null; Sfx.Tap(); }); }
+                if (Button(UR(x + tx, y + pad + line + th + (8 + i * 46) * k, tw, 40 * k), d.choices[i], opt)) { int ci = i; Later(() => { d.picked = ci; d.done = true; if (dialog == d) dialog = null; Sfx.Tap(); }); }
     }
     /** A pulsing yellow frame round the button Bolormaa is talking about. */
     void GlowAt(string key, Rect r)

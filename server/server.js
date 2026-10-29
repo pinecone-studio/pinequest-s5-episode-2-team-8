@@ -60,7 +60,10 @@ let actualPort = PORT;
 const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
 const roomStore = createRoomStore({ dataDir: DATA_DIR });
 const { resyncRealtime } = require('./realtime-resync.js');
-const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id), onErase: (ids) => eraseLive(ids) });
+const board = require('./leaderboard.js')(roomStore);
+const parentEmail = require('./parent-email.js')(roomStore); // weekly report to a grown-up's email; off without RESEND_API_KEY
+const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id), onErase: (ids) => eraseLive(ids), onChange: (ids) => board.forget(ids), onGone: (code) => voice.purge(code), email: parentEmail });
+const voice = require('./voice.js')(roomStore, { dataDir: DATA_DIR, checkPin: (message) => family.checkPin(message) }); // memory book voice clips
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
   '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.wasm': 'application/wasm', '.data': 'application/octet-stream' };
@@ -75,7 +78,7 @@ function serveStatic(req, res) {
     if (origin && originAllowed(origin)) { res.setHeader('access-control-allow-origin', origin); res.setHeader('vary', 'Origin'); }
     if (req.method === 'OPTIONS') {
       if (!origin || !originAllowed(origin)) { res.writeHead(403); return res.end(); }
-      res.writeHead(204, { 'access-control-allow-methods': 'GET, POST', 'access-control-allow-headers': 'content-type', 'access-control-max-age': '600' });
+      res.writeHead(204, { 'access-control-allow-methods': 'GET, POST, PUT, DELETE', 'access-control-allow-headers': 'content-type, x-family, x-player, x-ticket, x-pin', 'access-control-max-age': '600' });
       return res.end();
     }
   }
@@ -90,6 +93,8 @@ function serveStatic(req, res) {
     return basar.handle(req, res);
   }
   if (url.pathname === '/api/family') return family.handle(req, res);
+  if (url.pathname === '/api/voice' || url.pathname.startsWith('/api/voice/')) return voice.handle(req, res, url.pathname);
+  if (url.pathname === '/api/email/confirm' || url.pathname === '/api/email/stop') return parentEmail.handle(req, res, url);
   if (!ROOT || (req.method !== 'GET' && req.method !== 'HEAD')) { res.writeHead(ROOT ? 405 : 404, { 'content-type': 'text/plain; charset=utf-8' }); return res.end(ROOT ? 'Method not allowed' : 'Not found'); }
   let p;
   try { p = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end(); } // a broken %-escape used to throw and stop the server
@@ -345,6 +350,7 @@ function broadcast(r, msg, except) {
 }
 function handleRealtime(event) {
   if (event && event.t === 'family-erased') { // a family was erased on another instance (or this one: it is safe twice)
+    if (typeof event.code === 'string') void voice.purge(event.code); // its voice clips (the erasing instance purges them too: twice is harmless)
     if (!Array.isArray(event.ids)) return;
     return eraseLive(event.ids.filter((id) => typeof id === 'string')).catch((error) => console.error('Could not drop erased players:', error.message)); // the resync waits on it
   }
@@ -712,6 +718,8 @@ async function joinPlayer(conn, message, code, id, now) {
   r.remotePlayers.clear();
   for (const player of online) if (player.id !== id && !r.players.has(player.id)) r.remotePlayers.set(player.id, player);
   r.players.set(id, p); conn.player = p; conn.room = r;
+  // for the room board; a `board` asked right after the welcome waits for it (conn.noted)
+  conn.noted = roomStore.noteRoomPlayer(code, { id, name: p.name, look: p.look }).catch((error) => console.error('Could not note the room player:', error.message));
   if (!old && !replacingRemote && !previousInstance) logChat(r, { k: 'join', id, n: p.name });
   const players = [
     ...[...r.players.values()].filter((player) => player !== p).map(pub),
@@ -1079,6 +1087,9 @@ function onMessage(conn, text) {
     case 'cloud-save':
       handleCloudSave(conn, m);
       break;
+    case 'board': // XP leaderboard of this room or of the player's family (leaderboard.js)
+      Promise.resolve(conn.noted).then(() => board.reply(p.id, r.code, m.k)).then((answer) => conn.send(answer));
+      break;
     // ---- own ger
     case 'ger-claim':
       queueLotAction(conn, 'claim', m);
@@ -1194,6 +1205,7 @@ function leave(conn) {
  *  so the next save does not write them back. Their sockets get `erased` (the client stops retrying and forgets the family) and close. */
 async function eraseLive(ids) {
   const gone = new Set(ids);
+  board.clear();
   for (const connection of [...conns]) {
     if (!connection.player || !gone.has(connection.player.id)) continue;
     await leave(connection);
@@ -1238,11 +1250,13 @@ server.on('listening', () => {
 });
 roomStore.load().then(async (state) => {
   saved = state;
+  void voice.init(); // the private Supabase bucket, if missing
   await roomStore.startRealtime(INSTANCE_ID, handleRealtime, () => { // events sent while the listener was down are gone: re-derive erased families and who is online
     resyncRealtime({ roomStore, rooms, saved: () => saved, localIds: () => [...conns].filter((c) => c.player).map((c) => c.player.id), handle: handleRealtime })
       .catch((error) => console.error('Could not resync after the realtime listener returned:', error.message));
   });
   server.listen(PORT, '0.0.0.0');
+  parentEmail.start();
 }).catch(async (error) => {
   console.error('Could not initialize room storage:', error.message);
   try { await roomStore.close(); } catch (closeError) { console.error('Could not close room storage:', closeError.message); }

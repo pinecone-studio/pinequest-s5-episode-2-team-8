@@ -13,6 +13,17 @@ const WALLET_MAX = 2_000_000_000;
 const REALTIME_CHANNEL = 'naadamy_realtime';
 const FAMILY_CODE = /^[A-HJ-NP-Z2-9]{8}$/;
 const DEVICE_TICKETS_MAX = 8;
+const VOICE_ID = /^m\d{10,16}$/; // a memory id: "m" and the time in ms
+
+/** Why a voice clip can't be recorded (voice.js): `taken` (another child's clip has this id), `quota` (the family's
+ *  `max.clips` / `max.bytes`) or `storage-full` (`max.total` bytes of every family, `total` now); null when it can.
+ *  `clips` are the family's [{ id, size, by }]; a clip replaced by its own uploader doesn't count twice. */
+function voiceRefusal(clips, id, size, by, max, total) {
+  const old = clips.find((c) => c.id === id), others = clips.filter((c) => c.id !== id);
+  if (old && old.by !== by) return 'taken';
+  if (others.length >= max.clips || others.reduce((sum, c) => sum + c.size, 0) + size > max.bytes) return 'quota';
+  return total - (old ? old.size : 0) + size > max.total ? 'storage-full' : null;
+}
 
 function ticketHash(ticket) {
   return crypto.createHash('sha256').update(ticket).digest('hex');
@@ -93,6 +104,8 @@ function cleanFamily(family) {
 const PIN_COUNTS = ['pin', 'join', 'rec'].flatMap((c) => [c + 'Fails', c + 'Until', c + 'Locks', c + 'WrongAt']).concat('pinSetAt');
 const pinOf = (family) => ({ pinHash: family.pinHash, pinSalt: family.pinSalt, recoveryHash: family.recoveryHash, recoverySalt: family.recoverySalt,
   ...Object.fromEntries(PIN_COUNTS.map((key) => [key, family[key]])) });
+const emailDue = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
+const emailOut = (row) => ({ ...(isRecord(row.data) ? row.data : {}), dueAt: emailDue(Number(row.dueAt ?? row.due_at)) });
 const ERASED_KEEP_MS = 30 * 24 * 60 * 60 * 1000; // an erased child's id can't be taken again for 30 days: an old device can't bring it back
 
 /** Takes erased players out of a room's state ({ lots, chat }, changed in place): their ger lots are freed and the chat
@@ -146,6 +159,17 @@ function cleanEarned(earned) {
   return { d: earned.d, coins: count(earned.coins), xp: count(earned.xp) };
 }
 
+const BOARD_SEEN_MS = 30 * 24 * 60 * 60 * 1000; // a room's board counts the players who joined it in the last 30 days
+/** Leaderboard rows ({ id, xp, ...shown }) ranked by XP (equal XP, equal rank): the first `top` and the player `me`, without
+ *  ids. The same order as the PostgreSQL queries. */
+function rankRows(rows, me, top) {
+  rows.sort((a, b) => b.xp - a.xp || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  let rank = 0;
+  return rows.map((row, i) => ({ row, rank: i && rows[i - 1].xp === row.xp ? rank : (rank = i + 1), n: i + 1 }))
+    .filter(({ row, n }) => n <= top || row.id === me)
+    .map(({ row: { id, ...shown }, rank: place }) => ({ rank: place, ...shown, ...(id === me ? { me: true } : {}) }));
+}
+
 function isRecord(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -165,8 +189,17 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
   const familyFile = path.join(dataDir, 'families.json');
   const deviceTicketFile = path.join(dataDir, 'device-tickets.json');
   const erasedFile = path.join(dataDir, 'erased.json');
+  const voiceFile = path.join(dataDir, 'voice.json'); // { [family code]: { [memory id]: { size, by, ts } } }
+  const emailFile = path.join(dataDir, 'family-emails.json');
+  const emailSendFile = path.join(dataDir, 'email-sends.json');
+  const roomPlayersFile = path.join(dataDir, 'room-players.json');
 
   if (!databaseUrl) {
+    const dropVoice = (code) => { const all = readLegacyFile(voiceFile, 'voice clips'); if (Object.hasOwn(all, code)) { delete all[code]; writeIdentityFile(voiceFile, all); } };
+    const dropEmail = (code) => { // a family that goes takes its parent email and links with it
+      const emails = readLegacyFile(emailFile, 'family emails');
+      if (Object.hasOwn(emails, code)) { delete emails[code]; writeIdentityFile(emailFile, emails); }
+    };
     return {
       kind: 'json',
       sharedRealtime: false,
@@ -229,7 +262,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         const outcome = mutate(family);
         if (family && outcome.changed) {
           if (family.members.length) Object.defineProperty(families, code, { value: family, writable: true, configurable: true, enumerable: true });
-          else delete families[code]; // the last child left
+          else { delete families[code]; dropVoice(code); dropEmail(code); } // the last child left: the family's voice clips and parent email go with it
           writeIdentityFile(familyFile, families);
         }
         return outcome.result;
@@ -246,7 +279,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         const ids = new Set(family.members.map((member) => member.id));
         const wallets = readLegacyFile(walletFile, 'player wallets'), progress = readLegacyFile(progressFile, 'player progress');
         const identities = readIdentityFile(identityFile), devices = readLegacyFile(deviceTicketFile, 'device tickets'), rooms = readLegacyFile(dataFile);
-        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now();
+        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now(), seen = readLegacyFile(roomPlayersFile, 'room players');
         for (const [id, when] of Object.entries(erased)) if (!(at - when < ERASED_KEEP_MS)) delete erased[id];
         for (const id of ids) Object.defineProperty(erased, id, { value: at, writable: true, configurable: true, enumerable: true });
         writeIdentityFile(erasedFile, erased); // first: no device can take an erased id again, even if a later write fails
@@ -260,9 +293,93 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           fs.writeFileSync(temporaryFile, JSON.stringify(rooms));
           fs.renameSync(temporaryFile, dataFile);
         }
+        dropVoice(code);
+        dropEmail(code);
+        for (const players of Object.values(seen)) if (isRecord(players)) for (const id of ids) delete players[id];
+        writeIdentityFile(roomPlayersFile, seen);
         delete families[code];
         writeIdentityFile(familyFile, families);
         return outcome.result;
+      },
+      async voiceList(code) {
+        const all = readLegacyFile(voiceFile, 'voice clips'), clips = FAMILY_CODE.test(code || '') && Object.hasOwn(all, code) ? all[code] : {};
+        return Object.entries(clips).map(([id, c]) => ({ id, size: c.size, by: c.by, ts: c.ts })).sort((a, b) => a.ts - b.ts);
+      },
+      /** Records a clip of the family (it must still exist) unless voiceRefusal says no: { ok, old } (the record it replaced,
+       *  or null) or { ok: false, reason }. `max` null puts a record back as it was (an upload that failed), unchecked. */
+      async voicePut(code, id, size, by, max, ts = Date.now()) {
+        if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '') || !Object.hasOwn(readLegacyFile(familyFile, 'families'), code)) return { ok: false, reason: 'no-family' };
+        const all = readLegacyFile(voiceFile, 'voice clips'), clips = Object.hasOwn(all, code) ? all[code] : {};
+        const total = Object.values(all).reduce((sum, family) => sum + Object.values(family).reduce((s, c) => s + c.size, 0), 0);
+        const reason = max && voiceRefusal(Object.entries(clips).map(([k, c]) => ({ id: k, ...c })), id, size, by, max, total);
+        if (reason) return { ok: false, reason };
+        const old = Object.hasOwn(clips, id) ? clips[id] : null;
+        clips[id] = { size, by, ts }; all[code] = clips; // both checked by regex above, so never __proto__
+        writeIdentityFile(voiceFile, all);
+        return { ok: true, old };
+      },
+      /** The clip's record, now removed, or null. */
+      async voiceDelete(code, id) {
+        const all = readLegacyFile(voiceFile, 'voice clips');
+        if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '') || !Object.hasOwn(all, code) || !Object.hasOwn(all[code], id)) return null;
+        const clip = all[code][id];
+        delete all[code][id];
+        if (!Object.keys(all[code]).length) delete all[code];
+        writeIdentityFile(voiceFile, all);
+        return clip;
+      },
+      /** The family's parent email record (its format is parent-email.js's, with `dueAt`) or null. */
+      async getFamilyEmail(code) {
+        const emails = readLegacyFile(emailFile, 'family emails');
+        return FAMILY_CODE.test(code || '') && Object.hasOwn(emails, code) ? emailOut(emails[code]) : null;
+      },
+      /** mutate(record or null, does the family exist) returns { record, token, clearTokens, result }: `record` is saved (null
+       *  deletes it with its links, undefined changes nothing), `clearTokens` forgets its links, `token` ({ hash, kind, until })
+       *  is a new link that finds it (familyEmailToken). */
+      async mutateFamilyEmail(code, mutate) {
+        if (!FAMILY_CODE.test(code || '')) return mutate(null, false).result;
+        const families = readLegacyFile(familyFile, 'families'), emails = readLegacyFile(emailFile, 'family emails');
+        let row = Object.hasOwn(emails, code) ? emails[code] : null;
+        const outcome = mutate(row && emailOut(row), Object.hasOwn(families, code));
+        if (outcome.record === undefined && !outcome.token && !outcome.clearTokens) return outcome.result;
+        if (outcome.record === null || !Object.hasOwn(families, code)) row = null;
+        else if (outcome.record) { const { dueAt, ...data } = outcome.record; row = { data, dueAt: emailDue(dueAt), tokens: row ? row.tokens : {} }; }
+        if (row) {
+          const t = Date.now(), tokens = outcome.clearTokens ? {} : Object.fromEntries(Object.entries(row.tokens || {}).filter(([, k]) => k && k.until > t));
+          if (outcome.token) tokens[outcome.token.hash] = { kind: outcome.token.kind, until: outcome.token.until };
+          Object.defineProperty(emails, code, { value: { ...row, tokens }, writable: true, configurable: true, enumerable: true });
+        } else delete emails[code];
+        writeIdentityFile(emailFile, emails);
+        return outcome.result;
+      },
+      /** The link `hash` (still good at `at`): { code, kind } or null. */
+      async familyEmailToken(hash, at) {
+        for (const [code, row] of Object.entries(readLegacyFile(emailFile, 'family emails'))) {
+          const k = row && row.tokens && Object.hasOwn(row.tokens, hash) ? row.tokens[hash] : null;
+          if (k && k.until > at) return { code, kind: k.kind };
+        }
+        return null;
+      },
+      /** Counts one confirm mail on every key of `limits` ([{ key, max }]) unless one of them already has `max` in the
+       *  `windowMs` before `at`: { ok } or { ok: false, wait } (ms until it can). Older counts are forgotten. */
+      async takeEmailSend(limits, at, windowMs) {
+        const sends = readLegacyFile(emailSendFile, 'email sends'), out = {};
+        for (const [key, list] of Object.entries(sends)) { const recent = Array.isArray(list) ? list.filter((t) => t > at - windowMs) : []; if (recent.length) out[key] = recent; }
+        const full = limits.filter((l) => Object.hasOwn(out, l.key) && out[l.key].length >= l.max);
+        if (!full.length) for (const l of limits) Object.defineProperty(out, l.key, { value: [...(Object.hasOwn(out, l.key) ? out[l.key] : []), at], writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(emailSendFile, out);
+        return full.length ? { ok: false, wait: Math.max(...full.map((l) => Math.min(...out[l.key]))) + windowMs - at } : { ok: true };
+      },
+      /** Takes one family whose report is due at `at` and moves its due time to `next` in the same write, so it is sent
+       *  once: { code, record } or null. */
+      async claimFamilyReport(at, next) {
+        const emails = readLegacyFile(emailFile, 'family emails');
+        const code = Object.keys(emails).find((c) => isRecord(emails[c]) && emailDue(emails[c].dueAt) > 0 && emails[c].dueAt <= at);
+        if (!code) return null;
+        const record = emailOut(emails[code]);
+        emails[code].dueAt = next;
+        writeIdentityFile(emailFile, emails);
+        return { code, record };
       },
       async getAccount(id, initial = {}, inventorySeed = {}) {
         if (!PLAYER_ID.test(id || '')) throw new Error('Invalid player id for wallet');
@@ -348,6 +465,39 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       async startRealtime() {},
       async listPresence() { return []; },
       async erasedAmong() { return []; }, // one process: nothing can be erased behind its back
+      /** Remembers that this player joined the room, with the name and look shown on its board. */
+      async noteRoomPlayer(roomCode, { id, name, look }) {
+        if (!ROOM_CODE.test(roomCode || '') || !PLAYER_ID.test(id || '')) return;
+        const all = readLegacyFile(roomPlayersFile, 'room players'), at = Date.now();
+        for (const [code, players] of Object.entries(all)) { // forget the players not seen for 30 days, and rooms left empty
+          if (isRecord(players)) for (const [key, entry] of Object.entries(players)) if (!(isRecord(entry) && at - entry.at < BOARD_SEEN_MS)) delete players[key];
+          if (!isRecord(players) || !Object.keys(players).length) delete all[code];
+        }
+        const seen = Object.hasOwn(all, roomCode) ? all[roomCode] : {};
+        Object.defineProperty(seen, id, { value: { name, look, at }, writable: true, configurable: true, enumerable: true });
+        Object.defineProperty(all, roomCode, { value: seen, writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(roomPlayersFile, all);
+      },
+      /** The room's players of the last 30 days by XP: the top 10 and `me` ({ rank, name, look, xp, me? }). */
+      async roomBoard(roomCode, me) {
+        const all = readLegacyFile(roomPlayersFile, 'room players'), wallets = readLegacyFile(walletFile, 'player wallets');
+        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now();
+        const seen = Object.hasOwn(all, roomCode) && isRecord(all[roomCode]) ? all[roomCode] : {};
+        const rows = Object.entries(seen).filter(([id, entry]) => isRecord(entry) && at - entry.at < BOARD_SEEN_MS && Object.hasOwn(wallets, id)
+          && !(Object.hasOwn(erased, id) && at - erased[id] < ERASED_KEEP_MS))
+          .map(([id, entry]) => ({ id, name: entry.name, look: entry.look, xp: cleanWallet(wallets[id]).xp }));
+        return rankRows(rows, me, 10);
+      },
+      /** The children of `me`'s family by XP ({ rank, name, avatar, xp, me? }), or null when `me` is in no family. */
+      async familyBoard(me) {
+        const families = readLegacyFile(familyFile, 'families'), wallets = readLegacyFile(walletFile, 'player wallets');
+        const erased = readLegacyFile(erasedFile, 'erased players'), at = Date.now();
+        const family = Object.values(families).map(cleanFamily).find((f) => f.members.some((m) => m.id === me));
+        if (!family) return null;
+        const rows = family.members.filter((m) => !(Object.hasOwn(erased, m.id) && at - erased[m.id] < ERASED_KEEP_MS))
+          .map((m) => ({ id: m.id, name: m.name, avatar: m.avatar, xp: Object.hasOwn(wallets, m.id) ? cleanWallet(wallets[m.id]).xp : 0 }));
+        return rankRows(rows, me, Infinity);
+      },
       async registerPresence() { return null; },
       async updatePresence() {},
       async removePresence() {},
@@ -449,11 +599,55 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             erased_at timestamptz NOT NULL DEFAULT now()
           )
         `);
+        // the grown-up's email for the weekly report (parent-email.js) and its confirm/stop links (hashed); both go with the family
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_family_emails (
+            code text PRIMARY KEY REFERENCES naadamy_families (code) ON DELETE CASCADE,
+            data jsonb NOT NULL,
+            due_at bigint NOT NULL DEFAULT 0,
+            updated_at timestamptz NOT NULL DEFAULT now()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_email_tokens (
+            hash text PRIMARY KEY,
+            code text NOT NULL REFERENCES naadamy_family_emails (code) ON DELETE CASCADE,
+            kind text NOT NULL,
+            until bigint NOT NULL
+          )
+        `);
+        // confirm mails sent, by hashed key (address, sender address, all), for the daily caps; older than a day is deleted
+        await client.query('CREATE TABLE IF NOT EXISTS naadamy_email_sends (key text NOT NULL, at bigint NOT NULL)');
+        await client.query('CREATE INDEX IF NOT EXISTS naadamy_email_sends_key_idx ON naadamy_email_sends (key, at)');
+        await client.query('CREATE INDEX IF NOT EXISTS naadamy_family_emails_due_idx ON naadamy_family_emails (due_at) WHERE due_at > 0');
+        await client.query('CREATE INDEX IF NOT EXISTS naadamy_email_tokens_code_idx ON naadamy_email_tokens (code)');
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_voice (
+            family_code text NOT NULL,
+            memory_id text NOT NULL,
+            size integer NOT NULL,
+            uploader text NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (family_code, memory_id)
+          )
+        `); // voice clips' metadata (voice.js); the clips are in Supabase Storage
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_room_players (
+            room_code text NOT NULL,
+            player_id text NOT NULL,
+            name text NOT NULL,
+            look jsonb NOT NULL DEFAULT '{}'::jsonb,
+            seen_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (room_code, player_id)
+          )
+        `); // who joined each room, for its leaderboard
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_players_room_idx ON naadamy_players (room_code)');
+        await client.query('CREATE INDEX IF NOT EXISTS naadamy_room_players_player_idx ON naadamy_room_players (player_id)');
+        await client.query("DELETE FROM naadamy_room_players WHERE seen_at < now() - interval '30 days'"); // not shown any more: forgotten at each start
         // Supabase serves every public table over its REST API to anyone with the project's anon key. Row level security with
         // no policies closes that door; the server connects as the tables' owner, which RLS does not apply to.
         for (const table of ['naadamy_rooms', 'naadamy_players', 'naadamy_identities', 'naadamy_wallets', 'naadamy_wallet_ops', 'naadamy_player_progress',
-          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased']) {
+          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased', 'naadamy_family_emails', 'naadamy_email_tokens', 'naadamy_email_sends', 'naadamy_voice', 'naadamy_room_players']) {
           await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
         }
         for (const [code, state] of Object.entries(legacy)) {
@@ -574,6 +768,42 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       const result = await pool.query("SELECT id FROM naadamy_erased WHERE id = ANY($1::text[]) AND erased_at > now() - interval '30 days'", [ids]);
       return result.rows.map((row) => row.id);
     },
+    async noteRoomPlayer(roomCode, { id, name, look }) {
+      if (!ROOM_CODE.test(roomCode || '') || !PLAYER_ID.test(id || '')) return;
+      await pool.query(
+        `INSERT INTO naadamy_room_players (room_code, player_id, name, look, seen_at) VALUES ($1, $2, $3, $4::jsonb, now())
+         ON CONFLICT (room_code, player_id) DO UPDATE SET name = EXCLUDED.name, look = EXCLUDED.look, seen_at = EXCLUDED.seen_at`,
+        [roomCode, id, name, JSON.stringify(look || {})],
+      );
+    },
+    async roomBoard(roomCode, me) { // one query: rank everyone, keep the top 10 and me
+      const result = await pool.query(
+        `SELECT name, look, xp, place, me FROM (
+           SELECT r.name, r.look, w.xp, r.player_id = $2 AS me, rank() OVER (ORDER BY w.xp DESC) AS place,
+             row_number() OVER (ORDER BY w.xp DESC, r.player_id) AS n
+           FROM naadamy_room_players r JOIN naadamy_wallets w ON w.id = r.player_id
+           WHERE r.room_code = $1 AND r.seen_at > now() - interval '30 days'
+             AND NOT EXISTS (SELECT 1 FROM naadamy_erased e WHERE e.id = r.player_id AND e.erased_at > now() - interval '30 days')
+         ) ranked WHERE n <= 10 OR me ORDER BY n`,
+        [roomCode, me],
+      );
+      return result.rows.map((row) => ({ rank: Number(row.place), name: row.name, look: row.look, xp: Number(row.xp), ...(row.me ? { me: true } : {}) }));
+    },
+    async familyBoard(me) { // one query: me's (oldest) family, its children with their wallets' XP
+      const result = await pool.query(
+        `SELECT m->>'name' AS name, m->'avatar' AS avatar, COALESCE(w.xp, 0) AS xp, m->>'id' = $1 AS me,
+           rank() OVER (ORDER BY COALESCE(w.xp, 0) DESC) AS place
+         FROM (SELECT members FROM naadamy_families WHERE members @> jsonb_build_array(jsonb_build_object('id', $1::text))
+               ORDER BY created_at, code LIMIT 1) f
+         CROSS JOIN LATERAL jsonb_array_elements(f.members) m
+         LEFT JOIN naadamy_wallets w ON w.id = m->>'id'
+         WHERE NOT EXISTS (SELECT 1 FROM naadamy_erased e WHERE e.id = m->>'id' AND e.erased_at > now() - interval '30 days')
+         ORDER BY place, m->>'id'`,
+        [me],
+      );
+      if (!result.rows.length) return null;
+      return result.rows.map((row) => ({ rank: Number(row.place), name: row.name, avatar: Number(row.avatar) || 0, xp: Number(row.xp), ...(row.me ? { me: true } : {}) }));
+    },
     async addDeviceTicket(id, ticket) {
       if (!PLAYER_ID.test(id || '') || !PLAYER_TICKET.test(ticket || '')) throw new Error('Invalid device ticket');
       const client = await pool.connect();
@@ -619,6 +849,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             [code, JSON.stringify(family.members), JSON.stringify(pinOf(family))]);
         } else if (family && outcome.changed) {
           await client.query('DELETE FROM naadamy_families WHERE code = $1', [code]); // the last child left
+          await client.query('DELETE FROM naadamy_voice WHERE family_code = $1', [code]);
         }
         await client.query('COMMIT');
         return outcome.result;
@@ -644,12 +875,14 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         }
         const ids = family.members.map((member) => member.id), gone = new Set(ids);
         await client.query('DELETE FROM naadamy_families WHERE code = $1', [code]);
+        await client.query('DELETE FROM naadamy_voice WHERE family_code = $1', [code]); // the clips themselves: voice.js, on the NOTIFY
         await client.query('DELETE FROM naadamy_wallet_ops WHERE player_id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_wallets WHERE id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_player_progress WHERE player_id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_player_tickets WHERE player_id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_identities WHERE id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_players WHERE id = ANY($1::text[])', [ids]);
+        await client.query('DELETE FROM naadamy_room_players WHERE player_id = ANY($1::text[])', [ids]);
         await client.query("DELETE FROM naadamy_erased WHERE erased_at < now() - interval '30 days'");
         await client.query(
           'INSERT INTO naadamy_erased (id) SELECT unnest($1::text[]) ON CONFLICT (id) DO UPDATE SET erased_at = now()', [ids]);
@@ -661,7 +894,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           }
         }
         // every server instance closes these children's sockets and drops them from its rooms (sent when this commits)
-        await client.query('SELECT pg_notify($1, $2)', [REALTIME_CHANNEL, JSON.stringify({ t: 'family-erased', ids })]);
+        await client.query('SELECT pg_notify($1, $2)', [REALTIME_CHANNEL, JSON.stringify({ t: 'family-erased', ids, code })]);
         await client.query('COMMIT');
         return outcome.result;
       } catch (error) {
@@ -670,6 +903,112 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       } finally {
         client.release();
       }
+    },
+    async voiceList(code) {
+      if (!FAMILY_CODE.test(code || '')) return [];
+      const result = await pool.query(`SELECT memory_id, size, uploader, (extract(epoch FROM created_at) * 1000)::bigint AS ts
+        FROM naadamy_voice WHERE family_code = $1 ORDER BY created_at`, [code]);
+      return result.rows.map((r) => ({ id: r.memory_id, size: r.size, by: r.uploader, ts: Number(r.ts) }));
+    },
+    /** As in JSON mode. The family row is locked FOR SHARE, so an erase can't slip in between, and one clip is recorded at a
+     *  time (the total of every family is a limit too). */
+    async voicePut(code, id, size, by, max, ts = Date.now()) {
+      if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '')) return { ok: false, reason: 'no-family' };
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        if (!(await client.query('SELECT 1 FROM naadamy_families WHERE code = $1 FOR SHARE', [code])).rows.length) { await client.query('COMMIT'); return { ok: false, reason: 'no-family' }; }
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['naadamy-voice']);
+        const rows = (await client.query(`SELECT memory_id, size, uploader, (extract(epoch FROM created_at) * 1000)::bigint AS ts
+          FROM naadamy_voice WHERE family_code = $1`, [code])).rows;
+        const total = Number((await client.query('SELECT coalesce(sum(size), 0) AS total FROM naadamy_voice')).rows[0].total);
+        const clips = rows.map((r) => ({ id: r.memory_id, size: r.size, by: r.uploader, ts: Number(r.ts) })), reason = max && voiceRefusal(clips, id, size, by, max, total);
+        const old = clips.find((c) => c.id === id) || null;
+        if (!reason) await client.query(`INSERT INTO naadamy_voice (family_code, memory_id, size, uploader, created_at) VALUES ($1, $2, $3, $4, to_timestamp($5 / 1000.0))
+          ON CONFLICT (family_code, memory_id) DO UPDATE SET size = EXCLUDED.size, uploader = EXCLUDED.uploader, created_at = EXCLUDED.created_at`, [code, id, size, by, ts]);
+        await client.query('COMMIT');
+        return reason ? { ok: false, reason } : { ok: true, old: old && { size: old.size, by: old.by, ts: old.ts } };
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back voice clip:', rollbackError.message); }
+        throw new Error(`Could not record voice clip: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    /** As in JSON mode. The email rows go with the family row (ON DELETE CASCADE): erasing it or taking out its last child. */
+    async getFamilyEmail(code) {
+      if (!FAMILY_CODE.test(code || '')) return null;
+      const result = await pool.query('SELECT data, due_at FROM naadamy_family_emails WHERE code = $1', [code]);
+      return result.rows[0] ? emailOut(result.rows[0]) : null;
+    },
+    async mutateFamilyEmail(code, mutate) {
+      if (!FAMILY_CODE.test(code || '')) return mutate(null, false).result;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        // the family row first, as mutateFamily and eraseFamily lock it, so they never wait on each other
+        const family = await client.query('SELECT 1 FROM naadamy_families WHERE code = $1 FOR UPDATE', [code]);
+        const row = await client.query('SELECT data, due_at FROM naadamy_family_emails WHERE code = $1 FOR UPDATE', [code]);
+        const outcome = mutate(row.rows[0] ? emailOut(row.rows[0]) : null, family.rows.length > 0);
+        let kept = row.rows.length > 0;
+        if (outcome.record === null) { await client.query('DELETE FROM naadamy_family_emails WHERE code = $1', [code]); kept = false; } // its links go with it
+        else if (outcome.record && family.rows.length) {
+          const { dueAt, ...data } = outcome.record;
+          await client.query(`INSERT INTO naadamy_family_emails (code, data, due_at) VALUES ($1, $2::jsonb, $3)
+            ON CONFLICT (code) DO UPDATE SET data = EXCLUDED.data, due_at = EXCLUDED.due_at, updated_at = now()`, [code, JSON.stringify(data), emailDue(dueAt)]);
+          kept = true;
+        }
+        if (kept && outcome.clearTokens) await client.query('DELETE FROM naadamy_email_tokens WHERE code = $1', [code]);
+        if (kept && outcome.token) {
+          await client.query('DELETE FROM naadamy_email_tokens WHERE code = $1 AND until <= $2', [code, Date.now()]);
+          await client.query('INSERT INTO naadamy_email_tokens (hash, code, kind, until) VALUES ($1, $2, $3, $4)',
+            [outcome.token.hash, code, outcome.token.kind, outcome.token.until]);
+        }
+        await client.query('COMMIT');
+        return outcome.result;
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back family email change:', rollbackError.message); }
+        throw new Error(`Could not save family email: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    async voiceDelete(code, id) {
+      if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '')) return null;
+      const result = await pool.query('DELETE FROM naadamy_voice WHERE family_code = $1 AND memory_id = $2 RETURNING size, uploader', [code, id]);
+      return result.rows[0] ? { size: result.rows[0].size, by: result.rows[0].uploader } : null;
+    },
+    async familyEmailToken(hash, at) {
+      const result = await pool.query('SELECT code, kind FROM naadamy_email_tokens WHERE hash = $1 AND until > $2', [hash, at]);
+      return result.rows[0] || null;
+    },
+    /** As in JSON mode; one taker at a time on every server (a transaction advisory lock). */
+    async takeEmailSend(limits, at, windowMs) {
+      const client = await pool.connect(), keys = limits.map((l) => l.key);
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('naadamy_email_sends'))");
+        await client.query('DELETE FROM naadamy_email_sends WHERE at <= $1', [at - windowMs]);
+        const counts = await client.query('SELECT key, count(*)::int AS n, min(at) AS first FROM naadamy_email_sends WHERE key = ANY($1::text[]) GROUP BY key', [keys]);
+        const full = counts.rows.filter((row) => row.n >= limits.find((l) => l.key === row.key).max);
+        if (!full.length) await client.query('INSERT INTO naadamy_email_sends (key, at) SELECT unnest($1::text[]), $2::bigint', [keys, at]);
+        await client.query('COMMIT');
+        return full.length ? { ok: false, wait: Math.max(...full.map((row) => Number(row.first))) + windowMs - at } : { ok: true };
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back email count:', rollbackError.message); }
+        throw new Error(`Could not count email sends: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    /** One statement: of the due rows, one that no other server holds (SKIP LOCKED) gets its next due time, so two servers
+     *  never claim the same report. */
+    async claimFamilyReport(at, next) {
+      const result = await pool.query(`UPDATE naadamy_family_emails SET due_at = $2, updated_at = now()
+        WHERE code = (SELECT code FROM naadamy_family_emails WHERE due_at > 0 AND due_at <= $1 ORDER BY due_at LIMIT 1 FOR UPDATE SKIP LOCKED)
+          AND due_at > 0 AND due_at <= $1
+        RETURNING code, data, $1::bigint AS due_at`, [at, next]);
+      return result.rows[0] ? { code: result.rows[0].code, record: emailOut(result.rows[0]) } : null;
     },
     async getAccount(id, initial = {}, inventorySeed = {}) {
       if (!PLAYER_ID.test(id || '')) throw new Error('Invalid player id for wallet');

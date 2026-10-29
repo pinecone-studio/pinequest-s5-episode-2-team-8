@@ -51,7 +51,7 @@ public sealed class Doll
         armL.localRotation = Quaternion.AngleAxis(-s * 28, Vector3.right); armR.localRotation = Quaternion.AngleAxis(s * 28, Vector3.right);
     }
 
-    static string Key(Look l) => string.Join("|", l.deel, l.skin, l.hat, l.face, l.neck);
+    static string Key(Look l) => string.Join("|", l.deel, l.skin, l.hat, l.face, l.neck, l.gender);
 
     // ---------------------------------------------------------------- the pieces, in the doll's own space
     static string[] Deel(Look l) => Px.DEEL.TryGetValue(l.deel ?? "", out var d) ? d : Px.DEEL["blue"];
@@ -116,6 +116,11 @@ public sealed class Doll
             B(0, 0.322f, 1.2f, 0.055f, 0.02f, 0.025f, Px.Col(Px.K.outl));
         }
         else if (l.face == "sun") B(0, 0.29f, 1.18f, 0.44f, 0.035f, 0.12f, Px.Col("#2b2b3a"));
+        if (l.Girl) foreach (int s in new[] { -1, 1 })                // a girl's two braids down her back, tied with red
+        {
+            B(s * 0.17f, -0.22f, 0.66f, 0.1f, 0.1f, 0.5f, hair);
+            B(s * 0.17f, -0.22f, 0.6f, 0.11f, 0.11f, 0.06f, Px.Col(Px.K.red));
+        }
         Hat(l.hat);
     }
 

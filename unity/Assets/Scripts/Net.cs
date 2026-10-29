@@ -38,6 +38,11 @@ public sealed class Net
     public readonly Dictionary<string, Other> others = new Dictionary<string, Other>();
     public Lot[] lots; public int total, nutag; public bool replaced;
     public bool Online => status == "online";
+    /** The XP leaderboards (server leaderboard.js), asked for when their window opens or its tab changes. */
+    public sealed class BoardRow { public int rank, xp, avatar; public string name; public Look look; public bool me; }
+    public sealed class Board { public readonly List<BoardRow> rows = new List<BoardRow>(); public string reason; public float at; }
+    public readonly Dictionary<string, Board> boards = new Dictionary<string, Board>(); public readonly Dictionary<string, float> boardAsked = new Dictionary<string, float>();
+    public const float BOARD_WAIT = 8; // an older server never answers `board`
 
     ClientWebSocket ws; CancellationTokenSource cts; readonly ConcurrentQueue<string> inbox = new ConcurrentQueue<string>(), outbox = new ConcurrentQueue<string>();
     readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0); int retry; float retryAt = -1; bool closed = true;
@@ -158,8 +163,8 @@ public sealed class Net
     static string F2(float v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
     static string Raw(string k, string v) => Q(k) + ":" + v;
     static string Obj(params string[] kv) { var b = new List<string>(); for (int i = 0; i < kv.Length; i += 2) b.Add(Q(kv[i]) + ":" + (kv[i + 1] == null ? "null" : Q(kv[i + 1]))); return string.Join(",", b); }
-    public static string LookJson(Look l) => "{" + Obj("deel", l.deel, "skin", l.skin, "hat", l.hat, "face", l.face, "neck", l.neck, "pet", l.pet, "title", l.title, "ride", l.ride, "coat", l.coat) + "}";
-    static Look LookOf(J j) => j.IsNull ? new Look() : new Look { deel = j["deel"].S ?? "blue", skin = j["skin"].S ?? "#F6D3B3", hat = j["hat"].S, face = j["face"].S, neck = j["neck"].S, pet = j["pet"].S, title = j["title"].S, ride = j["ride"].S, coat = j["coat"].S };
+    public static string LookJson(Look l) => "{" + Obj("deel", l.deel, "skin", l.skin, "hat", l.hat, "face", l.face, "neck", l.neck, "pet", l.pet, "title", l.title, "ride", l.ride, "coat", l.coat, "gender", l.gender) + "}";
+    static Look LookOf(J j) => j.IsNull ? new Look() : new Look { deel = j["deel"].S ?? "blue", skin = j["skin"].S ?? "#F6D3B3", hat = j["hat"].S, face = j["face"].S, neck = j["neck"].S, pet = j["pet"].S, title = j["title"].S, ride = j["ride"].S, coat = j["coat"].S, gender = j["gender"].S };
     static Lot LotOf(J j) => j.IsNull ? null : new Lot { by = j["by"].S, n = j["n"].S, roof = j["roof"].S ?? "blue", door = j["door"].S ?? "red", stage = j["stage"].I };
     static ChatLine ChatOf(J j) => new ChatLine { k = j["k"].S, id = j["id"].S, n = j["n"].S, i = j["i"].I };
 
@@ -225,7 +230,7 @@ public sealed class Net
                 g.Toast(Loc.L("Өрөөнд нэвтэрч чадсангүй.", "Could not join the room.")); 
                 return;
             case "welcome":
-                status = "online"; retry = 0; room = m["room"].S; others.Clear(); foreach (var p in m["players"]) AddOther(p);
+                status = "online"; retry = 0; room = m["room"].S; others.Clear(); foreach (var p in m["players"]) AddOther(p); boards.Clear(); boardAsked.Clear();
                 lots = m["lots"].Select(LotOf).ToArray(); if (lots.Length < Rules.LOTS) Array.Resize(ref lots, Rules.LOTS);
                 sentLook = null; lookT = 99; sent = new Vector2(-99, -99);
                 g.Toast(Loc.L("Нутагт холбогдлоо", "Connected to the village") + " · " + room + (others.Count > 0 ? " · " + others.Count + Loc.L(" найз байна", " friends here") : ""));
@@ -305,7 +310,23 @@ public sealed class Net
                 return;
             }
             case "wr-invite": case "wr-declined": case "wr-start": case "wr-wait": case "wr-result": case "wr-end": g.OnWrestleMsg(m); return;
+            case "board":
+            {
+                string k = m["k"].S; if (k != "room" && k != "family") return;
+                var b = new Board { reason = m["reason"].S, at = Time.realtimeSinceStartup };
+                foreach (var r in m["rows"]) b.rows.Add(new BoardRow { rank = r["rank"].I, name = (r["name"].S ?? "").Replace("<", "").Replace(">", ""), xp = r["xp"].I, look = r.Has("look") ? LookOf(r["look"]) : null, avatar = r["avatar"].I, me = r["me"].B });
+                boards[k] = b; return;
+            }
         }
+    }
+    /** Ask for a board, unless a fresh one is here (the server keeps it 30 s anyway) or the last ask is still on its way. */
+    public void AskBoard(string k)
+    {
+        float now = Time.realtimeSinceStartup; if (!Online) return;
+        bool has = boards.TryGetValue(k, out var b), asked = boardAsked.TryGetValue(k, out var a);
+        if (has && (b.reason == null || b.reason == "no-family") && now - b.at < 15) return;
+        if (asked && (!has || a > b.at) && now - a < BOARD_WAIT) return;
+        boardAsked[k] = now; Send("{" + Obj("t", "board", "k", k) + "}");
     }
     public void Say(bool emote, int i) => Send("{" + Obj("t", "say", "k", emote ? "e" : "p") + "," + Raw("i", i.ToString()) + "}");
     public void Jumped() => Send("{" + Obj("t", "jump") + "}");
@@ -438,6 +459,7 @@ public sealed partial class Game
                 });
                 GUILayout.EndHorizontal();
                 if (n.status == "solo" && g.Btn(Loc.L("Дахин холбогдох", "Connect again"), false, 34)) g.Later(() => n.Connect(g));
+                if (n.Online && g.Btn(Loc.L("Шилдэгүүд", "Leaderboard"), false, 34)) g.Later(() => g.Swap(new BoardModal()));
             }
             n.chatOpen = true; n.unread = 0;
             if (n.Online) // the room's recent chat sits on top of the phrases, so reading and answering is one window
@@ -475,6 +497,61 @@ public sealed partial class Game
         }
         public override void Press(Game g) { }
         public override void Closed(Game g) { g.net.chatOpen = false; }
+    }
+
+    // ---------------------------------------------------------------- who has the most XP: in this room, or in my family
+    public sealed class BoardModal : Modal
+    {
+        static readonly string[] MEDAL = { "#f7c646", "#c9ccd3", "#d08a4e" };
+        string k = "room"; bool asked; float now = Time.realtimeSinceStartup; // `now` is set in Tick, so Layout and Repaint of one frame agree
+        GUIStyle sRank, sXp, sFor;
+        public override void Tick(Game g, float dt) { var n = g.net; now = Time.realtimeSinceStartup; if (!n.Online) asked = false; else if (!asked) { asked = true; n.AskBoard(k); } } // again after a reconnect
+        public override void Draw(Game g)
+        {
+            var n = g.net;
+            if (sFor != g.sLabel) { sFor = g.sLabel; sRank = new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = false }; sXp = new GUIStyle(g.sLabel) { wordWrap = false }; }
+            g.Title(Loc.L("Шилдэгүүд", "Leaderboard"));
+            int hit = g.Chips(new[] { Loc.L("Өрөө", "Room"), Loc.L("Гэр бүл", "Family") }, k == "room" ? 0 : 1, 100, true);
+            if (hit >= 0 && (hit == 0) != (k == "room")) { string nk = hit == 0 ? "room" : "family"; g.Later(() => { k = nk; asked = false; }); }
+            if (!n.Online)
+            {
+                g.Fact(Loc.L("Шилдэгүүдийг харахын тулд сервертэй холбогдож, найзуудтайгаа хамт тоглох хэрэгтэй.", "To see the leaderboard, connect to the server and play together with friends."), true, Loc.L("Холбогдоогүй байна", "Not connected"));
+                if (string.IsNullOrEmpty(Family.ServerOf(g, g.V))) { if (g.Btn(Loc.L("Тохиргоо", "Settings"), true, 40)) g.Later(() => g.Swap(new SettingsModal())); }
+                else if (n.status == "solo") { if (g.Btn(Loc.L("Олуулаа тоглох", "Play online"), true, 40)) g.Later(() => g.Swap(new ModeModal())); }
+                else g.Small(Loc.L("Холбогдож байна…", "Connecting…"));
+            }
+            else
+            {
+                bool has = n.boards.TryGetValue(k, out var b), sent = n.boardAsked.TryGetValue(k, out var a), waiting = sent && (!has || a > b.at);
+                if (waiting && now - a < Net.BOARD_WAIT || !has && !sent) g.Text(Loc.L("Ачаалж байна…", "Loading…"));
+                else if (!has) { g.Fact(Loc.L("Шилдэгүүд энэ серверт одоохондоо алга. Удахгүй нэмэгдэнэ!", "The leaderboard is not available on this server yet. Coming soon!"), false); if (g.Btn(Loc.L("Дахин оролдох", "Try again"), false, 34)) g.Later(() => n.AskBoard(k)); }
+                else if (b.reason == "no-family")
+                {
+                    g.Fact(Loc.L("Чи одоохондоо гэр бүлд нэгдээгүй байна. Том хүнээс гэр бүл үүсгээд чамайг нэмэхийг хүсээрэй, тэгвэл ах дүүстэйгээ уралдана!", "You are not in a family yet. Ask a grown-up to make a family and add you, then you can race your brothers and sisters!"), false);
+                    if (g.Btn(Loc.L("Гэр бүл (том хүн)", "Family (grown-ups)"), true, 40)) g.Later(() => { g.Close(); g.OpenFamily(); });
+                }
+                else if (b.reason != null) { g.Fact(Loc.L("Шилдэгүүдийг ачаалж чадсангүй. Жаахан хүлээгээд дахин оролдоорой.", "Could not load the leaderboard. Wait a little and try again."), false); if (g.Btn(Loc.L("Дахин оролдох", "Try again"), false, 34)) g.Later(() => n.AskBoard(k)); }
+                else if (b.rows.Count == 0) g.Text(k == "room" ? Loc.L("Энэ өрөөнд одоохондоо хэн ч алга. Тоглож XP цуглуулаад анхных нь болоорой!", "Nobody here yet. Play, earn XP and be the first!") : Loc.L("Гэр бүлд одоохондоо хэн ч алга.", "Nobody in the family yet."));
+                else
+                {
+                    if (waiting) g.Small(Loc.L("Шинэчилж чадсангүй. Өмнөх жагсаалт:", "Could not refresh. The last list:"));
+                    for (int i = 0; i < b.rows.Count; i++)
+                    {
+                        var r = b.rows[i]; if (i > 0 && r.me && r.rank > b.rows[i - 1].rank + 1) g.Small("…"); // a gap before my own row, under the top 10
+                        GUILayout.BeginHorizontal(r.me ? g.sSel : g.sBtn);
+                        var mr = GUILayoutUtility.GetRect(g.U(34), g.U(34), GUILayout.Width(g.U(34)), GUILayout.Height(g.U(34)));
+                        if (r.rank >= 1 && r.rank <= 3) { var old = GUI.color; GUI.color = Px.Col(MEDAL[r.rank - 1]); GUI.DrawTexture(mr, g.Tex(Disc())); GUI.color = old; }
+                        GUI.Label(mr, "<b>" + r.rank + "</b>", sRank);
+                        var ic = r.look != null ? Px.Char(r.look, 0, 0) : Px.Mascot(r.avatar); if (ic != null) g.IconAt(ic, 32);
+                        GUILayout.Label("<b>" + r.name + "</b>" + (r.me ? " · " + Loc.L("Би", "Me") : ""), g.sLabel);
+                        GUILayout.FlexibleSpace(); GUILayout.Label("<b>" + r.xp + "</b> XP", sXp);
+                        GUILayout.EndHorizontal();
+                    }
+                }
+            }
+            if (g.Btn(Loc.L("Хаах", "Close"), false, 30)) g.Later(g.Close);
+        }
+        public override void Press(Game g) => g.Close();
     }
 
     // ---------------------------------------------------------------- live wrestling with a friend: both pick a move and power, the server decides
