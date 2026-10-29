@@ -103,7 +103,7 @@ public static class Scenes
             R(x, 46, 50, 28, 14, "#4a4a55"); R(x, 47, 51, 26, 2, "#6a6a77"); R(x, 66, 30, 3, 20, "#5a5a66");
             bool hot = st.heat || (s == 1 && st.temp > 0.2f);
             if (hot) for (int i = 0; i < 5; i++) { int fh = 2 + (int)((t * 9 + i * 3) % 3); R(x, 52 + i * 4, 60 - fh, 2, fh, i % 2 != 0 ? K.orange : K.gold); }
-            if (s == 5) { R(x, 44, 36, 32, 14, "#3f76db"); R(x, 44, 41, 32, 2, K.gold); }
+            if (s == 5 && q >= 1) { R(x, 44, 36, 32, 14, "#3f76db"); R(x, 44, 41, 32, 2, K.gold); }
             else
             {
                 R(x, 47, 38, 26, 12, K.outl); R(x, 48, 39, 24, 10, "#c8c8d2"); R(x, 48, 39, 24, 2, "#ffffff");
@@ -117,6 +117,7 @@ public static class Scenes
                 }
                 if (s >= 3 && s < 5) for (int i = 0; i < (s == 3 ? 3 - Js.Round(3 * q) : 0); i++) Ell(x, 54 + i * 6, (int)(32 - ((t * 6 + i * 4) % 10)), 1, 1, "rgba(255,255,255,.7)");
                 if (s == 4) { Line(x, 64, 28, 58, 37, "#a5a5b0"); Ell(x, 57, 37, 2, 1, "#fff6e0"); }
+                if (s == 5) { int wh = Js.Round(14 * q); R(x, 44, 50 - wh, 32, wh, "#3f76db"); if (wh >= 9) R(x, 44, 41, 32, 2, K.gold); } // the blanket wraps up round the pot as you drag
             }
             if (s == 5) { R(x, 0, 0, W, H, "rgba(20,24,70," + (0.55 * (1 - Math.Abs(q * 2 - 1))).ToString("0.00", CultureInfo.InvariantCulture) + ")"); if (q > 0.2f && q < 0.8f) Blob(x, 20, 12, 4, 4, "#fff3c4", "#e6d8a0"); }
         }
