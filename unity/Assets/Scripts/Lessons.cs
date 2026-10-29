@@ -377,7 +377,7 @@ public sealed partial class Game
             var e = Event.current; var s = Step;
             if (s != null && Tp(s) == "zones" && !solved && e.type == EventType.MouseDown && rr.Contains(e.mousePosition))
             {
-                var p = live.Pick(e.mousePosition); string z = Scenes.ZoneAt(p.x, p.y); e.Use();
+                var p = live.Pick(e.mousePosition); string z = Scenes.ZoneAt(l["scene"].S, p.x, p.y); e.Use();
                 if (z != null) g.Later(() => { st.hl = z; st.hlBad = z != s["zone"].S; if (z == s["zone"].S) Success(s); else { Sfx.Bad(); say = Loc.L("Тэнд биш. Дахиад оролдоорой!", "Not there. Try again!"); g.StartCoroutine(ClearHl()); } });
             }
             if (run && s != null && s.Has("drop") && (Tp(s) == "pick" || Tp(s) == "tap")) DropTray(g, s);

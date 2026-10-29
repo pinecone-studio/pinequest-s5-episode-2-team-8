@@ -1396,169 +1396,87 @@
         "n": 5,
         "field": "sub",
         "label": {
-          "mn": "Малаа тоолох",
-          "en": "Count the herd"
+          "mn": "Мал авчрах",
+          "en": "Bring an animal"
         },
         "title": {
           "mn": "Малаа тоол!",
           "en": "Count the herd!"
         },
         "text": {
-          "mn": "5 удаа дарж таван хошуу малаа цуглуулаарай.",
-          "en": "Tap 5 times to gather all five animals."
+          "mn": "Таван хошуу малаа бэлчээрт нь нэг нэгээр нь чирж авчир!",
+          "en": "Drag the five kinds of animals onto the pasture, one by one!"
         },
         "after": {
           "mn": "Морь, үхэр, тэмээ, хонь, ямаа: таван хошуу мал.",
           "en": "Horse, cattle, camel, sheep, goat: the five animals."
-        }
+        },
+        "drop": [
+          0,
+          34,
+          120,
+          32
+        ]
       },
       {
-        "type": "pick",
+        "type": "zones",
+        "zone": "horse",
         "title": {
           "mn": "Айраг",
           "en": "Airag"
         },
         "text": {
-          "mn": "Айргийг аль малын сүүгээр хийдэг вэ?",
-          "en": "Airag is made from which animal’s milk?"
+          "mn": "Айргийг аль малын сүүгээр хийдэг вэ? Зураг дээрээс дар.",
+          "en": "Airag is made from which animal’s milk? Tap it in the picture."
         },
-        "options": [
-          {
-            "t": {
-              "mn": "Морь (гүү)",
-              "en": "Horse (mare)"
-            },
-            "ok": true
-          },
-          {
-            "t": {
-              "mn": "Хонь",
-              "en": "Sheep"
-            },
-            "ok": false
-          },
-          {
-            "t": {
-              "mn": "Тэмээ",
-              "en": "Camel"
-            },
-            "ok": false
-          }
-        ],
         "after": {
           "mn": "Гүүний сүүгээр айраг, тэмээний сүүгээр хоормог хийдэг.",
           "en": "Mare’s milk makes airag; camel’s milk makes khoormog."
         }
       },
       {
-        "type": "pick",
+        "type": "zones",
+        "zone": "sheep",
         "title": {
           "mn": "Эсгий",
           "en": "Felt"
         },
         "text": {
-          "mn": "Гэрийн эсгий хийх ноосыг голдуу аль малаас авдаг вэ?",
-          "en": "The wool for ger felt mostly comes from which animal?"
+          "mn": "Гэрийн эсгий хийх ноосыг голдуу аль малаас авдаг вэ? Зураг дээрээс дар.",
+          "en": "The wool for ger felt mostly comes from which animal? Tap it in the picture."
         },
-        "options": [
-          {
-            "t": {
-              "mn": "Хонь",
-              "en": "Sheep"
-            },
-            "ok": true
-          },
-          {
-            "t": {
-              "mn": "Морь",
-              "en": "Horse"
-            },
-            "ok": false
-          },
-          {
-            "t": {
-              "mn": "Үхэр",
-              "en": "Cattle"
-            },
-            "ok": false
-          }
-        ],
         "after": {
           "mn": "Хонины ноосыг дэвтээж, өнхрүүлж эсгий хийдэг.",
           "en": "Sheep’s wool is wetted and rolled into felt."
         }
       },
       {
-        "type": "pick",
+        "type": "zones",
+        "zone": "goat",
         "title": {
           "mn": "Ноолуур",
           "en": "Cashmere"
         },
         "text": {
-          "mn": "Зөөлөн ноолуурыг аль малаас самнаж авдаг вэ?",
-          "en": "Which animal gives soft cashmere?"
+          "mn": "Зөөлөн ноолуурыг аль малаас самнаж авдаг вэ? Зураг дээрээс дар.",
+          "en": "Which animal gives soft cashmere? Tap it in the picture."
         },
-        "options": [
-          {
-            "t": {
-              "mn": "Ямаа",
-              "en": "Goat"
-            },
-            "ok": true
-          },
-          {
-            "t": {
-              "mn": "Тэмээ",
-              "en": "Camel"
-            },
-            "ok": false
-          },
-          {
-            "t": {
-              "mn": "Хонь",
-              "en": "Sheep"
-            },
-            "ok": false
-          }
-        ],
         "after": {
           "mn": "Хавар ямааг самнаж ноолуур авдаг.",
           "en": "In spring goats are combed for cashmere."
         }
       },
       {
-        "type": "pick",
+        "type": "zones",
+        "zone": "camel",
         "title": {
           "mn": "Говийн хөлөг",
           "en": "Ship of the Gobi"
         },
         "text": {
-          "mn": "Говьд хүнд ачаа зөөж, ус ундгүй удаан тэсдэг мал аль вэ?",
-          "en": "Which animal carries heavy loads and goes long without water in the Gobi?"
+          "mn": "Говьд хүнд ачаа зөөж, ус ундгүй удаан тэсдэг мал аль вэ? Зураг дээрээс дар.",
+          "en": "Which animal carries heavy loads and goes long without water in the Gobi? Tap it in the picture."
         },
-        "options": [
-          {
-            "t": {
-              "mn": "Тэмээ",
-              "en": "Camel"
-            },
-            "ok": true
-          },
-          {
-            "t": {
-              "mn": "Хонь",
-              "en": "Sheep"
-            },
-            "ok": false
-          },
-          {
-            "t": {
-              "mn": "Ямаа",
-              "en": "Goat"
-            },
-            "ok": false
-          }
-        ],
         "after": {
           "mn": "Хоёр бөхтэй монгол тэмээг “говийн хөлөг” гэдэг.",
           "en": "The two-humped Mongolian camel is called “the ship of the Gobi”."
