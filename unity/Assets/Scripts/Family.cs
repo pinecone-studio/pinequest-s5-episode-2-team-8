@@ -59,8 +59,17 @@ public static class Family
     /** Where this profile reaches the server: its own address, the one this device last used, or the hosted one. "": play alone. */
     public static string ServerOf(Game g, SaveData p)
     {
-        if (p != null && !string.IsNullOrWhiteSpace(p.server)) return p.server;
-        return !string.IsNullOrWhiteSpace(g.App.server) ? g.App.server : HOSTED;
+        if (p != null && IsAddress(p.server)) return p.server; // a code typed into the box by mistake ("m8qhg") is no address: skip it
+        return IsAddress(g.App.server) ? g.App.server : HOSTED;
+    }
+    /** Looks like a server address: localhost, a name or IP with a dot, or anything with a :port (an optional http(s)/ws(s):// in front). */
+    public static bool IsAddress(string s)
+    {
+        s = (s ?? "").Trim(); if (s == "") return false;
+        int k = s.IndexOf("://"); if (k >= 0) { string sch = s.Substring(0, k).ToLowerInvariant(); if (sch != "http" && sch != "https" && sch != "ws" && sch != "wss") return false; s = s.Substring(k + 3); }
+        int sl = s.IndexOf('/'); string host = sl >= 0 ? s.Substring(0, sl) : s;
+        if (host == "" || !host.All(c => char.IsLetterOrDigit(c) || c == '.' || c == '-' || c == ':')) return false;
+        return host.StartsWith("localhost") || host.Contains('.') || host.Contains(':');
     }
 
     public static string Why(J r)
