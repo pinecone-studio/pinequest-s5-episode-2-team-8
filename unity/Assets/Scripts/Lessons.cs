@@ -275,7 +275,7 @@ public sealed partial class Game
         readonly J l; readonly string id; readonly SceneState st = new SceneState(); readonly Live live = new Live(Scenes.W, Scenes.H); readonly Action<PxCanvas, SceneState, float> draw;
         WithPicker picker; List<Player> players = new List<Player>(); string mode = "solo"; int i, turn;
         string say; bool solved; List<J> opts; int dragK = -1, bounceK = -1; Vector2 dragPos, dragOff, bounceFrom; float bounceT = -9, popT = -9; Rect sceneRect; Vector2 lscroll; GUIStyle trayLab; Rect ghostR; PxCanvas ghostImg; string ghostT; readonly HashSet<int> wrong = new HashSet<int>();
-        int tapN; float gauge; bool heating, gaugeOk; float t0; bool tfDone; string side, lastSide; Vector2? dragStart; bool dragDone; string altMsg;
+        int tapN; float gauge; bool heating, gaugeOk; float t0; bool tfDone; string side, lastSide; Vector2? dragStart; bool dragDone; string altMsg; int hintN, hintK = -1;
         QuizRun quiz; bool finished; (int right, int n, int[] tally) result; (int coins, int xp, int level) reward; bool first, rewarded;
         public LessonPage(string id)
         {
@@ -290,7 +290,7 @@ public sealed partial class Game
         string Tp(J s) => s["type"].S;
         void Show(Game g)
         {
-            say = null; solved = false; dragK = bounceK = -1; popT = -9; lscroll = Vector2.zero; wrong.Clear(); tapN = 0; gaugeOk = false; heating = false; tfDone = false; lastSide = null; altMsg = null; dragStart = null;
+            say = null; solved = false; dragK = bounceK = -1; popT = -9; lscroll = Vector2.zero; wrong.Clear(); tapN = 0; gaugeOk = false; heating = false; tfDone = false; lastSide = null; altMsg = null; dragStart = null; hintN = 0; hintK = -1;
             if (i >= l["steps"].Count) { StartQuiz(g); return; }
             var s = Step;
             if (s.Has("ch")) st.ch = s["ch"].S; st.broken = s["broken"].B;
@@ -382,6 +382,7 @@ public sealed partial class Game
                 var p = live.Pick(e.mousePosition); string z = Scenes.ZoneAt(l["scene"].S, p.x, p.y); e.Use();
                 if (z != null) g.Later(() => { st.hl = z; st.hlBad = z != s["zone"].S; if (z == s["zone"].S) Success(s); else { Sfx.Bad(); say = Loc.L("Тэнд биш. Дахиад оролдоорой!", "Not there. Try again!"); g.StartCoroutine(ClearHl()); } });
             }
+            if (run && s != null) HintBadge(g, s);
             if (run && s != null && s.Has("drop") && (Tp(s) == "pick" || Tp(s) == "tap")) DropTray(g, s);
             if (run && s != null && Tp(s) == "drag") DragPad(g, s);
             if (run) lscroll = g.BeginScroll(lscroll);
@@ -504,6 +505,7 @@ public sealed partial class Game
                     else { bounceK = k; bounceFrom = e.mousePosition - dragOff; bounceT = Time.time; if (!tray.Contains(e.mousePosition)) g.Later(() => { Sfx.Bad(); say = Loc.L("Гэрэлтэж буй газар руу чирээрэй", "Drag it onto the glowing spot"); }); }
                 }
             }
+            if (pick && hintK >= 0 && hintK < count && hintK != dragK && !Gone()) { var hr = Home(hintK); float a2 = 0.6f + 0.4f * Mathf.Sin(Time.time * 6), th2 = g.U(3); var hc = new Color(1, 0.85f, 0.15f, a2); g.Box(new Rect(hr.x, hr.y, hr.width, th2), hc); g.Box(new Rect(hr.x, hr.yMax - th2, hr.width, th2), hc); g.Box(new Rect(hr.x, hr.y, th2, hr.height), hc); g.Box(new Rect(hr.xMax - th2, hr.y, th2, hr.height), hc); }
             if (!Gone() && dragK < 0) // until you pick one up: a hand goes from the tray up to the glowing spot, its path dotted, and the job is written on the picture
             {
                 float ph = Time.time % 1.8f / 1.8f, u = Mathf.SmoothStep(0, 1, Mathf.Clamp01((ph - 0.12f) / 0.65f)), al = ph < 0.12f ? ph / 0.12f : ph > 0.85f ? (1 - ph) / 0.15f : 1;
@@ -520,6 +522,58 @@ public sealed partial class Game
         }
         /** A picture as big as fits in r, keeping its shape, with a little room round it. */
         static void Pic(Game g, Rect r, PxCanvas im) { float sz = Mathf.Min(r.width, r.height) - g.U(10); GUI.DrawTexture(new Rect(r.center.x - sz / 2, r.center.y - sz / 2, sz, sz), g.Tex(im), ScaleMode.ScaleToFit); }
+        /** Basar in the picture's corner: tap him for a hint. The first tap says what to do; the next ones help more (show the
+         *  right part, take away a wrong answer, light up the right place). A step can give its own first hint ("hint"). */
+        void HintBadge(Game g, J s)
+        {
+            var r = new Rect(sceneRect.xMax - g.U(54), sceneRect.yMax - g.U(54), g.U(48), g.U(48));
+            float bob = hintN == 0 ? Mathf.Round(Mathf.Sin(Time.time * 3) * g.U(2)) : 0; r.y += bob; // he bobs until you ask him once
+            GUI.Box(r, "", g.sBtn);
+            GUI.DrawTexture(new Rect(r.x + g.U(5), r.y + g.U(5), r.width - g.U(10), r.height - g.U(10)), g.Tex(Px.BankharFace(hintN > 0 ? 1 : 0)), ScaleMode.ScaleToFit);
+            var q = new Rect(r.xMax - g.U(16), r.y - g.U(6), g.U(20), g.U(20)); g.Box(q, Px.Col("#f7c646"));
+            GUI.Label(q, "<b>?</b>", new GUIStyle(g.sSmall) { alignment = TextAnchor.MiddleCenter, normal = { textColor = Px.Col("#2b1e2e") } });
+            var e = Event.current;
+            if (e.type == EventType.MouseDown && (r.Contains(e.mousePosition) || q.Contains(e.mousePosition))) { e.Use(); g.Later(() => Hint(s)); }
+        }
+        void Hint(J s)
+        {
+            Sfx.Pop(); hintN++; string ty = Tp(s);
+            string L(string mn, string en) => Loc.L("Вуф! " + mn, "Woof! " + en);
+            if (solved) { say = L("Сайн байна! Одоо “Цааш” товчийг дар.", "Well done! Now tap “Next”."); return; }
+            if (hintN == 1 && s.Has("hint")) { say = s["hint"].T.ToString(); return; }
+            switch (ty)
+            {
+                case "pick":
+                {
+                    int ok = opts.FindIndex(o => o["ok"].B);
+                    bool parts = opts.Exists(o => o.Has("img"));
+                    if (hintN == 1) { say = parts ? L("Гэр барих дараалал: шал, хана, хаалга, тооно, унь, эсгий, бүрээс, бүслүүр. Одоо аль нь дараагийнх вэ?", "The building order: floor, walls, door, crown, poles, felt, cover, ropes. Which one comes next?") : L(s["text"].T.ToString() + " Сайн бодоод үз!", s["text"].T.ToString() + " Think it through!"); return; }
+                    if (parts || s.Has("drop")) { hintK = ok; say = L($"Энэ нь “{opts[ok]["t"].T}”. Гэрэлтэж буй хэсгийг газар руу нь чир!", $"It’s “{opts[ok]["t"].T}”. Drag the glowing one onto its spot!"); return; }
+                    int bad = Enumerable.Range(0, opts.Count).FirstOrDefault(k => !opts[k]["ok"].B && !wrong.Contains(k) && k != ok);
+                    if (!opts[bad]["ok"].B && !wrong.Contains(bad)) { wrong.Add(bad); say = L("Нэг буруу хариултыг хаслаа. Үлдсэнээс сонго!", "I took away one wrong answer. Pick from the rest!"); }
+                    else say = L("Үлдсэн хариултуудаас сайн бодоод сонго!", "Think hard and pick from what is left!");
+                    return;
+                }
+                case "drag":
+                {
+                    string dir = s["dir"].S;
+                    string how = dir == "side" ? Loc.L("зураг дээр хуруугаа тавиад зүүнээс баруун тийш чир", "put your finger on the picture and drag from left to right")
+                        : dir == "up" ? Loc.L("зураг дээр хуруугаа тавиад дээш нь чир", "put your finger on the picture and drag it up")
+                        : Loc.L("зураг дээр хуруугаа тавиад доош нь тат", "put your finger on the picture and pull it down");
+                    string more = (s["alt"].B ? Loc.L(" Зүүн, баруун талаар ээлжлэн хий.", " Take turns on the left and the right.") : "") + (s["release"].B ? Loc.L(" Өндөрт өргөөд гараа тавь.", " Swing it high, then let go.") : "");
+                    say = Loc.L("Вуф! ", "Woof! ") + char.ToUpper(how[0]) + how.Substring(1) + "." + more + Loc.L($" {s["n"].I} удаа.", $" {s["n"].I} times.");
+                    return;
+                }
+                case "hold": say = L("Товчийг дараад барь. Зүү ногоон хэсэгт орох үед гараа ав.", "Press and hold the button. Let go when the needle is in the green part."); return;
+                case "timing": say = L("Зүүг ажиглаарай. Ногоон хэсэгт орох үед товчийг дар.", "Watch the needle. Tap the button when it is in the green part."); return;
+                case "tap": say = s.Has("drop") ? L($"Тавиураас чирээд гэрэлтэж буй газар руу {s["n"].I} удаа тавь.", $"Drag it from the tray onto the glowing spot, {s["n"].I} times.") : L($"Товчийг {s["n"].I} удаа дар.", $"Tap the button {s["n"].I} times."); return;
+                case "zones":
+                    if (hintN == 1) { say = L("Зураг дээрх зөв газрыг хуруугаараа дар.", "Tap the right place on the picture."); return; }
+                    st.hl = s["zone"].S; st.hlBad = false; I.StartCoroutine(ClearHl()); say = L("Гэрэлтэж буй газрыг хар. Тэнд дар!", "Look at the place that lights up. Tap it!"); return;
+                case "tf": say = L("Гэрийн ёс, түүхээ санаарай. Эргэлзвэл ээж, аав, эмээ, өвөөгөөсөө асуугаарай.", "Remember the customs and the stories. If you’re not sure, ask a parent or grandparent."); return;
+                default: say = L("Уншаад “Цааш” товчийг дар.", "Read it, then tap “Next”."); return;
+            }
+        }
         System.Collections.IEnumerator ClearHl() { yield return new WaitForSeconds(0.7f); if (!solved) st.hl = null; }
         static void Basar(Game g, string t) { GUILayout.BeginHorizontal(g.sBtn); g.IconAt(Px.BankharFace(1), 32); GUILayout.Label(t, g.sLabel); GUILayout.EndHorizontal(); }
         /** A hand gesture made on the picture: pull the udder down, lift the ladle high and let go, press the stone, stretch the walls. */
