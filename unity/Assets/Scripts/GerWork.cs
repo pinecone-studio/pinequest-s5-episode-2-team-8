@@ -155,7 +155,7 @@ public sealed partial class Game
         if (other != null) { if (other.stage > 0 && other.stage < GerRules.DONE) Toast(other.n + Loc.L(" гэрээ барьж байна. Дараа нь зочлоорой!", " is still building their ger. Visit when it is done!")); else Toast(other.n + Loc.L("-ийн гэр", "’s ger")); return; }
         if (V.lot.i >= 0 && V.lot.i != i) { Toast(Loc.L("Танд аль хэдийн гэр байна!", "You already have a ger!")); return; }
         if (MyStage >= GerRules.DONE && V.lot.i == i) { EnterGer(); return; }
-        if (!building) StartCoroutine(BuildGer(i));
+        if (!building) { if (IsoOn) GerBuildOpen(i); else StartCoroutine(BuildGer(i)); } // isometric: build on the plot (GerBuild.cs)
     }
 
     // ---------------------------------------------------------------- building

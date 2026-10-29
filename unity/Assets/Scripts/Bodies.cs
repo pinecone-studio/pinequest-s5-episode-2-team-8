@@ -6,7 +6,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public static class Bodies
+public static partial class Bodies
 {
     static readonly List<Vector3> vs = new List<Vector3>();
     static readonly List<Color32> cs = new List<Color32>();
@@ -32,6 +32,7 @@ public static class Bodies
         go.AddComponent<MeshFilter>().sharedMesh = mesh;
         var sh = Resources.Load<Shader>("Shaders/NaadamyVoxel") ?? Shader.Find("Naadamy/Voxel");
         go.AddComponent<MeshRenderer>().sharedMaterial = new Material(sh) { mainTexture = Texture2D.whiteTexture };
+        LotSigns(go); // the "for sale" signs, one object each so a plot with a ger can hide its own (BodiesGer.cs)
         return go;
     }
 
@@ -108,11 +109,6 @@ public static class Bodies
     {
         Color stake = Px.Col(Px.K.woodD), paper = Px.Col(Px.K.paper), gold = Px.Col(Px.K.gold);
         foreach (var (cx, cy) in new[] { (3, 6), (45, 6), (3, 44), (45, 44) }) Box(o.x + cx / 16f, o.y + cy / 16f, 0, 0.12f, 0.12f, 0.36f, stake);
-        float sx = o.x + 22 / 16f, sy = o.y + 34 / 16f;
-        Box(sx, sy, 0, 0.12f, 0.12f, 0.8f, stake);
-        Box(sx, sy + 0.04f, 0.42f, 1.0f, 0.06f, 0.48f, Px.Col(Px.K.outl));
-        Box(sx, sy + 0.08f, 0.46f, 0.9f, 0.04f, 0.4f, paper);
-        Box(sx, sy + 0.11f, 0.56f, 0.22f, 0.03f, 0.2f, gold); // the coin on it
     }
 
     /** A ger: felt wall with its skirt and hair ropes, the roof cover with its coloured trim, the toono, stovepipe and door. */

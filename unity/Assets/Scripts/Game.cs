@@ -449,7 +449,7 @@ public sealed partial class Game : MonoBehaviour
             }
             else Spr(Px.Bankhar(df), dgx * T - 3, dgy * T - 1, dgFlip, dgy + 0.05f);
             // your own ger on its lot
-            if (V.lot.i >= 0 && MyStage > 0) { var o = World.objects.Find(q => q.kind == "lot" && q.i == V.lot.i); Spr(Px.GerStage(MyStage, Px.ROOF[V.lot.roof ?? "blue"], Px.DOOR[V.lot.door ?? "red"]), o.x * T, o.y * T - 2, false, o.y + 2); }
+            if (V.lot.i >= 0 && MyStage > 0 && !IsoOn) { var o =World.objects.Find(q => q.kind == "lot" && q.i == V.lot.i); Spr(Px.GerStage(MyStage, Px.ROOF[V.lot.roof ?? "blue"], Px.DOOR[V.lot.door ?? "red"]), o.x * T, o.y * T - 2, false, o.y + 2); }
             // the dairy yard's animals: cows and goats shift about, mares stand by their foals on the зэл
             foreach (var o in World.objects)
             {
@@ -483,6 +483,7 @@ public sealed partial class Game : MonoBehaviour
             NetDraw();
             P2Draw(t);
         }
+        GerBodyDraw(); // my ger on its plot in the isometric view (GerBuild.cs)
         for (int i = poolUsed; i < pool.Count; i++) pool[i].enabled = false;
         for (int i = dollsUsed; i < dolls.Count; i++) if (dolls[i].root.activeSelf) dolls[i].root.SetActive(false);
         for (int i = crittersUsed; i < critters.Count; i++) if (critters[i].root.activeSelf) critters[i].root.SetActive(false);
