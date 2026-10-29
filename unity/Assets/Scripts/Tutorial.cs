@@ -62,8 +62,9 @@ public sealed partial class Game
         float w = Mathf.Min(vw - 16, 720 * k), pad = 12 * k, pic = (guide ? 112 : 72) * Mathf.Min(k, 1.5f), tx = pad * 2 + pic, tw = w - tx - pad;   // Bolormaa's 112×144 reference portrait
         var st = new GUIStyle(sPixel) { wordWrap = true, alignment = TextAnchor.UpperLeft, fontSize = PxSize(U(16 * k)), normal = { textColor = Color.white } }; // the story box is pixel text, as on the web
         var opt = k > 1 ? new GUIStyle(sOpt) { fontSize = PxSize(sOpt.fontSize * k) } : sOpt;
-        float line = 24 * k, th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0;
-        float h = Mathf.Max(guide ? pic * 72 / 56f + pad * 2 : pic + pad * 2, pad + line + th + (n > 0 ? (8 + n * 46) * k : 18 * k) + pad);
+        float line = 24 * k, th = st.CalcHeight(new GUIContent(d.text), U(tw)) / UiScale, n = d.choices != null ? d.choices.Length : 0, oht = 0;
+        for (int i = 0; i < n; i++) oht += Mathf.Max(40 * k, opt.CalcHeight(new GUIContent(d.choices[i]), U(tw)) / UiScale) + 6 * k; // an answer grows to fit its (often long) words
+        float h = Mathf.Max(guide ? pic * 72 / 56f + pad * 2 : pic + pad * 2, pad + line + th + (n > 0 ? 8 * k + oht : 18 * k) + pad);
         float x = vw / 2 - w / 2, y = d.top ? (guide ? 120 : 60) : vh - h - 70;
         var r = UR(x, y, w, h); Ui(r);
         Box(r, Color.white); Box(UR(x + 3, y + 3, w - 6, h - 6), Px.Col("#08060e"));
@@ -88,8 +89,15 @@ public sealed partial class Game
         GUI.Label(UR(x + tx, y + pad + line, tw, th + 4), vis + "<color=#00000000>" + d.text.Substring(vis.Length) + "</color>", st);
         if (!d.Typing && n == 0) GUI.Label(UR(x + w - 30 * k, y + h - 28 * k, 20 * k, 20 * k), (int)(Time.time * 2) % 2 == 0 ? "▼" : "", st);
         if (n > 0 && !d.Typing)
+        {
+            float oy = y + pad + line + th + 8 * k;
             for (int i = 0; i < n; i++)
-                if (Button(UR(x + tx, y + pad + line + th + (8 + i * 46) * k, tw, 40 * k), d.choices[i], opt)) { int ci = i; Later(() => { d.picked = ci; d.done = true; if (dialog == d) dialog = null; Sfx.Tap(); }); }
+            {
+                float oh = Mathf.Max(40 * k, opt.CalcHeight(new GUIContent(d.choices[i]), U(tw)) / UiScale);
+                if (Button(UR(x + tx, oy, tw, oh), d.choices[i], opt)) { int ci = i; Later(() => { d.picked = ci; d.done = true; if (dialog == d) dialog = null; Sfx.Tap(); }); }
+                oy += oh + 6 * k;
+            }
+        }
     }
     /** A pulsing yellow frame round the button Bolormaa is talking about. */
     void GlowAt(string key, Rect r)

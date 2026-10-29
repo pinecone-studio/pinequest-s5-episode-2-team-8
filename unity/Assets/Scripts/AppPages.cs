@@ -23,7 +23,7 @@ public sealed partial class Game
                 var r = GUILayoutUtility.GetRect(g.U(10), g.U(46), GUILayout.ExpandWidth(true));
                 if (GUI.Button(r, "", g.sBtn)) g.Later(() => { g.Close(); run(); });
                 float s = g.U(30); GUI.DrawTexture(new Rect(r.x + g.U(8), r.center.y - s / 2, s, s), g.Tex(Emo.Icon(emoji) ?? Px.Icon("ui:star")));
-                GUI.Label(new Rect(r.x + g.U(46), r.y, r.width - g.U(80), r.height), label, new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleLeft, wordWrap = false });
+                GUI.Label(new Rect(r.x + g.U(46), r.y, r.width - g.U(80), r.height), label, new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleLeft });
                 GUI.Label(new Rect(r.xMax - g.U(30), r.y, g.U(22), r.height), ">", new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter });
             }
             Item("🏹", Loc.L("Түүхийн аялал: Чингис хаан", "Story mode: Chinggis Khaan"), () => g.OpenStory());

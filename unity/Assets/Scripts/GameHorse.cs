@@ -233,7 +233,8 @@ public sealed partial class Game
             GUI.Label(UR(vw / 2 + 50, 60, 90, 24), tt.ToString("0.0"), st);
             Bar(UR(vw / 2 - 130, 88, 260, 10), r.stam, r.stam < 0.2f ? Px.Col("#e14b3d") : Px.Col("#f7c646"));
         }
-        GUI.Label(UR(vw / 2 - 145, r.phase == "count" ? 110 : 100, 290, 36), r.say, new GUIStyle(sChipText) { alignment = TextAnchor.UpperCenter, wordWrap = true, fontSize = Ts(11) });
+        var sayS = new GUIStyle(sChipText) { alignment = TextAnchor.UpperCenter, wordWrap = true, fontSize = Ts(11) };
+        GUI.Label(new Rect(U(vw / 2 - 145), U(r.phase == "count" ? 110 : 100), U(290), Mathf.Max(U(36), sayS.CalcHeight(new GUIContent(r.say), U(290)))), r.say, sayS);
         sprintRect = Rect.zero;
         if (r.phase == "go")
         {

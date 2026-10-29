@@ -99,10 +99,12 @@ public sealed partial class Game
         if (achShow == null) return;
         float age = Time.time - achT; if (age > 3.6f) { achShow = null; return; }
         float slide = Mathf.Clamp01(age / 0.3f) * Mathf.Clamp01((3.6f - age) / 0.3f);
-        var r = new Rect(Screen.width / 2f - U(150), U(8) - (1 - slide) * U(90), U(300), U(70)); GUI.Box(r, "", sToast);
-        GUI.DrawTexture(new Rect(r.x + U(8), r.y + U(5), U(60), U(60)), Tex(Emo.Badge(achShow.emblem, achShow.cat)));
-        GUI.Label(new Rect(r.x + U(76), r.y + U(8), r.width - U(84), U(20)), Loc.L("Шинэ амжилт!", "New achievement!"), new GUIStyle(sChipText) { fontSize = PxSize(U(11f) * 1.3f) });
-        GUI.Label(new Rect(r.x + U(76), r.y + U(28), r.width - U(84), U(34)), "<b>" + achShow.name + "</b>", new GUIStyle(sChipText) { wordWrap = true });
+        float lw = U(300) - U(84); var s1 = new GUIStyle(sChipText) { fontSize = PxSize(U(11f) * 1.3f) }; var s2 = new GUIStyle(sChipText) { wordWrap = true }; var nm = "<b>" + achShow.name + "</b>";
+        float h1 = s1.CalcHeight(new GUIContent("Ag"), lw), h2 = s2.CalcHeight(new GUIContent(nm), lw); // the pixel font's lines are tall: size the card to its text
+        var r = new Rect(Screen.width / 2f - U(150), U(8) - (1 - slide) * U(90), U(300), Mathf.Max(U(70), h1 + h2 + U(16))); GUI.Box(r, "", sToast);
+        GUI.DrawTexture(new Rect(r.x + U(8), r.center.y - U(30), U(60), U(60)), Tex(Emo.Badge(achShow.emblem, achShow.cat)));
+        GUI.Label(new Rect(r.x + U(76), r.y + U(8), lw, h1), Loc.L("Шинэ амжилт!", "New achievement!"), s1);
+        GUI.Label(new Rect(r.x + U(76), r.y + U(8) + h1, lw, h2), nm, s2);
     }
     static PxCanvas Grey(PxCanvas c)
     {

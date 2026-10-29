@@ -427,7 +427,7 @@ public sealed partial class Game
             if (seg < 3)
             {
                 var hr = g.URect(60, 58, 150, 12); g.Box(hr, new Color(0, 0, 0, 0.6f)); g.Box(new Rect(hr.x + U, hr.y + U, (hr.width - 2 * U) * rally, hr.height - 2 * U), rally >= 1 && (int)(t * 4) % 2 == 0 ? Px.Col("#fff2a8") : Px.Col("#e0b04a"));
-                GUI.Label(g.URect(214, 54, 220, 20), rally >= 1 ? Loc.L(TouchUI ? "“Холбоо” — бүрээ дуудах!" : "R — холбоотнуудаа дууд!", TouchUI ? "Allies — blow the horn!" : "R — call your allies!") : Loc.L("Холбоотнуудын бүрээ", "Allies' horn"), new GUIStyle(g.sPixel) { fontSize = PxSize(U * 12), alignment = TextAnchor.MiddleLeft, normal = { textColor = Color.white } });
+                GUI.Label(g.URect(214, 54, 300, 20), rally >= 1 ? Loc.L(TouchUI ? "“Холбоо” — бүрээ дуудах!" : "R — холбоотнуудаа дууд!", TouchUI ? "Allies — blow the horn!" : "R — call your allies!") : Loc.L("Холбоотнуудын бүрээ", "Allies' horn"), new GUIStyle(g.sPixel) { fontSize = PxSize(U * 12), alignment = TextAnchor.MiddleLeft, normal = { textColor = Color.white } });
             }
             // what to do now
             string goal = seg == 3 ? (borte == null ? Loc.L("Зугтаж буй хүмүүсийн дундаас Бөртийг ол: тэргэнд ойртоод “Дуудах”", "Find Börte among the fleeing people: ride near the carts and Call") : Loc.L("Бөртэ!", "Börte!"))

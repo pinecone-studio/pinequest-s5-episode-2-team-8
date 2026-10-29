@@ -212,8 +212,10 @@ public sealed partial class Game
             var r = GUILayoutUtility.GetRect(w, g.U(100), GUILayout.Width(w), GUILayout.Height(g.U(100)));
             bool hit = GUI.Button(r, "", g.sPanel);
             if (icon != null) GUI.DrawTexture(new Rect(r.center.x - g.U(14), r.y + g.U(16), g.U(28), g.U(28)), g.Tex(icon), ScaleMode.ScaleToFit);
-            GUI.Label(new Rect(r.x + g.U(8), r.y + g.U(48), r.width - g.U(16), g.U(20)), title, new GUIStyle(g.sLabel) { font = g.sTitle.font, alignment = TextAnchor.UpperCenter, fontSize = Mathf.RoundToInt(g.U(15)), wordWrap = false });
-            GUI.Label(new Rect(r.x + g.U(8), r.y + g.U(68), r.width - g.U(16), g.U(18)), sub, new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, wordWrap = false });
+            float aw = r.width - g.U(12);
+            GUIStyle Fit(GUIStyle st, string t) { float tw = st.CalcSize(new GUIContent(t)).x; if (tw > aw) st.fontSize = Mathf.Max(Mathf.RoundToInt(g.U(8)), Mathf.FloorToInt(st.fontSize * aw / tw)); return st; } // a long Mongolian title shrinks to its card
+            GUI.Label(new Rect(r.x + g.U(6), r.y + g.U(46), aw, g.U(22)), title, Fit(new GUIStyle(g.sLabel) { font = g.sTitle.font, alignment = TextAnchor.UpperCenter, fontSize = Mathf.RoundToInt(g.U(15)), wordWrap = false }, title));
+            GUI.Label(new Rect(r.x + g.U(6), r.y + g.U(68), aw, g.U(20)), sub, Fit(new GUIStyle(g.sSmall) { alignment = TextAnchor.UpperCenter, wordWrap = false }, sub));
             return hit;
         }
         /** A lesson as the web version's card: its picture, icon and title, what it is about and its tags. The whole card opens it. */
@@ -222,13 +224,14 @@ public sealed partial class Game
             string id = l["id"].S; var pr = g.V.learn.Find(x => x.id == id);
             if (!thumbs.TryGetValue(id, out var live)) { thumbs[id] = live = new Live(Scenes.W, Scenes.H); var st = new SceneState { sub = 1 }; Lessons.Apply(st, l["final"]); Scenes.ByName(l["scene"].S)(live.c, st, 2); }
             float pad = g.U(14), iw = w - pad * 2, ih = iw * Scenes.H / Scenes.W;
-            var r = GUILayoutUtility.GetRect(w, ih + g.U(150), GUILayout.Width(w), GUILayout.Height(ih + g.U(150)));
+            var ds = new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(13)), normal = { textColor = Px.Col("#6b4220") } }; float dh = Mathf.Max(g.U(60), ds.CalcHeight(new GUIContent(l["desc"].T.ToString()), iw)); // a long description makes the card taller
+            var r = GUILayoutUtility.GetRect(w, ih + g.U(90) + dh, GUILayout.Width(w), GUILayout.Height(ih + g.U(90) + dh));
             if (GUI.Button(r, "", g.sPanel)) g.Later(() => g.OpenLesson(id));
             live.ShowAt(new Rect(r.x + pad, r.y + pad, iw, ih));
             float y = r.y + pad + ih + g.U(10);
             var ic = Emo.Icon(l["icon"].S); if (ic != null) GUI.DrawTexture(new Rect(r.x + pad, y + g.U(2), g.U(20), g.U(20)), g.Tex(ic), ScaleMode.ScaleToFit);
             GUI.Label(new Rect(r.x + pad + g.U(26), y, iw - g.U(26), g.U(26)), l["title"].T.ToString(), new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(18)), wordWrap = false });
-            GUI.Label(new Rect(r.x + pad, y + g.U(30), iw, g.U(60)), l["desc"].T.ToString(), new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(13)), normal = { textColor = Px.Col("#6b4220") } });
+            GUI.Label(new Rect(r.x + pad, y + g.U(30), iw, dh), l["desc"].T.ToString(), ds);
             float tx = r.x + pad, ty = r.yMax - pad - g.U(24);
             void Tag(string text, string col)
             {
