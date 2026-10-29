@@ -7,21 +7,45 @@
   <link rel="icon" href="data:,">
   <title>{{{ PRODUCT_NAME }}}</title>
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #76b947; overscroll-behavior: none; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #182441; overscroll-behavior: none; }
     /* the game fills the window; it is drawn for landscape, like the phone app */
-    #unity-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #76b947; touch-action: none; outline: none; }
+    #unity-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #182441; touch-action: none; outline: none; }
     .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px;
-      box-sizing: border-box; text-align: center; font: 700 18px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fff; background: #76b947; }
-    #bar { width: min(320px, 70vw); height: 14px; border-radius: 7px; background: rgba(43, 30, 46, .3); overflow: hidden; }
-    #fill { width: 0; height: 100%; background: #f7c646; transition: width .2s; }
-    #turn { display: none; z-index: 2; }
+      box-sizing: border-box; text-align: center; font: 700 18px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif; color: #fff; }
+    #loading { z-index: 3; overflow: hidden; isolation: isolate; gap: 0; padding: 24px;
+      background: linear-gradient(180deg, #748eb9 0%, #c7a17f 51%, #d9aa72 68%, #7d8a5b 100%); }
+    #loading::before { content: ''; position: absolute; z-index: -2; width: clamp(100px, 17vw, 210px); aspect-ratio: 1; left: 68%; top: 12%; border-radius: 50%;
+      background: radial-gradient(circle at 36% 34%, #fff2c6 0 7%, #f9d88c 35%, #eeb770 72%); box-shadow: 0 0 70px 24px rgba(255, 218, 149, .24); }
+    .ridge { position: absolute; z-index: -1; left: -5%; width: 110%; bottom: 0; pointer-events: none; }
+    .ridge-far { height: 42%; background: #71805f; opacity: .82; clip-path: polygon(0 52%, 10% 43%, 19% 50%, 29% 22%, 38% 40%, 49% 18%, 59% 43%, 70% 27%, 80% 45%, 90% 19%, 100% 42%, 100% 100%, 0 100%); }
+    .ridge-near { height: 29%; background: linear-gradient(180deg, #53694b, #344b40); clip-path: polygon(0 37%, 12% 25%, 22% 44%, 34% 20%, 45% 48%, 58% 25%, 72% 45%, 83% 22%, 100% 37%, 100% 100%, 0 100%); }
+    .load-card { width: min(430px, 100%); box-sizing: border-box; padding: clamp(24px, 5vw, 38px); display: flex; flex-direction: column; align-items: center; gap: 14px;
+      border: 1px solid rgba(255, 241, 206, .38); border-radius: 24px; background: linear-gradient(145deg, rgba(35, 43, 67, .77), rgba(32, 45, 60, .58));
+      box-shadow: 0 22px 70px rgba(26, 33, 49, .3), inset 0 1px rgba(255,255,255,.16); backdrop-filter: blur(10px); }
+    .brand-mark { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 15px; color: #46351f; font-size: 24px;
+      background: linear-gradient(145deg, #ffe7a1, #f0bd5e); box-shadow: 0 5px 18px rgba(248, 202, 112, .24); }
+    .load-title { margin: 0; color: #fff2cf; font-size: clamp(26px, 5vw, 34px); line-height: 1.1; letter-spacing: .12em; text-shadow: 0 2px 16px rgba(255, 218, 149, .24); }
+    .load-subtitle { margin: 0; color: rgba(255,255,255,.92); font-size: 16px; }
+    .load-note { margin: 0; color: rgba(255,255,255,.66); font-size: 12px; font-weight: 500; }
+    #bar { width: min(320px, 70vw); height: 12px; border: 1px solid rgba(255, 255, 255, .22); border-radius: 99px; background: rgba(9, 20, 37, .46); overflow: hidden; }
+    #fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f4c466, #ffe6a0); box-shadow: 0 0 14px rgba(255, 221, 142, .5); transition: width .2s; }
+    #turn { display: none; z-index: 4; background: linear-gradient(180deg, #718ab1, #d8ab72 68%, #526b4a); }
     #turn b { font-size: 48px; }
     @media (orientation: portrait) and (pointer: coarse) { #turn { display: flex; } }
   </style>
 </head>
 <body>
   <canvas id="unity-canvas" tabindex="-1"></canvas>
-  <div id="loading" class="screen"><div>Naadamy ачаалж байна…<br><small>Naadamy is loading…</small></div><div id="bar"><div id="fill"></div></div></div>
+  <div id="loading" class="screen">
+    <div class="ridge ridge-far"></div><div class="ridge ridge-near"></div>
+    <div class="load-card">
+      <div class="brand-mark" aria-hidden="true">✦</div>
+      <h1 class="load-title">НААДАМЫ</h1>
+      <p class="load-subtitle">Naadamy is loading…</p>
+      <div id="bar" role="progressbar" aria-label="Loading"><div id="fill"></div></div>
+      <p class="load-note">A little village is waking up</p>
+    </div>
+  </div>
   <div id="turn" class="screen"><b>🔄</b><div>Утсаа хэвтээ эргүүлээрэй<br><small>Turn your phone sideways</small></div></div>
   <script src="Build/{{{ LOADER_FILENAME }}}"></script>
   <script>
