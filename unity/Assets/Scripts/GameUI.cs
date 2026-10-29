@@ -678,15 +678,14 @@ public sealed partial class Game
         GUILayout.FlexibleSpace();
         GUILayout.BeginVertical(sPanel);
         var m = modal; m.winScroll = BeginScroll(m.winScroll, h - U(40));
-        // mouth and blink timing: a slow, steady 4 Hz mouth that stays on while the speaker is in the window (not a 1.6 s burst), and a 0.18 s blink on a 4.2 s cycle offset per character so it reads as a natural blink, not a frame glitch
+        // the mouth-open sheet cell draws the face at a slightly different offset than the mouth-closed cell, so any toggle made the eyes and mouth look misaligned; keep the mouth closed and animate only the blink (0.18 s dip every 4.2 s, offset per character so two speakers don't blink together)
         var sp = m.Speaker;
         PxCanvas port = null;
         if (sp != null)
         {
             float tt = Time.time;
-            bool mouthOpen = (int)(tt * 4) % 2 == 0;
             bool blinking = (tt + sp.Value.who.Length * 0.37f) % 4.2f < 0.18f;
-            port = Portrait(sp.Value.who, sp.Value.face, mouthOpen, blinking);
+            port = Portrait(sp.Value.who, sp.Value.face, false, blinking);
         }
         if (port != null)   // the one you are talking to, in a portrait at the window's left
         {
