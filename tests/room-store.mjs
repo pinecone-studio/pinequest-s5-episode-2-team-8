@@ -32,7 +32,7 @@ class FakePool {
       query: async (sql, values = []) => {
         const statement = sql.replace(/\s+/g, ' ').trim();
         this.calls.push(statement);
-        if (/^(CREATE (TABLE|INDEX)|ALTER TABLE)/.test(statement) || /^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
+        if (/^(CREATE (TABLE|INDEX)|ALTER TABLE|DELETE FROM naadamy_room_players WHERE seen_at)/.test(statement) || /^(BEGIN|COMMIT|ROLLBACK)$/.test(statement)) return { rows: [] };
         if (/^INSERT INTO naadamy_rooms/.test(statement)) {
           if (this.failOnUpsert && /DO UPDATE/.test(statement)) throw new Error('injected database outage');
           if (/DO NOTHING/.test(statement) && this.state.has(values[0])) return { rows: [] };
@@ -93,7 +93,7 @@ class FakePool {
         const erased = /^DELETE FROM (naadamy_\w+) WHERE (?:player_)?id = ANY\(\$1::text\[\]\)$/.exec(statement);
         if (erased) {
           const ids = new Set(values[0]);
-          const maps = { naadamy_wallets: this.wallets, naadamy_player_progress: this.progress, naadamy_player_tickets: this.deviceTickets, naadamy_identities: this.identities, naadamy_players: new Map() };
+          const maps = { naadamy_wallets: this.wallets, naadamy_player_progress: this.progress, naadamy_player_tickets: this.deviceTickets, naadamy_identities: this.identities, naadamy_players: new Map(), naadamy_room_players: new Map() };
           if (erased[1] === 'naadamy_wallet_ops') { for (const key of [...this.walletOperations.keys()]) if (ids.has(key.slice(0, key.lastIndexOf(':')).split(':')[0])) this.walletOperations.delete(key); }
           else for (const id of ids) maps[erased[1]].delete(id);
           return { rows: [] };

@@ -163,6 +163,18 @@ A second tab of the same player (`replaced`) doesn't add a join or leave line.
 
 `cloud` is `{ eth, aimag, charAt, learn: { id: { done, best, family } }, ach: { id: ms }, stamps: { aimag: ms }, bichig: { id: best }, bichigMem: { id: 1 }, hist, story: { chapter: part, 'chapter:done': 1 } }`. Merging (`mergeCloud`) only adds: done stays done, best scores, `hist` and story parts go up, every badge and stamp is kept with its earliest date. The character is the exception: the most recent choice (`charAt`) wins. A finished story chapter drops its part, since replaying it starts from the beginning. So no device can erase what another earned, and sending the same copy twice changes nothing. Ids are `[\w:.-]{1,48}`, at most 200 per list; anything else is dropped. The server keeps it in the player's progress record under `cloud` (`naadamy_player_progress` or `DATA_DIR/progress.json`). The server can't check any of it; none of it is money.
 
+### Leaderboards
+
+| `t` | Fields | What it does |
+|---|---|---|
+| `board` | `k` | Ask for an XP leaderboard: `k: 'room'` = the room you are in, `k: 'family'` = your family. Answered with `board`. |
+
+- **Room board:** the players who joined this room in the last 30 days (recorded at each `join` with the name and look shown in the room, in `naadamy_room_players`; JSON: `DATA_DIR/room-players.json`), ranked by their wallet XP. The top 10, plus your own row when you are not in it.
+- **Family board:** the children of your family (the oldest family you are in), ranked by wallet XP; a child who never joined has 0. Only a child of the family can see it: the server finds the family from your authenticated `id`, so no family code is sent.
+- A row is `{ rank, name, look, xp, me? }` (room) or `{ rank, name, avatar, xp, me? }` (family; `avatar` = the mascot index of [Family login](#family-login)). Equal XP shares a rank (1, 2, 2, 4). `me: true` marks your own row. Nothing else is sent: no ids, no family code.
+- Children erased with their family (`naadamy_erased`, last 30 days) never appear; erasing also deletes their room entries.
+- Each answer is kept for 30 s per player (and room), so asking again in that time costs no database query; each board is one query.
+
 ### Gers (the 8 shared lots per room, `LOTS`)
 | `t` | Fields | What it does |
 |---|---|---|
@@ -194,6 +206,7 @@ Room lots and the recent chat log are saved every 5 seconds when changed and on 
 | `look` | `id, look, lvl` | Someone changed outfit or level. |
 | `say` | `id, k, i` | Someone said a phrase or emote (your own included). |
 | `wallet-result` | `op, accepted, reason?, wallet` | Reply to `wallet-op`. Returns the canonical wallet after the operation. `reason` may be `insufficient`, `server-only`, `invalid` or `storage`. |
+| `board` | `k, rows, reason?` | Reply to `board` (see [Leaderboards](#leaderboards)). `reason` may be `no-family` (you are in no family), `invalid` (unknown `k`) or `storage`; `rows` is then `[]`. |
 | `cloud` | `cloud` | Reply to `cloud-save`: the server's merged copy. The device merges it in the same way. |
 | `sync-result` | `op, accepted, applied?, reason?, wallet, inventory` | Reply to `sync`. `applied` = `{ coins, xp }` actually added (less than sent when the daily cap is reached; coins spent stop at a zero balance). A repeated `op` returns the first answer without counting again. `reason` may be `invalid` or `storage`. |
 | `inventory-result` | `op, accepted, reason?, wallet, inventory` | Reply to `shop-buy`. Returns canonical wallet and limited shop inventory. `reason` may be `owned`, `level`, `insufficient`, `invalid` or `storage`. |
