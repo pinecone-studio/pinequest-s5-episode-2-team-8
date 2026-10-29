@@ -48,7 +48,7 @@ class FakePool {
       return { rows: row ? [structuredClone(row)] : [] };
     }
     if (/^DELETE FROM naadamy_families WHERE code/.test(statement)) { this.families.delete(values[0]); return { rows: [] }; }
-    if (/^DELETE FROM naadamy_\w+ WHERE (player_)?id = ANY|^DELETE FROM naadamy_erased|^INSERT INTO naadamy_erased/.test(statement)) return { rows: [] };
+    if (/^DELETE FROM naadamy_\w+ WHERE (player_)?id = ANY|^DELETE FROM naadamy_erased|^INSERT INTO naadamy_erased|^DELETE FROM naadamy_voice WHERE family_code/.test(statement)) return { rows: [] };
     if (/^SELECT instance_id FROM naadamy_players/.test(statement)) {
       const player = this.players.get(values[0]);
       return { rows: player ? [{ instance_id: player.instance_id }] : [] };
@@ -147,7 +147,7 @@ try {
   pool.families.set('ERAS2345', { members: [{ id: 'kid-one' }, { id: 'kid-two' }], pin: {} });
   eventsA.length = 0; eventsB.length = 0;
   assert.equal(await storeA.eraseFamily('ERAS2345', () => ({ erase: true, result: 'erased' })), 'erased');
-  assert.deepEqual(eventsB, [{ t: 'family-erased', ids: ['kid-one', 'kid-two'] }], 'the other instance hears which children were erased');
+  assert.deepEqual(eventsB, [{ t: 'family-erased', ids: ['kid-one', 'kid-two'], code: 'ERAS2345' }], 'the other instance hears which children were erased');
   assert.deepEqual(eventsA, eventsB, 'the erasing instance hears it too (dropping them twice is harmless)');
   await storeA.close();
   console.log('Shared presence: instance discovery, replacement safety, updates, event fanout and family erase fanout passed.');

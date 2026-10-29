@@ -4,11 +4,17 @@ services:
     runtime: node
     region: singapore
     plan: 0.5c-512mb
-    buildCommand: npm ci && node --check server/server.js && node --check server/room-store.js && node --check server/family.js && node --check server/client-ip.js
+    buildCommand: npm ci && node --check server/server.js && node --check server/room-store.js && node --check server/family.js && node --check server/client-ip.js && node --check server/voice.js
     startCommand: node server/server.js
     healthCheckPath: /api/hello
     envVars:
       - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_VOICE_BUCKET
         sync: false
       - key: DATA_DIR
         value: /var/data

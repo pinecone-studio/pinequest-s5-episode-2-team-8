@@ -77,7 +77,8 @@ function childOf(message) {
 
 const shown = (member, now) => ({ id: member.id, name: member.name, age: member.age, avatar: member.avatar, locked: (member.until || 0) > now });
 
-module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null, onErase = async () => {} } = {}) {
+module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null, onErase = async () => {}, onGone = async () => {} } = {}) {
+  // onGone(code): the family is no more (erased, or its last child taken out): its voice clips go too (voice.js)
   // a few requests a minute per address: family codes and pictures cannot be guessed by trying many
   const hits = new Map();
   function allow(ip) {
@@ -180,7 +181,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     if (refusal) return refusal;
     if (!known.pinHash) return { ok: false, reason: 'needs-pin' };
     const salt = crypto.randomBytes(16).toString('hex'), hash = pics ? await hashPictures(pics, salt) : '';
-    return roomStore.mutateFamily(code, (family) => {
+    const result = await roomStore.mutateFamily(code, (family) => {
       if (!family) return { changed: false, result: { ok: false, reason: 'no-family' } };
       if (!family.members.some((m) => m.id === by)) return { changed: false, result: { ok: false, reason: 'identity' } };
       if (!family.pinHash) return { changed: false, result: { ok: false, reason: 'needs-pin' } };
@@ -192,6 +193,8 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
       else Object.assign(family.members[i], { salt, hash, fails: 0, until: 0 });
       return { changed: true, result: { ok: true, code, left: family.members.length } };
     });
+    if (result.ok && result.left === 0) await onGone(code);
+    return result;
   }
 
   /** Sets the family's PIN (`pin`): with the old one (`old`), or, for a family made before the PIN, by its oldest child,
@@ -283,6 +286,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     if (!result.ok) return result;
     console.log(`Family erased: ${crypto.createHash('sha256').update(code).digest('hex').slice(0, 16)} at ${new Date(now()).toISOString()}`);
     await onErase(ids);
+    await onGone(code);
     return result;
   }
 
@@ -353,5 +357,5 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     });
   }
 
-  return { handle };
+  return { handle, checkPin };
 };
