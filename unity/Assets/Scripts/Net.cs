@@ -163,8 +163,8 @@ public sealed class Net
     static string F2(float v) => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
     static string Raw(string k, string v) => Q(k) + ":" + v;
     static string Obj(params string[] kv) { var b = new List<string>(); for (int i = 0; i < kv.Length; i += 2) b.Add(Q(kv[i]) + ":" + (kv[i + 1] == null ? "null" : Q(kv[i + 1]))); return string.Join(",", b); }
-    public static string LookJson(Look l) => "{" + Obj("deel", l.deel, "skin", l.skin, "hat", l.hat, "face", l.face, "neck", l.neck, "pet", l.pet, "title", l.title, "ride", l.ride, "coat", l.coat) + "}";
-    static Look LookOf(J j) => j.IsNull ? new Look() : new Look { deel = j["deel"].S ?? "blue", skin = j["skin"].S ?? "#F6D3B3", hat = j["hat"].S, face = j["face"].S, neck = j["neck"].S, pet = j["pet"].S, title = j["title"].S, ride = j["ride"].S, coat = j["coat"].S };
+    public static string LookJson(Look l) => "{" + Obj("deel", l.deel, "skin", l.skin, "hat", l.hat, "face", l.face, "neck", l.neck, "pet", l.pet, "title", l.title, "ride", l.ride, "coat", l.coat, "gender", l.gender) + "}";
+    static Look LookOf(J j) => j.IsNull ? new Look() : new Look { deel = j["deel"].S ?? "blue", skin = j["skin"].S ?? "#F6D3B3", hat = j["hat"].S, face = j["face"].S, neck = j["neck"].S, pet = j["pet"].S, title = j["title"].S, ride = j["ride"].S, coat = j["coat"].S, gender = j["gender"].S };
     static Lot LotOf(J j) => j.IsNull ? null : new Lot { by = j["by"].S, n = j["n"].S, roof = j["roof"].S ?? "blue", door = j["door"].S ?? "red", stage = j["stage"].I };
     static ChatLine ChatOf(J j) => new ChatLine { k = j["k"].S, id = j["id"].S, n = j["n"].S, i = j["i"].I };
 

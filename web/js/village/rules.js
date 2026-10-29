@@ -199,6 +199,7 @@
     const l = look || {}, out = {};
     out.deel = DEELS[l.deel] ? l.deel : 'blue';
     out.skin = SKINS.includes(l.skin) ? l.skin : SKINS[0];
+    out.gender = l.gender === 'girl' ? 'girl' : null;
     for (const k of Object.keys(LOOKS)) out[k] = LOOKS[k].includes(l[k]) ? l[k] : null;
     return out;
   }

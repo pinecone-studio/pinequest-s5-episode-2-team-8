@@ -22,6 +22,7 @@ public sealed partial class Game
 
     sealed class ArcheryModal : Modal
     {
+        public override float Width => 4000; // as wide as the screen allows (DrawModal caps it)
         static readonly int[] DIST = { 92, 118, 142 }, TOL = { 13, 10, 8 };
         const int X0 = 34, GROUND = 94; const float G = 120;
         readonly Live live = new Live(192, 108); readonly Look look;
@@ -112,7 +113,7 @@ public sealed partial class Game
                 Px.P(x, Mathf.Round(q.x), Mathf.Round(q.y), "#e14b3d");
             }
             g.Small(Loc.L("Сур харваа", "Mongolian archery"));
-            live.Show(g, 210);
+            live.Show(g, Mathf.Max(210, Screen.height / g.U(1) - 250)); // the field fills the screen, leaving room for the rows and buttons below
             if (ch) { var at = live.At(TX + 23, GROUND - 23); g.Outlined(at.x, at.y, Loc.L("Уухай!", "Uukhai!"), live.Scale * 9, Px.Col("#f7c646")); }
             GUILayout.BeginHorizontal();
             GUILayout.Label($"<b>{Loc.L("Үе", "Round")} {Mathf.Min(round + 1, 3)}/3 · {Loc.L("Сум", "Arrow")} {Mathf.Min(arrow + 1, 4)}/4</b>", g.sLabel);
