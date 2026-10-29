@@ -77,7 +77,7 @@ function childOf(message) {
 
 const shown = (member, now) => ({ id: member.id, name: member.name, age: member.age, avatar: member.avatar, locked: (member.until || 0) > now });
 
-module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null, onErase = async () => {}, onChange = () => {} } = {}) {
+module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null, onErase = async () => {}, onChange = () => {}, email = null } = {}) {
   // a few requests a minute per address: family codes and pictures cannot be guessed by trying many
   const hits = new Map();
   function allow(ip) {
@@ -293,10 +293,22 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     return result;
   }
 
+  /** A grown-up adds (`set-email`, with `email`) or takes away (`remove-email`) the address for the weekly report
+   *  (parent-email.js). Both need the PIN, checked as for check-pin (same tries and lock). */
+  async function emailAct(message, act, ip) {
+    if (!email || (act === 'set-email' && !email.enabled)) return { ok: false, reason: 'email-off' };
+    if (act === 'set-email' && !email.address(message.email)) return { ok: false, reason: 'invalid' };
+    const checked = await checkPin(message);
+    if (!checked.ok) return checked;
+    return act === 'set-email' ? email.set(familyCode(message.code), message.email, ip) : email.remove(familyCode(message.code));
+  }
+  // { to: 'k***@gmail.com', confirmed } with `full` (login, which needs a child's pictures), else { confirmed }; or null
+  const emailOf = async (code, full) => (email ? email.shownFor(code, full) : null);
+
   async function members(message) {
     const family = await roomStore.getFamily(familyCode(message.code));
     if (!family) return { ok: false, reason: 'no-family' };
-    return { ok: true, members: family.members.map((m) => shown(m, now())), needsPin: !family.pinHash };
+    return { ok: true, members: family.members.map((m) => shown(m, now())), needsPin: !family.pinHash, email: await emailOf(familyCode(message.code)) };
   }
 
   async function login(message) {
@@ -329,10 +341,10 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     const ticket = crypto.randomBytes(32).toString('hex');
     await roomStore.addDeviceTicket(id, ticket);
     // the child's cloud save comes along, so the new device has their character and lessons before the first join
-    return { ok: true, id, ticket, ...childOf(stored), code, cloud: await cloudOf(id), needsPin: !family.pinHash };
+    return { ok: true, id, ticket, ...childOf(stored), code, cloud: await cloudOf(id), needsPin: !family.pinHash, email: await emailOf(code, true) };
   }
 
-  /** HTTP handler for POST /api/family with { act: 'create' | 'join' | 'members' | 'login' | 'pictures' | 'remove' | 'pin' | 'check-pin' | 'recover' | 'erase', ... }. */
+  /** HTTP handler for POST /api/family with { act: 'create' | 'join' | 'members' | 'login' | 'pictures' | 'remove' | 'pin' | 'check-pin' | 'recover' | 'erase' | 'set-email' | 'remove-email', ... }. */
   function handle(req, res) {
     const send = (status, body) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
     if (req.method !== 'POST') return send(405, { ok: false, reason: 'method' });
@@ -352,6 +364,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
         if (message.act === 'check-pin') return send(200, await checkPin(message));
         if (message.act === 'recover') return send(200, await recover(message));
         if (message.act === 'erase') return send(200, await erase(message));
+        if (message.act === 'set-email' || message.act === 'remove-email') return send(200, await emailAct(message, message.act, clientIp(req)));
         send(400, { ok: false, reason: 'invalid' });
       } catch (error) {
         console.error('Family:', error.message);
