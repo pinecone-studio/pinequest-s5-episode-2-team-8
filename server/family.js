@@ -77,7 +77,8 @@ function childOf(message) {
 
 const shown = (member, now) => ({ id: member.id, name: member.name, age: member.age, avatar: member.avatar, locked: (member.until || 0) > now });
 
-module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null, onErase = async () => {}, onChange = () => {}, email = null } = {}) {
+module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null, onErase = async () => {}, onChange = () => {}, onGone = async () => {}, email = null } = {}) {
+  // onGone(code): the family is no more (erased, or its last child taken out): its voice clips go too (voice.js)
   // a few requests a minute per address: family codes and pictures cannot be guessed by trying many
   const hits = new Map();
   function allow(ip) {
@@ -197,6 +198,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
       else Object.assign(family.members[i], { salt, hash, fails: 0, until: 0 });
       return { changed: true, result: { ok: true, code, left: family.members.length } };
     });
+    if (result.ok && result.left === 0) await onGone(code);
     if (result.ok && ids.length) onChange(ids);
     return result;
   }
@@ -290,6 +292,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     if (!result.ok) return result;
     console.log(`Family erased: ${crypto.createHash('sha256').update(code).digest('hex').slice(0, 16)} at ${new Date(now()).toISOString()}`);
     await onErase(ids);
+    await onGone(code);
     return result;
   }
 
@@ -373,5 +376,5 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     });
   }
 
-  return { handle };
+  return { handle, checkPin };
 };

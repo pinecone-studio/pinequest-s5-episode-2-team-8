@@ -13,6 +13,17 @@ const WALLET_MAX = 2_000_000_000;
 const REALTIME_CHANNEL = 'naadamy_realtime';
 const FAMILY_CODE = /^[A-HJ-NP-Z2-9]{8}$/;
 const DEVICE_TICKETS_MAX = 8;
+const VOICE_ID = /^m\d{10,16}$/; // a memory id: "m" and the time in ms
+
+/** Why a voice clip can't be recorded (voice.js): `taken` (another child's clip has this id), `quota` (the family's
+ *  `max.clips` / `max.bytes`) or `storage-full` (`max.total` bytes of every family, `total` now); null when it can.
+ *  `clips` are the family's [{ id, size, by }]; a clip replaced by its own uploader doesn't count twice. */
+function voiceRefusal(clips, id, size, by, max, total) {
+  const old = clips.find((c) => c.id === id), others = clips.filter((c) => c.id !== id);
+  if (old && old.by !== by) return 'taken';
+  if (others.length >= max.clips || others.reduce((sum, c) => sum + c.size, 0) + size > max.bytes) return 'quota';
+  return total - (old ? old.size : 0) + size > max.total ? 'storage-full' : null;
+}
 
 function ticketHash(ticket) {
   return crypto.createHash('sha256').update(ticket).digest('hex');
@@ -178,11 +189,13 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
   const familyFile = path.join(dataDir, 'families.json');
   const deviceTicketFile = path.join(dataDir, 'device-tickets.json');
   const erasedFile = path.join(dataDir, 'erased.json');
+  const voiceFile = path.join(dataDir, 'voice.json'); // { [family code]: { [memory id]: { size, by, ts } } }
   const emailFile = path.join(dataDir, 'family-emails.json');
   const emailSendFile = path.join(dataDir, 'email-sends.json');
   const roomPlayersFile = path.join(dataDir, 'room-players.json');
 
   if (!databaseUrl) {
+    const dropVoice = (code) => { const all = readLegacyFile(voiceFile, 'voice clips'); if (Object.hasOwn(all, code)) { delete all[code]; writeIdentityFile(voiceFile, all); } };
     const dropEmail = (code) => { // a family that goes takes its parent email and links with it
       const emails = readLegacyFile(emailFile, 'family emails');
       if (Object.hasOwn(emails, code)) { delete emails[code]; writeIdentityFile(emailFile, emails); }
@@ -249,7 +262,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         const outcome = mutate(family);
         if (family && outcome.changed) {
           if (family.members.length) Object.defineProperty(families, code, { value: family, writable: true, configurable: true, enumerable: true });
-          else { delete families[code]; dropEmail(code); } // the last child left
+          else { delete families[code]; dropVoice(code); dropEmail(code); } // the last child left: the family's voice clips and parent email go with it
           writeIdentityFile(familyFile, families);
         }
         return outcome.result;
@@ -280,12 +293,40 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           fs.writeFileSync(temporaryFile, JSON.stringify(rooms));
           fs.renameSync(temporaryFile, dataFile);
         }
+        dropVoice(code);
         dropEmail(code);
         for (const players of Object.values(seen)) if (isRecord(players)) for (const id of ids) delete players[id];
         writeIdentityFile(roomPlayersFile, seen);
         delete families[code];
         writeIdentityFile(familyFile, families);
         return outcome.result;
+      },
+      async voiceList(code) {
+        const all = readLegacyFile(voiceFile, 'voice clips'), clips = FAMILY_CODE.test(code || '') && Object.hasOwn(all, code) ? all[code] : {};
+        return Object.entries(clips).map(([id, c]) => ({ id, size: c.size, by: c.by, ts: c.ts })).sort((a, b) => a.ts - b.ts);
+      },
+      /** Records a clip of the family (it must still exist) unless voiceRefusal says no: { ok, old } (the record it replaced,
+       *  or null) or { ok: false, reason }. `max` null puts a record back as it was (an upload that failed), unchecked. */
+      async voicePut(code, id, size, by, max, ts = Date.now()) {
+        if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '') || !Object.hasOwn(readLegacyFile(familyFile, 'families'), code)) return { ok: false, reason: 'no-family' };
+        const all = readLegacyFile(voiceFile, 'voice clips'), clips = Object.hasOwn(all, code) ? all[code] : {};
+        const total = Object.values(all).reduce((sum, family) => sum + Object.values(family).reduce((s, c) => s + c.size, 0), 0);
+        const reason = max && voiceRefusal(Object.entries(clips).map(([k, c]) => ({ id: k, ...c })), id, size, by, max, total);
+        if (reason) return { ok: false, reason };
+        const old = Object.hasOwn(clips, id) ? clips[id] : null;
+        clips[id] = { size, by, ts }; all[code] = clips; // both checked by regex above, so never __proto__
+        writeIdentityFile(voiceFile, all);
+        return { ok: true, old };
+      },
+      /** The clip's record, now removed, or null. */
+      async voiceDelete(code, id) {
+        const all = readLegacyFile(voiceFile, 'voice clips');
+        if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '') || !Object.hasOwn(all, code) || !Object.hasOwn(all[code], id)) return null;
+        const clip = all[code][id];
+        delete all[code][id];
+        if (!Object.keys(all[code]).length) delete all[code];
+        writeIdentityFile(voiceFile, all);
+        return clip;
       },
       /** The family's parent email record (its format is parent-email.js's, with `dueAt`) or null. */
       async getFamilyEmail(code) {
@@ -581,6 +622,16 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_family_emails_due_idx ON naadamy_family_emails (due_at) WHERE due_at > 0');
         await client.query('CREATE INDEX IF NOT EXISTS naadamy_email_tokens_code_idx ON naadamy_email_tokens (code)');
         await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_voice (
+            family_code text NOT NULL,
+            memory_id text NOT NULL,
+            size integer NOT NULL,
+            uploader text NOT NULL,
+            created_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (family_code, memory_id)
+          )
+        `); // voice clips' metadata (voice.js); the clips are in Supabase Storage
+        await client.query(`
           CREATE TABLE IF NOT EXISTS naadamy_room_players (
             room_code text NOT NULL,
             player_id text NOT NULL,
@@ -596,7 +647,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         // Supabase serves every public table over its REST API to anyone with the project's anon key. Row level security with
         // no policies closes that door; the server connects as the tables' owner, which RLS does not apply to.
         for (const table of ['naadamy_rooms', 'naadamy_players', 'naadamy_identities', 'naadamy_wallets', 'naadamy_wallet_ops', 'naadamy_player_progress',
-          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased', 'naadamy_family_emails', 'naadamy_email_tokens', 'naadamy_email_sends', 'naadamy_room_players']) {
+          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased', 'naadamy_family_emails', 'naadamy_email_tokens', 'naadamy_email_sends', 'naadamy_voice', 'naadamy_room_players']) {
           await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
         }
         for (const [code, state] of Object.entries(legacy)) {
@@ -798,6 +849,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             [code, JSON.stringify(family.members), JSON.stringify(pinOf(family))]);
         } else if (family && outcome.changed) {
           await client.query('DELETE FROM naadamy_families WHERE code = $1', [code]); // the last child left
+          await client.query('DELETE FROM naadamy_voice WHERE family_code = $1', [code]);
         }
         await client.query('COMMIT');
         return outcome.result;
@@ -823,6 +875,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         }
         const ids = family.members.map((member) => member.id), gone = new Set(ids);
         await client.query('DELETE FROM naadamy_families WHERE code = $1', [code]);
+        await client.query('DELETE FROM naadamy_voice WHERE family_code = $1', [code]); // the clips themselves: voice.js, on the NOTIFY
         await client.query('DELETE FROM naadamy_wallet_ops WHERE player_id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_wallets WHERE id = ANY($1::text[])', [ids]);
         await client.query('DELETE FROM naadamy_player_progress WHERE player_id = ANY($1::text[])', [ids]);
@@ -841,12 +894,43 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           }
         }
         // every server instance closes these children's sockets and drops them from its rooms (sent when this commits)
-        await client.query('SELECT pg_notify($1, $2)', [REALTIME_CHANNEL, JSON.stringify({ t: 'family-erased', ids })]);
+        await client.query('SELECT pg_notify($1, $2)', [REALTIME_CHANNEL, JSON.stringify({ t: 'family-erased', ids, code })]);
         await client.query('COMMIT');
         return outcome.result;
       } catch (error) {
         try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back family erase:', rollbackError.message); }
         throw new Error(`Could not erase family: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    async voiceList(code) {
+      if (!FAMILY_CODE.test(code || '')) return [];
+      const result = await pool.query(`SELECT memory_id, size, uploader, (extract(epoch FROM created_at) * 1000)::bigint AS ts
+        FROM naadamy_voice WHERE family_code = $1 ORDER BY created_at`, [code]);
+      return result.rows.map((r) => ({ id: r.memory_id, size: r.size, by: r.uploader, ts: Number(r.ts) }));
+    },
+    /** As in JSON mode. The family row is locked FOR SHARE, so an erase can't slip in between, and one clip is recorded at a
+     *  time (the total of every family is a limit too). */
+    async voicePut(code, id, size, by, max, ts = Date.now()) {
+      if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '')) return { ok: false, reason: 'no-family' };
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        if (!(await client.query('SELECT 1 FROM naadamy_families WHERE code = $1 FOR SHARE', [code])).rows.length) { await client.query('COMMIT'); return { ok: false, reason: 'no-family' }; }
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['naadamy-voice']);
+        const rows = (await client.query(`SELECT memory_id, size, uploader, (extract(epoch FROM created_at) * 1000)::bigint AS ts
+          FROM naadamy_voice WHERE family_code = $1`, [code])).rows;
+        const total = Number((await client.query('SELECT coalesce(sum(size), 0) AS total FROM naadamy_voice')).rows[0].total);
+        const clips = rows.map((r) => ({ id: r.memory_id, size: r.size, by: r.uploader, ts: Number(r.ts) })), reason = max && voiceRefusal(clips, id, size, by, max, total);
+        const old = clips.find((c) => c.id === id) || null;
+        if (!reason) await client.query(`INSERT INTO naadamy_voice (family_code, memory_id, size, uploader, created_at) VALUES ($1, $2, $3, $4, to_timestamp($5 / 1000.0))
+          ON CONFLICT (family_code, memory_id) DO UPDATE SET size = EXCLUDED.size, uploader = EXCLUDED.uploader, created_at = EXCLUDED.created_at`, [code, id, size, by, ts]);
+        await client.query('COMMIT');
+        return reason ? { ok: false, reason } : { ok: true, old: old && { size: old.size, by: old.by, ts: old.ts } };
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back voice clip:', rollbackError.message); }
+        throw new Error(`Could not record voice clip: ${error.message}`, { cause: error });
       } finally {
         client.release();
       }
@@ -888,6 +972,11 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
       } finally {
         client.release();
       }
+    },
+    async voiceDelete(code, id) {
+      if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '')) return null;
+      const result = await pool.query('DELETE FROM naadamy_voice WHERE family_code = $1 AND memory_id = $2 RETURNING size, uploader', [code, id]);
+      return result.rows[0] ? { size: result.rows[0].size, by: result.rows[0].uploader } : null;
     },
     async familyEmailToken(hash, at) {
       const result = await pool.query('SELECT code, kind FROM naadamy_email_tokens WHERE hash = $1 AND until > $2', [hash, at]);

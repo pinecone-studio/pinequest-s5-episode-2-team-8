@@ -99,6 +99,7 @@ class FakePool {
           return { rows: [] };
         }
         if (/^DELETE FROM naadamy_erased WHERE erased_at </.test(statement)) return { rows: [] };
+        if (/^DELETE FROM naadamy_voice WHERE family_code = \$1$/.test(statement)) { this.voiceDropped = values[0]; return { rows: [] }; }
         if (/^INSERT INTO naadamy_erased \(id\) SELECT unnest/.test(statement)) { for (const id of values[0]) this.erased.add(id); return { rows: [] }; }
         if (/^SELECT code, state FROM naadamy_rooms ORDER BY code FOR UPDATE$/.test(statement)) {
           return { rows: [...this.state].sort(([x], [y]) => (x < y ? -1 : 1)).map(([code, state]) => ({ code, state: structuredClone(state) })) };
@@ -327,7 +328,8 @@ try {
   assert.deepEqual(dbState.get('ERASE').lots, [null, { by: 'someone', n: 'B' }, null], 'their gers are freed');
   assert.deepEqual(dbState.get('ERASE').chat, [{ k: 'p', id: 'someone', n: 'B', i: 1 }], 'their chat lines are dropped');
   assert.equal(await store.eraseFamily('ERAS2345', (family) => ({ erase: false, result: family })), null, 'a second erase finds no family');
-  assert.deepEqual(pool.notifications.at(-1).payload, { t: 'family-erased', ids: ['erase-one', 'erase-two'] }, 'every instance is told which children were erased');
+  assert.deepEqual(pool.notifications.at(-1).payload, { t: 'family-erased', ids: ['erase-one', 'erase-two'], code: 'ERAS2345' }, 'every instance is told which children were erased');
+  assert.equal(pool.voiceDropped, 'ERAS2345', 'the family\'s voice clip records are erased in the same transaction');
   assert.equal(await store.authenticatePlayer('erase-one', 'e'.repeat(64)), false, 'an erased id is not taken again with its old ticket');
   assert.equal(await store.authenticatePlayer('erase-two', '9'.repeat(64)), false, 'nor with a new one');
   await store.close();
