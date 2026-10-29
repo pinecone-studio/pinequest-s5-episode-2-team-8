@@ -77,7 +77,7 @@ function childOf(message) {
 
 const shown = (member, now) => ({ id: member.id, name: member.name, age: member.age, avatar: member.avatar, locked: (member.until || 0) > now });
 
-module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null, onErase = async () => {}, onGone = async () => {} } = {}) {
+module.exports = function createFamily(roomStore, { now = () => Date.now(), cloudOf = async () => null, onErase = async () => {}, onChange = () => {}, onGone = async () => {} } = {}) {
   // onGone(code): the family is no more (erased, or its last child taken out): its voice clips go too (voice.js)
   // a few requests a minute per address: family codes and pictures cannot be guessed by trying many
   const hits = new Map();
@@ -136,7 +136,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
       const record = await member(id, child, pics), pin = { ...(await pinRecord(message.pin, recoveryCode(message.recovery))), pinLocks: 0 };
       for (let attempt = 0; attempt < 5; attempt++) {
         const code = newFamilyCode();
-        if (await roomStore.createFamily(code, record, pin)) return { ok: true, code };
+        if (await roomStore.createFamily(code, record, pin)) { onChange([id]); return { ok: true, code }; }
       }
       throw new Error('Could not find a free family code');
     }
@@ -149,14 +149,18 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     const { attempt, refusal } = known.members.some((m) => m.id === id) ? { attempt: null } : await pinTry(known, message.pin, 'join');
     if (refusal) return refusal;
     const record = await member(id, child, pics);
-    return roomStore.mutateFamily(code, (family) => {
+    let ids = [];
+    const result = await roomStore.mutateFamily(code, (family) => {
       if (!family) return { changed: false, result: { ok: false, reason: 'no-family' } };
+      ids = family.members.map((m) => m.id).concat(id);
       const index = family.members.findIndex((m) => m.id === id);
       if (index < 0 && family.pinHash) { const no = pinCheck(family, attempt, 'join'); if (no) return { changed: true, result: no }; }
       if (index < 0 && family.members.length >= MEMBERS_MAX) return { changed: true, result: { ok: false, reason: 'full' } };
       if (index < 0) family.members.push(record); else family.members[index] = record;
       return { changed: true, result: { ok: true, code } };
     });
+    if (result.ok) onChange(ids); // the family's board changed for all its children
+    return result;
   }
 
   /** `by` is a child of the family and this device plays as it (its ticket): the family with the PIN tried, or a refusal.
@@ -181,6 +185,7 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
     if (refusal) return refusal;
     if (!known.pinHash) return { ok: false, reason: 'needs-pin' };
     const salt = crypto.randomBytes(16).toString('hex'), hash = pics ? await hashPictures(pics, salt) : '';
+    let ids = [];
     const result = await roomStore.mutateFamily(code, (family) => {
       if (!family) return { changed: false, result: { ok: false, reason: 'no-family' } };
       if (!family.members.some((m) => m.id === by)) return { changed: false, result: { ok: false, reason: 'identity' } };
@@ -189,11 +194,12 @@ module.exports = function createFamily(roomStore, { now = () => Date.now(), clou
       if (no) return { changed: true, result: no };
       const i = family.members.findIndex((m) => m.id === id);
       if (i < 0) return { changed: true, result: { ok: false, reason: 'no-member' } };
-      if (act === 'remove') family.members.splice(i, 1);
+      if (act === 'remove') { ids = family.members.map((m) => m.id); family.members.splice(i, 1); }
       else Object.assign(family.members[i], { salt, hash, fails: 0, until: 0 });
       return { changed: true, result: { ok: true, code, left: family.members.length } };
     });
     if (result.ok && result.left === 0) await onGone(code);
+    if (result.ok && ids.length) onChange(ids);
     return result;
   }
 

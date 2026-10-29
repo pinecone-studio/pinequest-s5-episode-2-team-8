@@ -60,7 +60,8 @@ let actualPort = PORT;
 const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
 const roomStore = createRoomStore({ dataDir: DATA_DIR });
 const { resyncRealtime } = require('./realtime-resync.js');
-const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id), onErase: (ids) => eraseLive(ids), onGone: (code) => voice.purge(code) });
+const board = require('./leaderboard.js')(roomStore);
+const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id), onErase: (ids) => eraseLive(ids), onChange: (ids) => board.forget(ids), onGone: (code) => voice.purge(code) });
 const voice = require('./voice.js')(roomStore, { dataDir: DATA_DIR, checkPin: (message) => family.checkPin(message) }); // memory book voice clips
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
@@ -715,6 +716,8 @@ async function joinPlayer(conn, message, code, id, now) {
   r.remotePlayers.clear();
   for (const player of online) if (player.id !== id && !r.players.has(player.id)) r.remotePlayers.set(player.id, player);
   r.players.set(id, p); conn.player = p; conn.room = r;
+  // for the room board; a `board` asked right after the welcome waits for it (conn.noted)
+  conn.noted = roomStore.noteRoomPlayer(code, { id, name: p.name, look: p.look }).catch((error) => console.error('Could not note the room player:', error.message));
   if (!old && !replacingRemote && !previousInstance) logChat(r, { k: 'join', id, n: p.name });
   const players = [
     ...[...r.players.values()].filter((player) => player !== p).map(pub),
@@ -1082,6 +1085,9 @@ function onMessage(conn, text) {
     case 'cloud-save':
       handleCloudSave(conn, m);
       break;
+    case 'board': // XP leaderboard of this room or of the player's family (leaderboard.js)
+      Promise.resolve(conn.noted).then(() => board.reply(p.id, r.code, m.k)).then((answer) => conn.send(answer));
+      break;
     // ---- own ger
     case 'ger-claim':
       queueLotAction(conn, 'claim', m);
@@ -1197,6 +1203,7 @@ function leave(conn) {
  *  so the next save does not write them back. Their sockets get `erased` (the client stops retrying and forgets the family) and close. */
 async function eraseLive(ids) {
   const gone = new Set(ids);
+  board.clear();
   for (const connection of [...conns]) {
     if (!connection.player || !gone.has(connection.player.id)) continue;
     await leave(connection);
