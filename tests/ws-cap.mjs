@@ -13,7 +13,7 @@ const fails = [], ok = (c, m) => { if (c) console.log('✓ ' + m); else { consol
 
 async function start(extra) {
   const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-wscap-')); dirs.push(dataDir);
-  const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, DATABASE_URL: '', ...extra }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
+  const server = spawn(process.execPath, [(process.env.NAADAMY_SERVER || join(root, 'server', 'server.js'))], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, DATABASE_URL: '', ...extra }, stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
   servers.push(server);
   const port = await new Promise((resolveP, reject) => {
     server.on('message', (m) => m.port && resolveP(m.port));

@@ -23,7 +23,7 @@ await new Promise((r) => fake.listen(0, r));
 
 function start(env) {
   return new Promise((resolveP, reject) => {
-    const child = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', ...env }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    const child = spawn(process.execPath, [(process.env.NAADAMY_SERVER || join(root, 'server', 'server.js'))], { env: { ...process.env, PORT: '0', ...env }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
     child.on('message', (m) => m.port && resolveP({ child, base: `http://127.0.0.1:${m.port}` }));
     child.on('exit', (c) => reject(new Error('server exited ' + c)));
   });
