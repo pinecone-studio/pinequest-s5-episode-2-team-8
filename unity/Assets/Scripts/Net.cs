@@ -34,6 +34,7 @@ public sealed class Net
     public static string ChatText(ChatLine l) => l.k == "join" ? Loc.L("нутагт ирлээ", "joined the village") : l.k == "leave" ? Loc.L("нутгаас явлаа", "left the village") : l.k == "e" ? null : (l.i >= 0 && l.i < PHRASES.Length ? PHRASES[l.i] : PHRASES[0]).ToString();
 
     public string status = "solo"; // solo | connecting | online | reconnecting
+    public string failWhy;           // why the last connect gave up (shown with "Connect again"), null when fine
     public string room = "NUTAG", serverUrl;
     public readonly Dictionary<string, Other> others = new Dictionary<string, Other>();
     public Lot[] lots; public int total, nutag; public bool replaced;
@@ -45,7 +46,7 @@ public sealed class Net
     public const float BOARD_WAIT = 8; // an older server never answers `board`
 
     ClientWebSocket ws; CancellationTokenSource cts; readonly ConcurrentQueue<string> inbox = new ConcurrentQueue<string>(), outbox = new ConcurrentQueue<string>();
-    readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0); int retry; float retryAt = -1; bool closed = true;
+    readonly SemaphoreSlim sendSignal = new SemaphoreSlim(0); int retry; float retryAt = -1, openAt = -1, connectAt; bool closed = true, welcomed;
     float moveT, lookT; Vector2 sent = new Vector2(-99, -99); string sentLook;
     long walletRev = -1; bool syncing; float syncAt = -1, syncSentAt; string serverDay = "", capDay = "";
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -75,7 +76,7 @@ public sealed class Net
     /** Connect (again) with the current server address and room. No address: play alone. */
     public void Connect(Game g)
     {
-        Close(); replaced = false;
+        Close(); replaced = false; welcomed = false; failWhy = null; retry = 0; connectAt = Time.realtimeSinceStartup;
         serverUrl = WsUrl(Family.ServerOf(g, g.V)); room = string.IsNullOrEmpty(g.V.room) ? "NUTAG" : g.V.room;
         if (serverUrl == null) { status = "solo"; return; }
         closed = false; status = "connecting"; Open(g);
@@ -92,9 +93,11 @@ public sealed class Net
         others.Clear(); lots = null; if (status != "solo") status = "solo";
         while (inbox.TryDequeue(out _)) { } while (outbox.TryDequeue(out _)) { }
     }
+    /** Stop trying: a refused join or a server that never answers. Playing alone goes on; "Connect again" tries anew. */
+    void GiveUp(Game g, string why) { Close(); failWhy = why; status = "solo"; g.Toast(why); }
     void Open(Game g)
     {
-        var V = g.V; SaveData.EnsureTicket(V);
+        var V = g.V; SaveData.EnsureTicket(V); openAt = Time.realtimeSinceStartup;
         string join = Obj("t", "join", "room", room, "id", V.id, "ticket", V.ticket, "name", V.name) + "," + Raw("look", LookJson(V.look)) + "," + Raw("lvl", Rules.Level(V.xp).l.ToString()) + "," + Raw("x", F2(g.MyX)) + "," + Raw("y", F2(g.MyY)) + "," + Raw("dir", "0");
         string url = serverUrl;
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -182,6 +185,15 @@ public sealed class Net
 #endif
         while (inbox.TryDequeue(out var text)) { J m; try { m = J.Parse(text); } catch (Exception) { continue; } Handle(g, m); }
         if (!closed && !Live && retryAt > 0 && Time.realtimeSinceStartup > retryAt) { retryAt = -1; status = "reconnecting"; Open(g); }
+        if (Live && !Online && openAt > 0 && Time.realtimeSinceStartup - openAt > 15) // a socket that never opens (a browser can sit at "connecting"), or a join nobody answers
+        {
+            openAt = -1;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            webLive = false; NaadamyWsClose(); inbox.Enqueue("{\"t\":\"_closed\"}"); // drop it: the usual retry follows
+#else
+            try { cts?.Cancel(); } catch (ObjectDisposedException) { }
+#endif
+        }
         foreach (var o in others.Values) // others glide to where the server says they are
         {
             float dx = o.x - o.px, dy = o.y - o.py, d = Mathf.Sqrt(dx * dx + dy * dy); o.moving = d > 0.02f;
@@ -206,6 +218,7 @@ public sealed class Net
                 ws = null; bool was = Online; others.Clear(); lots = null; g.EndRemoteMatch(); syncing = false;
                 if (closed) { status = "solo"; return; }
                 if (replaced) { status = "solo"; closed = true; return; }
+                if (!welcomed && Time.realtimeSinceStartup - connectAt > 60) { GiveUp(g, Loc.L("Сервертэй холбогдож чадсангүй. Серверийн хаягаа шалгаад дахин холбогдоорой.", "Could not reach the server. Check the server address and connect again.")); return; } // never got in for a minute (a sleeping server wakes within that): a wrong address, not a dropped line
                 status = "reconnecting"; retryAt = Time.realtimeSinceStartup + Mathf.Min(10, 1.5f * ++retry);
                 if (was) g.Toast(Loc.L("Сервертэй холболт тасарлаа. Дахин холбогдож байна…", "Lost the server. Reconnecting…"));
                 return;
@@ -224,13 +237,15 @@ public sealed class Net
                 }
                 if (m["why"].S == "storage")
                 {
-                    g.Toast(Loc.L("Серверийн хадгалалт алдаа гарлаа.", "Server storage error."));
+                    if (!Online) GiveUp(g, Loc.L("Серверийн хадгалалт алдаа гарлаа. Дараа дахин холбогдоорой.", "Server storage error. Connect again a bit later."));
+                    else g.Toast(Loc.L("Серверийн хадгалалт алдаа гарлаа.", "Server storage error."));
                     return;
                 }
-                g.Toast(Loc.L("Өрөөнд нэвтэрч чадсангүй.", "Could not join the room.")); 
+                if (!Online) GiveUp(g, Loc.L("Өрөөнд нэвтэрч чадсангүй. Өрөөний кодоо шалгаарай.", "Could not join the room. Check the room code."));
+                else g.Toast(Loc.L("Өрөөнд нэвтэрч чадсангүй.", "Could not join the room."));
                 return;
             case "welcome":
-                status = "online"; retry = 0; room = m["room"].S; others.Clear(); foreach (var p in m["players"]) AddOther(p); boards.Clear(); boardAsked.Clear();
+                status = "online"; retry = 0; welcomed = true; openAt = -1; failWhy = null; room = m["room"].S; others.Clear(); foreach (var p in m["players"]) AddOther(p); boards.Clear(); boardAsked.Clear();
                 lots = m["lots"].Select(LotOf).ToArray(); if (lots.Length < Rules.LOTS) Array.Resize(ref lots, Rules.LOTS);
                 sentLook = null; lookT = 99; sent = new Vector2(-99, -99);
                 g.Toast(Loc.L("Нутагт холбогдлоо", "Connected to the village") + " · " + room + (others.Count > 0 ? " · " + others.Count + Loc.L(" найз байна", " friends here") : ""));
@@ -451,7 +466,7 @@ public sealed partial class Game
             if (!string.IsNullOrEmpty(Family.ServerOf(g, g.V)))
             {
                 g.Small(n.Online ? Loc.L($"“{n.room}” өрөөнд {n.others.Count + 1} хүн байна. Ижил кодтой хүмүүс нэг нутагт хамт тоглоно.", $"{n.others.Count + 1} people in room “{n.room}”. Everyone with the same code plays in one village.")
-                    : n.status == "solo" ? Loc.L("Сервертэй холбогдоогүй байна.", "Not connected to the server.") : Loc.L("Холбогдож байна…", "Connecting…"));
+                    : n.status == "solo" ? n.failWhy ?? Loc.L("Сервертэй холбогдоогүй байна.", "Not connected to the server.") : Loc.L("Холбогдож байна…", "Connecting…"));
                 GUILayout.BeginHorizontal();
                 code = GUILayout.TextField(code ?? "", 8, new GUIStyle(g.sBtn) { alignment = TextAnchor.MiddleCenter }, GUILayout.MinHeight(g.U(40))).ToUpperInvariant();
                 if (GUILayout.Button(Loc.L("Нэгдэх", "Join"), g.sPrimary, GUILayout.Width(g.U(100)), GUILayout.MinHeight(g.U(40)))) g.Later(() =>

@@ -482,6 +482,7 @@ public sealed partial class Game
                 {
                     string code = Family.Clean(famCode);
                     if (code.Length != 8) { err = Loc.L("8 үсэг, тоотой кодоо бичээрэй", "Write the 8-letter code"); return; }
+                    if (!Family.IsAddress(famServer)) { err = Loc.L("Серверийн хаяг буруу байна (ж: 192.168.1.10:8000). Гэр бүлийн кодыг дээд талын нүдэнд бичнэ.", "That isn't a server address (e.g. 192.168.1.10:8000). The family code goes in the box above."); return; }
                     busy = true; err = "";
                     g.StartCoroutine(Family.Post(famServer, "{\"act\":\"members\",\"code\":" + J.Quote(code) + "}", r =>
                     {

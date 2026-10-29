@@ -1,1 +1,2743 @@
-[{"id":"ger","icon":"⛺","scene":"ger","topic":"ger","color":"#3f76db","final":{"stage":9},"title":{"mn":"Монгол гэр барих","en":"Build a Mongol ger"},"learned":[{"mn":"Гэрийн хэсгүүд: шал, хана, хаалга, тооно, багана, унь, эсгий, бүрээс, бүслүүр","en":"The ger’s parts: floor, khana, door, toono, bagana, uni, felt, cover, ropes"},{"mn":"Барих дараалал ба хаалга урагшаа харах шалтгаан","en":"The building order and why the door faces south"},{"mn":"Эсгий гэрийг дулаан байлгадаг","en":"Felt keeps the ger warm"}],"desc":{"mn":"Хана, тооно, униа зөв дарааллаар босгоод өөрийн гэрээ бариарай.","en":"Raise the walls, crown and poles in the right order and build your own ger."},"steps":[{"type":"learn","title":{"mn":"Нүүдэлчдийн ухаалаг байшин","en":"The nomads’ clever home"},"text":{"mn":"Монгол гэрийг гэр бүлээрээ 1–2 цагт барьж, буулгаж болдог. Өвөл дулаан, зун сэрүүн. Өнөөдөр чи өөрөө барина!","en":"A family can put up or take down a ger in 1–2 hours. Warm in winter, cool in summer. Today you will build one!"}},{"type":"pick","stage":1,"title":{"mn":"1. Эхлээд юу бэлдэх вэ?","en":"1. What comes first?"},"text":{"mn":"Тэгш газар сонгоод…","en":"Pick flat ground, then…"},"options":[{"t":{"mn":"Шалаа тавина","en":"Lay the floor"},"ok":true},{"t":{"mn":"Бүрээсээ хучна","en":"Put on the cover"},"ok":false},{"t":{"mn":"Тоноо өргөнө","en":"Lift the crown"},"ok":false}],"after":{"mn":"Зөв! Тэгш газар шалаа тавьснаар гэр тэгш, бат бөх болно.","en":"Right! A level floor keeps the ger straight and strong."},"drop":[27,60,66,7]},{"type":"drag","stage":2,"dir":"side","n":5,"icon":"👐","label":{"mn":"Ханаа дэлгэх","en":"Stretch the khana"},"title":{"mn":"2. Ханаа дэлгэ!","en":"2. Unfold the walls!"},"text":{"mn":"Хана бол эвхэгддэг сараалж. Хоёр тийш нь чирж дэлгээрэй. 5 удаа дэлгэвэл 5 ханатай гэр болно.","en":"The khana is a folding lattice. Drag left and right to stretch it open. Stretch it 5 times for a 5-khana ger."},"low":{"mn":"Илүү өргөн дэлгэ!","en":"Stretch it wider!"},"after":{"mn":"5 ханатай гэр гэр бүлд хамгийн түгээмэл хэмжээ.","en":"A 5-khana ger is the most common family size."}},{"type":"pick","stage":3,"title":{"mn":"3. Хаалгыг аль зүг рүү харуулах вэ?","en":"3. Which way should the door face?"},"text":{"mn":"Хана хоёрын дунд хаалгаа уяна.","en":"Tie the door between two walls."},"options":[{"t":{"mn":"Урагш (өмнө)","en":"South"},"ok":true},{"t":{"mn":"Хойш","en":"North"},"ok":false},{"t":{"mn":"Баруун тийш","en":"West"},"ok":false}],"after":{"mn":"Урагш харсан хаалгаар нар сайн тусаж, хойд зүгийн хүйтэн салхинаас хамгаалагдана.","en":"A south-facing door gets the sun and is sheltered from cold northern winds."},"drop":[52,47,16,18]},{"type":"pick","title":{"mn":"4. Гэрийн “нүд” болох дугуй цонх","en":"4. The ger’s round “eye”"},"text":{"mn":"Үүнийг хоёр баганаар тулж өргөнө. Түүнийг юу гэдэг вэ?","en":"It is lifted up on two posts. What is it called?"},"options":[{"t":{"mn":"Тооно","en":"Toono"},"ok":true},{"t":{"mn":"Унь","en":"Uni"},"ok":false},{"t":{"mn":"Өрх","en":"Örkh"},"ok":false}],"after":{"mn":"Тоонг хоёр хүн хамт өргөдөг. Гэр барих бол гэр бүлийн ажил!","en":"Two people lift the toono together. Building a ger is family teamwork!"},"drop":[49,25,22,10]},{"type":"timing","stage":4,"lo":0.82,"hi":0.97,"label":{"mn":"Өргө!","en":"Lift!"},"title":{"mn":"Тооноо хамт өргө!","en":"Lift the toono together!"},"text":{"mn":"Тооно хүнд! Хоёр хүн хоёр баганыг зэрэг өргөнө. Зүү ногоон хэсэгт ирэхэд “Өргө!” дар: нэг, хоёр, гурав!","en":"The toono is heavy! Two people raise its two posts at the same time. Tap “Lift!” when the needle reaches the green zone: one, two, three!"},"after":{"mn":"Өргөлөө! Тооно бол гэрийн нүд: гэрэл, агаар тэндээс орж, утаа гардаг.","en":"Up it goes! The toono is the ger’s eye: light and air come in and smoke goes out through it."}},{"type":"drag","stage":5,"dir":"up","alt":true,"n":9,"icon":"✊","label":{"mn":"Униа тооно руу шургуул","en":"Push the uni into the toono"},"title":{"mn":"5. Униа хатга!","en":"5. Place the roof poles!"},"text":{"mn":"Унийн үзүүрийг тооны нүхэнд дээш нь шургуулж, нөгөө үзүүрийг ханад уяна. Тэнцвэртэй байлгахын тулд зүүн, баруун талд ээлжлэн тавь.","en":"Push the end of each uni up into a hole in the toono and tie the other end to the wall. Place them left and right in turn to keep it balanced."},"altHint":{"mn":"Ээлжлэн тавь! Одоо нөгөө талд нь униа шургуул, тэгэхгүй бол тооно хазайна.","en":"Take turns! Now do the other side, or the toono will tip."},"low":{"mn":"Дээш нь бүр түлх!","en":"Push it all the way up!"},"after":{"mn":"Жинхэнэ 5 ханатай гэрт 80 орчим унь байдаг!","en":"A real 5-khana ger has about 80 poles!"}},{"type":"pick","stage":6,"title":{"mn":"6. Гэрийг дулаахан болгоё","en":"6. Make it warm"},"text":{"mn":"Хана, униа юугаар бүрэх вэ?","en":"What covers the walls and roof?"},"options":[{"t":{"mn":"Ноосон эсгий","en":"Wool felt"},"ok":true},{"t":{"mn":"Цаас","en":"Paper"},"ok":false},{"t":{"mn":"Шил","en":"Glass"},"ok":false}],"after":{"mn":"Хонины ноосоор хийсэн эсгий өвлийн хүйтэнд дулаан байлгадаг.","en":"Felt made from sheep’s wool keeps out the winter cold."},"drop":[30,30,60,35]},{"type":"pick","stage":7,"title":{"mn":"7. Борооноос хамгаалъя","en":"7. Keep the rain out"},"text":{"mn":"Эсгийн гадуур юу хучих вэ?","en":"What goes over the felt?"},"options":[{"t":{"mn":"Цагаан бүрээс","en":"The white cover"},"ok":true},{"t":{"mn":"Ширдэг","en":"A felt mat"},"ok":false},{"t":{"mn":"Тулга","en":"The stove stand"},"ok":false}],"after":{"mn":"Цагаан бүрээс бороо, нарнаас хамгаалж, гэрийг гоё харагдуулдаг.","en":"The white cover protects from rain and sun and makes the ger shine."},"drop":[30,30,60,35]},{"type":"drag","stage":8,"dir":"down","n":3,"icon":"💪","label":{"mn":"Бүсээ чангал","en":"Pull the rope tight"},"title":{"mn":"8. Бүслүүрээ чангал!","en":"8. Tighten the ropes!"},"text":{"mn":"Гурван бүслүүрээр гэрээ бүсэлбэл хүчтэй салхинд ч хөдлөхгүй.","en":"Three ropes around the ger keep it steady even in strong wind."},"low":{"mn":"Хүчтэй тат!","en":"Pull harder!"},"after":{"mn":"Гэр бат бөх боллоо! Салхитай өдөр ч хөдлөхгүй.","en":"The ger is firm now. It won’t move even on a windy day."}},{"type":"learn","stage":9,"title":{"mn":"Гэр бэлэн боллоо! 🎉","en":"Your ger is ready! 🎉"},"text":{"mn":"Тулгаа тавьж, анхны цайгаа чанана. Одоо Басарын асуултад хариулаад, дараа нь гэр бүлээрээ бяцхан гэр барьцгаая!","en":"Set up the stove and make the first tea. Now answer Basar’s questions, then build a mini ger with your family!"}}],"family":{"say":{"mn":"“Ээж, аав аа, хамтдаа монгол гэр барьцгаая!”","en":"“Mom, Dad, let’s build a Mongol ger together!”"},"what":{"mn":"Картон, цаасаар бяцхан гэр хийцгээе","en":"Make a mini ger from card and paper"},"materials":[{"mn":"Зузаан цаас эсвэл картон","en":"Thick paper or card"},{"mn":"10 шүдний чигчлүүр эсвэл шорлог","en":"10 toothpicks or skewers"},{"mn":"Цагаан даавуу эсвэл салфетка","en":"White cloth or a napkin"},{"mn":"Утас, цавуу, хайч (том хүнтэй)","en":"String, glue, scissors (with a grown-up)"}],"steps":[{"mn":"Картоныг тойруулан тавьж хана хийгээд хаалгыг нь урагш харуулна.","en":"Roll card into a circle for the walls; the door faces south."},{"mn":"Цаасан цагираг хийж тооно болгоно.","en":"Make a paper ring for the toono."},{"mn":"Чигчлүүрүүдийг тооноос хана руу унь болгож наана.","en":"Glue toothpicks from the toono to the walls as uni."},{"mn":"Цагаан даавуугаар бүрээд, утсаар бүслүүр уяна.","en":"Cover with cloth and tie string ropes around it."},{"mn":"Гэрийнхэндээ гэрийн хэсгүүдийн нэрийг заагаарай!","en":"Teach your family the names of every part!"}]}},{"id":"idee","icon":"🥛","scene":"idee","topic":"idee","color":"#e9a91f","final":{"stage":7},"title":{"mn":"Цагаан идээ хийх","en":"Make Mongolian dairy"},"learned":[{"mn":"Цагаан идээ гэж юу вэ: тараг, өрөм, ааруул, бяслаг, айраг","en":"What white foods are: yogurt, cream, aaruul, cheese, airag"},{"mn":"Тараг исгэх: буцалгах, бүлээн болтол хөргөх, хөрөнгө хийх","en":"Making yogurt: boil, cool to lukewarm, add starter"},{"mn":"Ааруулыг шахаж, наранд хатаадаг","en":"Aaruul is pressed and dried in the sun"}],"desc":{"mn":"Үнээ саагаад сүүгээ буцалгаж, өрөм, тараг, ааруул хийцгээе.","en":"Milk the cow, boil the milk and make cream, yogurt and aaruul."},"steps":[{"type":"learn","stage":0,"title":{"mn":"Цагаан идээ гэж юу вэ?","en":"What is “white food”?"},"text":{"mn":"Монголчууд зун сүүгээр тараг, өрөм, ааруул, бяслаг, шар тос, айраг хийдэг. Үүнийг цагаан идээ гэнэ. Цагаан сараар ширээний тэргүүнд тавьдаг.","en":"In summer Mongols make yogurt, cream, aaruul, cheese, butter and airag from milk. These are “white foods”, placed first on the Tsagaan Sar table."}},{"type":"drag","stage":0,"dir":"down","alt":true,"n":8,"icon":"✊","label":{"mn":"Доош нь татаж саа","en":"Pull down to milk"},"title":{"mn":"1. Үнээгээ саа!","en":"1. Milk the cow!"},"text":{"mn":"Үхрийн дэлэнг атгаад доош нь тат. Хоёр гараараа ээлжлэн саана: зүүн, баруун, зүүн…","en":"Hold a teat and pull it down. Use both hands in turn: left, right, left…"},"altHint":{"mn":"Ээлжлэн саа! Одоо нөгөө талын дэлэнг тат.","en":"Take turns! Now pull the other teat."},"low":{"mn":"Доош нь бүр татаарай!","en":"Pull all the way down!"},"after":{"mn":"Хувин дүүрлээ! Саахдаа үнээгээ зөөлөн илж, аялгуулан дуулж тайвшруулдаг.","en":"The bucket is full! Herders stroke the cow and sing softly to keep her calm."}},{"type":"drag","dir":"up","release":true,"need":0.8,"n":3,"field":"flick","set":{"tsatsal":true},"icon":"🥄","label":{"mn":"Дээш цацах","en":"Flick up"},"title":{"mn":"Сүүний дээж өргө","en":"Offer the first milk"},"text":{"mn":"Шанагаар сүүний дээжийг авч тэнгэр өөд гурван удаа цацал өргө. Дээш нь шидэх шиг өргөөд тавиарай.","en":"Scoop the first milk and flick it up to the sky three times. Swing up and let go."},"low":{"mn":"Илүү өндөр өргө!","en":"Higher!"},"after":{"mn":"Цацал өргөхдөө сайн сайхныг ерөөдөг. Тэнгэр, газар, нутагтаа хүндэтгэл үзүүлж байгаа хэрэг.","en":"While offering, people wish for good things. It honours the sky, the land and home."}},{"type":"tap","stage":1,"n":1,"drop":[45,35,30,16],"title":{"mn":"Сүүгээ тогоонд хийе","en":"Pour the milk into the pot"},"label":{"mn":"Сүү","en":"Milk"},"text":{"mn":"Саасан сүүгээ тогоо руу чирж хийгээрэй.","en":"Drag the fresh milk to the pot."},"after":{"mn":"Сайн байна! Одоо сүүгээ аажуухан халаая.","en":"Good! Now let’s warm the milk slowly."}},{"type":"hold","stage":1,"set":{"tsatsal":false},"lo":0.82,"hi":0.97,"label":{"mn":"Гал түлэх (дараад барина)","en":"Heat (press and hold)"},"title":{"mn":"2. Сүүгээ буцалга","en":"2. Bring the milk to a boil"},"text":{"mn":"Товчийг дараад барь. Сүү буцлах үед (ногоон хэсэгт) тавиарай. Удаан барьвал сүү халина!","en":"Press and hold. Let go when the milk boils (green zone). Hold too long and it boils over!"},"after":{"mn":"Сайн байна! Халуун сүүг заавал том хүнтэй хамт буцалгаарай.","en":"Well done! Always boil hot milk with a grown-up."}},{"type":"drag","stage":2,"dir":"up","release":true,"need":0.8,"n":6,"icon":"🥄","label":{"mn":"Шанагаа өргөөд тавь","en":"Lift the ladle, let go"},"title":{"mn":"3. Сүүгээ самра!","en":"3. Ladle the milk!"},"text":{"mn":"Шанагаар сүүгээ утгаад өндөрт өргөж цутга. Өндрөөс цутгах тусам хөөс их гарч, өрөм зузаан тогтоно.","en":"Scoop milk with the ladle, lift it high and pour. The higher you pour, the more foam and the thicker the cream."},"low":{"mn":"Арай намхан байна. Шанагаа өндөрт өргө!","en":"Too low. Lift the ladle higher!"},"after":{"mn":"Хонуулахад сүүний дээр өрөм тогтоно. Өрөмөөс шар тос хийдэг.","en":"Overnight cream (öröm) forms on top. Butter is made from it."}},{"type":"timing","stage":3,"lo":0.3,"hi":0.48,"label":{"mn":"Одоо!","en":"Now!"},"title":{"mn":"4. Бүлээн болтол хөргө","en":"4. Cool it to lukewarm"},"text":{"mn":"Сүү хөрч байна. Зүү ногоон “бүлээн” хэсэгт ирэхэд дар.","en":"The milk is cooling. Tap when the needle reaches the green “lukewarm” zone."},"after":{"mn":"Хуруу тэвчихүйц бүлээн байх ёстой. Хэт халуунд тараг исэхгүй.","en":"It should be finger-warm. Too hot and the yogurt won’t set."}},{"type":"pick","stage":4,"title":{"mn":"5. Тараг исгэхийн тулд юу нэмэх вэ?","en":"5. What do we add to make yogurt?"},"text":{"mn":"Бүлээн сүүндээ…","en":"Into the warm milk goes…"},"options":[{"t":{"mn":"Хөрөнгө (бага зэрэг хуучин тараг)","en":"Starter (a little old yogurt)"},"ok":true},{"t":{"mn":"Давс","en":"Salt"},"ok":false},{"t":{"mn":"Чихэр","en":"Sugar"},"ok":false}],"after":{"mn":"Хөрөнгөнд байгаа сайн бактери сүүг тараг болгодог.","en":"Good bacteria in the starter turn milk into yogurt."},"drop":[45,35,30,16]},{"type":"tap","stage":5,"n":4,"label":{"mn":"Дулаан боох","en":"Wrap warm"},"title":{"mn":"6. Дулаан боож хонуул","en":"6. Wrap it warm overnight"},"text":{"mn":"Савыг дээл, хөнжлөөр боож дулаан газар хонуулна.","en":"Wrap the pot in a deel or blanket and leave it somewhere warm overnight."},"after":{"mn":"Өглөө боллоо — тараг бэлэн! 🌞","en":"Morning — the yogurt is ready! 🌞"}},{"type":"drag","stage":6,"dir":"down","n":4,"icon":"🪨","label":{"mn":"Чулуугаар дарах","en":"Press with the stone"},"title":{"mn":"7. Ааруул хийцгээе","en":"7. Let’s make aaruul"},"text":{"mn":"Тарагаа халааж ээдэм гаргаад даавуунд хийнэ. Дээр нь хавтгай чулуу тавиад доош нь дарж усыг нь шахаж гаргана.","en":"Heat the yogurt until curds form and put them in a cloth. Lay a flat stone on top and press down to squeeze out the water."},"low":{"mn":"Хүчтэй дар!","en":"Press harder!"}},{"type":"drag","dir":"down","n":3,"field":"mold","set":{"molding":true},"icon":"👐","label":{"mn":"Хэвэнд дарах","en":"Press into the mould"},"title":{"mn":"Ааруулаа хэвэнд хийж дар","en":"Press the aaruul into a mould"},"text":{"mn":"Шахсан ээдмээ модон хэвэнд хийгээд гараараа доош нь дарж хэлбэржүүлнэ. Хэвний нүх бүрийг дүүргээрэй!","en":"Put the pressed curd into a wooden mould and push it down with your hands. Fill every hole!"},"low":{"mn":"Хүчтэй дар!","en":"Press harder!"},"after":{"mn":"Хэвний сийлсэн хээ ааруулан дээр тод гарна. Ааруулыг дөрвөлжин, дугуй, цэцэг хэлбэртэй хэвээр хийдэг.","en":"The carved pattern shows on each piece. Aaruul moulds come in squares, circles and flower shapes."}},{"type":"pick","stage":7,"title":{"mn":"8. Ааруулаа хаана хатаах вэ?","en":"8. Where do we dry the aaruul?"},"text":{"mn":"Хэрчсэн ааруулаа…","en":"Cut the curd into pieces and…"},"options":[{"t":{"mn":"Нар, салхинд","en":"In the sun and wind"},"ok":true},{"t":{"mn":"Хөргөгчинд","en":"In the fridge"},"ok":false},{"t":{"mn":"Усанд","en":"In water"},"ok":false}],"after":{"mn":"Гэрийн дээвэр эсвэл тавиур дээр наранд хатаадаг. Хатуу, амттай ааруул бэлэн!","en":"Dried on the ger roof or a rack in the sun. Crunchy aaruul is ready!"}}],"family":{"say":{"mn":"“Ээж, аав аа, хамтдаа тараг исгэцгээе!”","en":"“Mom, Dad, let’s make yogurt together!”"},"what":{"mn":"Гэртээ жинхэнэ тараг исгэцгээе","en":"Make real yogurt at home"},"materials":[{"mn":"1 литр сүү","en":"1 litre of milk"},{"mn":"2 халбага тараг (хөрөнгө)","en":"2 spoons of yogurt (starter)"},{"mn":"Таглаатай сав","en":"A pot with a lid"},{"mn":"Алчуур эсвэл хөнжил","en":"A towel or blanket"}],"steps":[{"mn":"Том хүн сүүг буцалгана.","en":"A grown-up boils the milk."},{"mn":"Бүлээн болтол хөргөнө — хуруугаараа болгоомжтой шалгана.","en":"Cool it until lukewarm — test carefully with a finger."},{"mn":"Хөрөнгөө хийж сайн хутгана.","en":"Stir in the starter."},{"mn":"Таглаад дулаан боож 6–8 цаг байлгана.","en":"Cover, wrap it warm and wait 6–8 hours."},{"mn":"Хөргөгчинд хөргөөд гэр бүлээрээ амсаарай!","en":"Chill it and taste it together!"}]}},{"id":"customs","icon":"🙏","scene":"inside","topic":"customs","color":"#9466e0","final":{},"title":{"mn":"Гэрийн ёс заншил","en":"Ger manners"},"learned":[{"mn":"Хоймор, гал голомт, эрэгтэй ба эмэгтэй тал хаана байдаг","en":"Where the khoimor, hearth and men’s and women’s sides are"},{"mn":"Босго гишгэхгүй, нар зөв явах, баганын дундуур гарахгүй","en":"Don’t step on the threshold, move sunwise, don’t pass between the posts"},{"mn":"Ахмадад хоёр гараараа юм өгөх","en":"Hand things to elders with both hands"}],"desc":{"mn":"Хоймор хаана вэ? Босго гишгэж болох уу? Гэрийн дотоод “газрын зураг”-ийг сур.","en":"Where is the khoimor? Can you step on the threshold? Learn the ger’s inside “map”."},"steps":[{"type":"learn","title":{"mn":"Гэр бүр дотроо газрын зурагтай","en":"Every ger has a map inside"},"text":{"mn":"Монгол гэрт хүн бүр, эд зүйл бүр өөрийн байртай. Дээрээс харахад хаалга доор (урд), хоймор дээр (хойд) байна.","en":"In a ger every person and thing has its place. From above, the door is at the bottom (south) and the khoimor at the top (north)."}},{"type":"tf","answer":false,"title":{"mn":"Зөв үү, буруу юу?","en":"True or false?"},"text":{"mn":"Гэрт орохдоо босго гишгэж болно.","en":"You may step on the threshold when entering."},"after":{"mn":"Босго гишгэх нь ёс бус. Босгыг алхаж давдаг.","en":"Stepping on the threshold is bad manners. Step over it."}},{"type":"zones","zone":"khoimor","title":{"mn":"Хоймор хаана вэ?","en":"Where is the khoimor?"},"text":{"mn":"Ахмад настан, хүндтэй зочин суудаг хамгийн хүндэт газрыг дар.","en":"Tap the place of honour where elders and honoured guests sit."},"after":{"mn":"Хоймор хаалганы эсрэг талд, хойд хэсэгт байдаг.","en":"The khoimor is opposite the door, at the north."}},{"type":"zones","zone":"hearth","title":{"mn":"Гал голомт хаана вэ?","en":"Where is the hearth?"},"text":{"mn":"Гэрийн зүрх болох галыг дар.","en":"Tap the fire, the heart of the ger."},"after":{"mn":"Гал голомт гэрийн яг голд байдаг. Гал руу хөлөө чиглүүлж, хог хаядаггүй.","en":"The hearth is in the very centre. Never point your feet at it or throw rubbish in it."}},{"type":"zones","zone":"west","title":{"mn":"Эрэгтэй хүн, зочны тал","en":"The men’s and guests’ side"},"text":{"mn":"Уламжлалаар эмээл, хазаар байдаг, эрэгтэй хүн, зочин суудаг талыг дар.","en":"Tap the side where saddles are kept and men and guests sit."},"after":{"mn":"Баруун тал буюу орохдоо зүүн гар тал. Эмээл, хазаар энд байна.","en":"The west side — your left as you enter. Saddles and bridles are here."}},{"type":"zones","zone":"east","title":{"mn":"Гал тогооны тал","en":"The kitchen side"},"text":{"mn":"Аяга таваг, тогоо байдаг талыг дар.","en":"Tap the side with bowls and pots."},"after":{"mn":"Зүүн тал буюу орохдоо баруун гар тал. Гэрийн эзэгтэйн тал.","en":"The east side — your right as you enter. The hostess’s side."}},{"type":"pick","title":{"mn":"Гэр дотор ямар чигээр явах вэ?","en":"Which way do you walk inside?"},"text":{"mn":"Нар явахтай адил…","en":"Like the sun travels…"},"options":[{"t":{"mn":"Нар зөв (цагийн зүүний дагуу)","en":"Sunwise (clockwise)"},"ok":true},{"t":{"mn":"Нар буруу","en":"Against the sun"},"ok":false},{"t":{"mn":"Голоор нь шууд","en":"Straight through the middle"},"ok":false}],"after":{"mn":"Нар зөв эргэх нь сайн сайхныг бэлгэддэг.","en":"Moving sunwise is a sign of good fortune."}},{"type":"tf","answer":true,"title":{"mn":"Зөв үү, буруу юу?","en":"True or false?"},"text":{"mn":"Хоёр баганын дундуур гарч болохгүй.","en":"You should not walk between the two posts."},"after":{"mn":"Зөв! Баганыг түшиж, дундуур нь гарахгүй.","en":"Right! Don’t lean on the posts or walk between them."}},{"type":"tf","answer":true,"title":{"mn":"Зөв үү, буруу юу?","en":"True or false?"},"text":{"mn":"Ахмад хүнд юм өгөхдөө баруун гараараа эсвэл хоёр гараараа өгнө.","en":"Hand things to elders with your right hand or both hands."},"after":{"mn":"Энэ бол хүндэтгэлийн тэмдэг.","en":"This is a sign of respect."}}],"family":{"say":{"mn":"“Эмээ, өвөө өө, гэрийн ёс заншлаа надад заагаарай!”","en":"“Grandma, Grandpa, teach me our home customs!”"},"what":{"mn":"Ахмадуудаасаа ёс заншил сурцгаая","en":"Learn customs from your elders"},"materials":[{"mn":"Эмээ, өвөө эсвэл ээж, аав","en":"Grandma, Grandpa, Mom or Dad"},{"mn":"Naadamy-ийн Дурсамжийн ном","en":"The Naadamy memory book"}],"steps":[{"mn":"Гэртээ хоймор хаана байгааг хамт олоорой.","en":"Find where the khoimor is in your home."},{"mn":"Ахмадад цайгаа хоёр гараараа өргөж дадлага хий.","en":"Practise offering tea to an elder with both hands."},{"mn":"Тэднээс өөр ямар ёс заншил мэддэгийг асуу.","en":"Ask what other customs they know."},{"mn":"Ярьсныг нь Дурсамжийн номонд бичиж, дуу хоолойг нь хадгал.","en":"Save their words and voice in the memory book."}]}},{"id":"nuuts","icon":"📜","scene":"story","topic":"nuuts","color":"#c8483c","final":{"ch":"banner"},"title":{"mn":"Нууц товчооны үлгэр","en":"Tales of the Secret History"},"learned":[{"mn":"Бөртэ чоно, Гуа марал: Нууц товчооны эхлэл","en":"Börte Chino and Gua Maral: how the Secret History begins"},{"mn":"Алан гуагийн таван сумны эв нэгдлийн сургаал","en":"Alan Gua’s five arrows lesson on unity"},{"mn":"Тэмүжиний бага нас ба 1206 онд Чингис хаан болсон нь","en":"Temüjin’s childhood and becoming Chinggis Khaan in 1206"}],"desc":{"mn":"Бөртэ чоно, таван сумны сургаал, бяцхан Тэмүжин, Чингис хаан болсон түүх.","en":"The blue wolf, the five arrows, young Temüjin and how he became Chinggis Khaan."},"steps":[{"type":"story","ch":"wolf","title":{"mn":"Бөртэ чоно, Гуа марал","en":"The blue wolf and the doe"},"text":{"mn":"“Монголын нууц товчоо” ингэж эхэлдэг: Дээр тэнгэрээс заяат төрсөн Бөртэ чоно, гэргий Гуа марал хоёр далайг гэтэлж ирээд Онон голын эх, Бурхан халдун ууланд нутаглажээ.","en":"The Secret History begins: Börte Chino, born with destiny from Heaven, and his wife Gua Maral crossed the waters and settled at the source of the Onon river, by Mount Burkhan Khaldun."}},{"type":"pick","ch":"wolf","title":{"mn":"Асуулт","en":"Question"},"text":{"mn":"Нууц товчоонд гардаг монголчуудын домогт өвөг хэн бэ?","en":"Who are the legendary ancestors in the Secret History?"},"options":[{"t":{"mn":"Бөртэ чоно, Гуа марал","en":"Börte Chino and Gua Maral"},"ok":true},{"t":{"mn":"Арслан, бар","en":"A lion and a tiger"},"ok":false},{"t":{"mn":"Луу, гарьд","en":"A dragon and a garuda"},"ok":false}]},{"type":"story","ch":"arrows","title":{"mn":"Таван сумны сургаал","en":"The five arrows"},"text":{"mn":"Алан гуа эх таван хүүдээ нэг нэг сум өгч “хугал” гэхэд тэд амархан хугалжээ. Дараа нь таван сумыг багцлан өгөхөд хэн ч хугалж чадсангүй. “Та нар салбал нэг сум шиг амархан хугарна. Эв нэгдэлтэй бол хэн ч дийлэхгүй” гэж сургажээ.","en":"Mother Alan Gua gave each of her five sons an arrow to break, and they snapped easily. Then she bound five together and no one could break them. “Apart you break like one arrow. Together no one can defeat you.”"},"broken":true},{"type":"pick","ch":"arrows","title":{"mn":"Асуулт","en":"Question"},"text":{"mn":"Таван сумны сургаал юуны тухай вэ?","en":"What is the five arrows lesson about?"},"options":[{"t":{"mn":"Эв нэгдэл","en":"Unity"},"ok":true},{"t":{"mn":"Хурдан гүйх","en":"Running fast"},"ok":false},{"t":{"mn":"Баян болох","en":"Getting rich"},"ok":false}]},{"type":"story","ch":"river","title":{"mn":"Бяцхан Тэмүжин","en":"Young Temüjin"},"text":{"mn":"Тэмүжин Онон голын Дэлүүн болдогт төржээ. Аавыг нь хорлон алсны дараа тэдний гэр бүл ганцаардсан ч Өэлүн эх хүүхдүүдээ Онон голын загас, зэрлэг жимс, ургамлын үндсээр хооллож, зоригтой өсгөжээ.","en":"Temüjin was born at Delüün Boldog by the Onon river. After his father was poisoned the family was left alone, but mother Hö’elün raised her children bravely on fish, berries and wild roots."}},{"type":"pick","ch":"river","title":{"mn":"Асуулт","en":"Question"},"text":{"mn":"Хэцүү үед Тэмүжиний гэр бүлийг хэн тэжээж өсгөсөн бэ?","en":"Who fed and raised Temüjin’s family in the hard times?"},"options":[{"t":{"mn":"Өэлүн эх","en":"Mother Hö’elün"},"ok":true},{"t":{"mn":"Жамуха","en":"Jamukha"},"ok":false},{"t":{"mn":"Тоорил хан","en":"To’oril Khan"},"ok":false}]},{"type":"story","ch":"river","title":{"mn":"Найз нөхөд","en":"True friends"},"text":{"mn":"Залуу Тэмүжин Тайчуудын олзонд орсон ч Сорхон шарын гэр бүл түүнийг ноосон тэргэнд нууж аварчээ. Тэрээр анд Жамуха, үнэнч нөхөр Боорчи нартайгаа хүчээ нэгтгэжээ.","en":"Young Temüjin was captured by the Tayichi’ud, but Sorkhan Shira’s family hid him in a cart of wool. He joined forces with his anda Jamukha and loyal friend Bo’orchu."}},{"type":"story","ch":"banner","title":{"mn":"Чингис хаан","en":"Chinggis Khaan"},"text":{"mn":"1206 онд Онон голын эхэнд Их хурилдай хуралдаж, есөн хөлт цагаан туг мандуулан Тэмүжинийг Чингис хаан хэмээн өргөмжилж, Их Монгол Улсыг байгуулжээ.","en":"In 1206 the Great Khuriltai met at the source of the Onon, raised the nine-footed white banner, proclaimed Temüjin Chinggis Khaan and founded the Great Mongol State."}},{"type":"pick","ch":"banner","title":{"mn":"Асуулт","en":"Question"},"text":{"mn":"Тэмүжинийг Чингис хаан хэмээн өргөмжилсөн хурилдай хэдэн онд болсон бэ?","en":"In which year was Temüjin proclaimed Chinggis Khaan?"},"options":[{"t":{"mn":"1206","en":"1206"},"ok":true},{"t":{"mn":"1162","en":"1162"},"ok":false},{"t":{"mn":"1911","en":"1911"},"ok":false}]},{"type":"learn","ch":"banner","title":{"mn":"Нууц товчоо","en":"The Secret History"},"text":{"mn":"Ихэнх эрдэмтэд Нууц товчоог 1228 онд бичигдсэн гэж үздэг. 12 бүлэг, 282 зүйлтэй. Басараас илүү олон түүх асуугаарай!","en":"Most scholars date the Secret History to 1228. It has 12 chapters and 282 sections. Ask Basar for more stories!"}}],"family":{"say":{"mn":"“Ээж, аав аа, таван сумны сургаалыг туршиж үзье!”","en":"“Mom, Dad, let’s try the five arrows lesson!”"},"what":{"mn":"Эв нэгдлийн туршилт","en":"The unity experiment"},"materials":[{"mn":"5 нарийн хуурай мөчир эсвэл модон шорлог","en":"5 thin dry twigs or wooden skewers"},{"mn":"Утас","en":"String"}],"steps":[{"mn":"Хүн бүр нэг мөчир хугалж үзнэ — амархан!","en":"Everyone breaks one twig — easy!"},{"mn":"Таван мөчрийг утсаар багцлаад хугалж үзнэ — хэцүү!","en":"Tie five together and try — hard!"},{"mn":"Гэр бүлд эв нэгдэл яагаад чухал вэ гэж ярилцаарай.","en":"Talk about why unity matters in a family."},{"mn":"Алан гуа эхийн түүхийг дүү, найздаа ярьж өгөөрэй.","en":"Tell Alan Gua’s story to a sibling or friend."}]}},{"id":"herd","icon":"🐑","scene":"herd","topic":"nomad","color":"#2ea35f","final":{"sub":1},"title":{"mn":"Таван хошуу мал","en":"The five herd animals"},"learned":[{"mn":"Таван хошуу мал: морь, үхэр, тэмээ, хонь, ямаа","en":"The five animals: horse, cattle, camel, sheep, goat"},{"mn":"Мал бүрийн өгдөг зүйл: айраг, ноос, ноолуур, сүү, хүч","en":"What each gives: airag, wool, cashmere, milk, strength"},{"mn":"Малчид жилд 4 удаа нүүдэг","en":"Herders move four times a year"}],"desc":{"mn":"Морь, үхэр, тэмээ, хонь, ямаа: мал бүр малчин айлд юу өгдөг вэ?","en":"Horse, cattle, camel, sheep, goat: what does each give a herding family?"},"steps":[{"type":"learn","set":{"sub":0.2},"title":{"mn":"Малчдын баялаг","en":"The herders’ wealth"},"text":{"mn":"Монголчууд мянга мянган жил таван хошуу мал маллаж ирсэн. Мал бүр өөр өөр ашигтай.","en":"For thousands of years Mongols have herded five kinds of animals. Each one is useful in its own way."}},{"type":"tap","n":5,"field":"sub","label":{"mn":"Малаа тоолох","en":"Count the herd"},"title":{"mn":"Малаа тоол!","en":"Count the herd!"},"text":{"mn":"5 удаа дарж таван хошуу малаа цуглуулаарай.","en":"Tap 5 times to gather all five animals."},"after":{"mn":"Морь, үхэр, тэмээ, хонь, ямаа: таван хошуу мал.","en":"Horse, cattle, camel, sheep, goat: the five animals."}},{"type":"pick","title":{"mn":"Айраг","en":"Airag"},"text":{"mn":"Айргийг аль малын сүүгээр хийдэг вэ?","en":"Airag is made from which animal’s milk?"},"options":[{"t":{"mn":"Морь (гүү)","en":"Horse (mare)"},"ok":true},{"t":{"mn":"Хонь","en":"Sheep"},"ok":false},{"t":{"mn":"Тэмээ","en":"Camel"},"ok":false}],"after":{"mn":"Гүүний сүүгээр айраг, тэмээний сүүгээр хоормог хийдэг.","en":"Mare’s milk makes airag; camel’s milk makes khoormog."}},{"type":"pick","title":{"mn":"Эсгий","en":"Felt"},"text":{"mn":"Гэрийн эсгий хийх ноосыг голдуу аль малаас авдаг вэ?","en":"The wool for ger felt mostly comes from which animal?"},"options":[{"t":{"mn":"Хонь","en":"Sheep"},"ok":true},{"t":{"mn":"Морь","en":"Horse"},"ok":false},{"t":{"mn":"Үхэр","en":"Cattle"},"ok":false}],"after":{"mn":"Хонины ноосыг дэвтээж, өнхрүүлж эсгий хийдэг.","en":"Sheep’s wool is wetted and rolled into felt."}},{"type":"pick","title":{"mn":"Ноолуур","en":"Cashmere"},"text":{"mn":"Зөөлөн ноолуурыг аль малаас самнаж авдаг вэ?","en":"Which animal gives soft cashmere?"},"options":[{"t":{"mn":"Ямаа","en":"Goat"},"ok":true},{"t":{"mn":"Тэмээ","en":"Camel"},"ok":false},{"t":{"mn":"Хонь","en":"Sheep"},"ok":false}],"after":{"mn":"Хавар ямааг самнаж ноолуур авдаг.","en":"In spring goats are combed for cashmere."}},{"type":"pick","title":{"mn":"Говийн хөлөг","en":"Ship of the Gobi"},"text":{"mn":"Говьд хүнд ачаа зөөж, ус ундгүй удаан тэсдэг мал аль вэ?","en":"Which animal carries heavy loads and goes long without water in the Gobi?"},"options":[{"t":{"mn":"Тэмээ","en":"Camel"},"ok":true},{"t":{"mn":"Хонь","en":"Sheep"},"ok":false},{"t":{"mn":"Ямаа","en":"Goat"},"ok":false}],"after":{"mn":"Хоёр бөхтэй монгол тэмээг “говийн хөлөг” гэдэг.","en":"The two-humped Mongolian camel is called “the ship of the Gobi”."}},{"type":"tf","answer":true,"title":{"mn":"Зөв үү, буруу юу?","en":"True or false?"},"text":{"mn":"Малчид жилд дөрвөн улирлын бууцанд нүүдэг.","en":"Herders move between four seasonal camps a year."},"after":{"mn":"Хаваржаа, зуслан, намаржаа, өвөлжөө.","en":"Spring, summer, autumn and winter camps."}},{"type":"learn","title":{"mn":"Морь бол далавч","en":"The horse is our wings"},"text":{"mn":"“Морь бол монгол хүний далавч” гэдэг. Монголд хүнээс олон адуу бий!","en":"They say “the horse is a Mongol’s wings”. Mongolia has more horses than people!"}}],"family":{"say":{"mn":"“Өвөө, эмээ ээ, та нар ямар мал маллаж байсан бэ?”","en":"“Grandpa, Grandma, which animals did you herd?”"},"what":{"mn":"Ахмадуудаасаа малын тухай асуух","en":"Ask your elders about their animals"},"materials":[{"mn":"Өвөө, эмээ эсвэл ахмад хамаатан","en":"Grandparents or older relatives"},{"mn":"Цаас, өнгийн харандаа","en":"Paper and coloured pencils"}],"steps":[{"mn":"Тэд бага байхдаа ямар мал маллаж байсныг асуу.","en":"Ask which animals they herded as children."},{"mn":"Хамгийн дуртай морь нь хэн гэдэг нэртэй байсныг асуу.","en":"Ask the name of their favourite horse."},{"mn":"Таван хошуу малаа хамтдаа зураарай.","en":"Draw the five animals together."},{"mn":"Түүхийг нь Дурсамжийн номонд бичээрэй.","en":"Save their story in the memory book."}]}},{"id":"tsagaansar","icon":"🥟","scene":"table","topic":"customs","color":"#e14b3d","final":{"buuz":10,"layers":5},"title":{"mn":"Цагаан сар","en":"Tsagaan Sar"},"learned":[{"mn":"Битүүнээр гэрээ цэвэрлэж, гэр бүлээрээ цуглардаг","en":"On Bituun, families clean the home and gather"},{"mn":"Ул боовыг сондгой давхраар өрдөг, бууз чимхдэг","en":"Ul boov is stacked in odd layers; families make buuz"},{"mn":"Золгохдоо хадаг барьж, ахмадын тохойг доороос түшдэг","en":"To greet elders, offer a khadag and support their elbows"}],"desc":{"mn":"Бууз чимхэж, ул боов өрж, ахмадуудтайгаа хэрхэн золгохыг сур.","en":"Make buuz, stack ul boov and learn how to greet your elders."},"steps":[{"type":"learn","title":{"mn":"Сар шинийн баяр","en":"Lunar New Year"},"text":{"mn":"Цагаан сар бол монголчуудын шинэ жил. Өвлийг үдэж, хаврыг угтдаг. Битүүний орой гэр бүлээрээ цуглаж, шинийн нэгэнд ахмадуудтайгаа золгодог.","en":"Tsagaan Sar is the Mongolian New Year, seeing off winter and welcoming spring. On the eve families gather, and on the first day they greet their elders."}},{"type":"tap","n":10,"field":"buuz","scale":10,"label":{"mn":"Бууз чимхэх","en":"Pinch a buuz"},"title":{"mn":"Бууз чимхье!","en":"Let’s make buuz!"},"text":{"mn":"Гэр бүлээрээ олон мянган бууз чимхдэг айл ч бий. 10 удаа дараарай!","en":"Some families make thousands of buuz together. Tap 10 times!"},"after":{"mn":"Сайхан бууз боллоо! Битүүний өмнө бүгд хамтдаа чимхдэг.","en":"Lovely buuz! Everyone makes them together before the holiday."},"drop":[56,43,36,13]},{"type":"pick","title":{"mn":"Ул боов","en":"Ul boov"},"text":{"mn":"Ул боовыг ширээн дээр хэрхэн өрдөг вэ?","en":"How is ul boov stacked on the table?"},"options":[{"t":{"mn":"Сондгой давхраар (3, 5, 7)","en":"In odd layers (3, 5, 7)"},"ok":true},{"t":{"mn":"Тэгш давхраар (2, 4, 6)","en":"In even layers (2, 4, 6)"},"ok":false},{"t":{"mn":"Ганцхан ширхэг","en":"Just one piece"},"ok":false}],"after":{"mn":"Сондгой тоо өсөлт, сайн сайхныг бэлгэддэг гэдэг.","en":"Odd numbers are said to symbolise growth and good fortune."}},{"type":"tap","n":5,"field":"layers","scale":5,"label":{"mn":"Давхарга өрөх","en":"Add a layer"},"title":{"mn":"Ул боовоо өрье","en":"Stack the ul boov"},"text":{"mn":"5 давхар ул боов өрөөд оройд нь цагаан идээ, чихэр тавина.","en":"Stack 5 layers and put dairy foods and sweets on top."},"drop":[18,14,32,34]},{"type":"pick","title":{"mn":"Битүүн","en":"Bituun"},"text":{"mn":"Битүүний орой юу хийдэг вэ?","en":"What do families do on the eve, Bituun?"},"options":[{"t":{"mn":"Гэрээ цэвэрлэж, гэр бүлээрээ цуглардаг","en":"Clean the home and gather as a family"},"ok":true},{"t":{"mn":"Ганцаараа унтдаг","en":"Sleep alone"},"ok":false},{"t":{"mn":"Дэлгүүр хэсдэг","en":"Go shopping"},"ok":false}],"after":{"mn":"Хуучин жилийн бүх зүйлийг цэгцэлж, шинэ жилийг цэвэр угтдаг.","en":"Everything is tidied so the new year starts fresh."}},{"type":"pick","title":{"mn":"Золголт","en":"Greeting"},"text":{"mn":"Золгохдоо ахмадад юу барьдаг вэ?","en":"What do you offer an elder when greeting them?"},"options":[{"t":{"mn":"Хадаг","en":"A khadag scarf"},"ok":true},{"t":{"mn":"Ном","en":"A book"},"ok":false},{"t":{"mn":"Бөмбөг","en":"A ball"},"ok":false}],"after":{"mn":"Цэнхэр хадаг нь тэнгэр, хүндэтгэлийг бэлгэддэг.","en":"The blue khadag symbolises the sky and respect."}},{"type":"tf","answer":true,"title":{"mn":"Зөв үү, буруу юу?","en":"True or false?"},"text":{"mn":"Золгохдоо залуу хүн ахмадын тохойг доороос нь түшдэг.","en":"When greeting, the younger person supports the elder’s elbows from below."},"after":{"mn":"Энэ нь ахмадаа түших, хүндлэхийн бэлгэдэл.","en":"It shows that you support and respect your elder."}}],"family":{"say":{"mn":"“Ээж, аав аа, хамтдаа бууз чимхэцгээе!”","en":"“Mom, Dad, let’s make buuz together!”"},"what":{"mn":"Гэр бүлээрээ бууз чимхэж, золгох дадлага хийх","en":"Make buuz together and practise the greeting"},"materials":[{"mn":"Гурил, мах (том хүнтэй)","en":"Flour and meat (with a grown-up)"},{"mn":"Хадаг","en":"A khadag"}],"steps":[{"mn":"Том хүнтэй хамт гурилаа зуурч, махаа бэлдэнэ.","en":"With a grown-up, make the dough and filling."},{"mn":"Хүн бүр бууз чимхэж үзнэ.","en":"Everyone tries pinching buuz."},{"mn":"Хадаг барьж, ахмадын тохойг доороос түшиж золгох дадлага хийнэ.","en":"Practise the greeting: offer the khadag and support the elder’s elbows."},{"mn":"Ахмадаасаа хуучин Цагаан сарын дурсамжийг асуугаарай.","en":"Ask your elders about Tsagaan Sar when they were young."}]}},{"id":"khuur","icon":"🎻","scene":"khuur","topic":"arts","color":"#7d57c4","final":{"lit":1},"title":{"mn":"Морин хуур ба уртын дуу","en":"Morin khuur & long song"},"learned":[{"mn":"Морин хуур хоёр утастай, морин толгойтой","en":"The morin khuur has two strings and a horse head"},{"mn":"Хөөрхөн Намжилын домог","en":"The legend of Khökhöö Namjil"},{"mn":"Уртын дуу, хөөмий, биелгээ, ёохор","en":"Long song, khöömii, biyelgee and yokhor"}],"desc":{"mn":"Хөөрхөн Намжилын домог, морин хуур, уртын дуу, хөөмий, ардын бүжиг.","en":"The legend of Khökhöö Namjil, the horsehead fiddle, long song, throat singing and folk dance."},"steps":[{"type":"story","title":{"mn":"Хөөрхөн Намжилын домог","en":"The legend of Khökhöö Namjil"},"text":{"mn":"Эрт урьд цагт Хөөрхөн Намжил гэдэг залуу жигүүртэй хурдан морьтой байжээ. Морь нь үхэхэд Намжил ихэд гунигласан бөгөөд хайртай морио дурсан, түүний толгойн дүрсээр анхны морин хуурыг урласан гэдэг.","en":"Long ago a young man named Khökhöö Namjil had a swift, winged horse. When the horse died, Namjil grieved, and carved the first morin khuur in its memory, with a horse’s head."}},{"type":"pick","title":{"mn":"Асуулт","en":"Question"},"text":{"mn":"Морин хуурын толгой ямар дүрстэй вэ?","en":"What shape is the head of the morin khuur?"},"options":[{"t":{"mn":"Морь","en":"A horse"},"ok":true},{"t":{"mn":"Луу","en":"A dragon"},"ok":false},{"t":{"mn":"Арслан","en":"A lion"},"ok":false}]},{"type":"pick","title":{"mn":"Утас","en":"Strings"},"text":{"mn":"Морин хуур хэдэн утастай вэ?","en":"How many strings does the morin khuur have?"},"options":[{"t":{"mn":"2","en":"2"},"ok":true},{"t":{"mn":"4","en":"4"},"ok":false},{"t":{"mn":"6","en":"6"},"ok":false}],"after":{"mn":"Хоёр утсыг адууны сүүлний үсээр хийдэг уламжлалтай.","en":"Traditionally the two strings are made of horsetail hair."}},{"type":"tap","n":6,"field":"lit","scale":1,"tone":true,"label":{"mn":"Нумаа татах","en":"Draw the bow"},"title":{"mn":"Хуураа хөгжимдье!","en":"Let’s play!"},"text":{"mn":"6 удаа нумаа татаж аялгуу тоглоорой.","en":"Draw the bow 6 times to play a tune."},"after":{"mn":"Морин хуурын дууг “талын салхи”, “морины янцгаалах” дуутай зүйрлэдэг.","en":"The fiddle’s sound is compared to the steppe wind and a horse’s neigh."}},{"type":"pick","title":{"mn":"Уртын дуу","en":"Long song"},"text":{"mn":"Уртын дууны онцлог юу вэ?","en":"What is special about the long song?"},"options":[{"t":{"mn":"Удаан, сунжирсан аялгуутай","en":"Slow, long-stretched notes"},"ok":true},{"t":{"mn":"Маш хурдан","en":"Very fast"},"ok":false},{"t":{"mn":"Үггүй","en":"No words at all"},"ok":false}]},{"type":"pick","title":{"mn":"Хөөмий","en":"Khöömii"},"text":{"mn":"Нэг хүн нэгэн зэрэг хоёр дуу авиа гаргадаг урлагийг юу гэдэг вэ?","en":"What is the art of singing two sounds at once called?"},"options":[{"t":{"mn":"Хөөмий","en":"Khöömii"},"ok":true},{"t":{"mn":"Биелгээ","en":"Biyelgee"},"ok":false},{"t":{"mn":"Ёохор","en":"Yokhor"},"ok":false}]},{"type":"tf","answer":true,"title":{"mn":"Зөв үү, буруу юу?","en":"True or false?"},"text":{"mn":"Морин хуур, уртын дуу, хөөмий ЮНЕСКО-гийн биет бус өвд бүртгэлтэй.","en":"The morin khuur, long song and khöömii are on UNESCO’s intangible heritage list."},"after":{"mn":"Монголын соёлын өв дэлхийд хүлээн зөвшөөрөгдсөн.","en":"Mongolian heritage is recognised around the world."}},{"type":"learn","title":{"mn":"Ардын бүжиг","en":"Folk dance"},"text":{"mn":"Баруун Монголын биелгээг голдуу дээд биеэрээ бүжиглэдэг тул гэрийн бага зайд ч болдог. Буриадын ёохорыг гар гараасаа барьж тойрон бүжиглэдэг.","en":"Western Mongolia’s biyelgee uses mostly the upper body, so it fits inside a ger. The Buryat yokhor is danced holding hands in a circle."}}],"family":{"say":{"mn":"“Ээж, аав аа, хамтдаа уртын дуу сонсъё!”","en":"“Mom, Dad, let’s listen to a long song together!”"},"what":{"mn":"Гэр бүлээрээ монгол хөгжим сонсох, бүжиглэх","en":"Listen to Mongolian music and dance together"},"materials":[{"mn":"Утас эсвэл радио","en":"A phone or radio"},{"mn":"Гэр бүлийн гишүүд","en":"Your family"}],"steps":[{"mn":"Морин хуурын аялгуу, уртын дуу хамтдаа сонсоорой.","en":"Listen to morin khuur music and a long song together."},{"mn":"Өвөө, эмээгээсээ мэддэг дууг нь заалгаарай.","en":"Ask your grandparents to teach you a song they know."},{"mn":"Гар гараасаа барьж ёохор шиг тойрон бүжиглээрэй.","en":"Hold hands and dance in a circle like the yokhor."}]}},{"id":"shagai","icon":"🦴","scene":"shagai","topic":"naadam","color":"#c98a4b","final":{"sides":["horse","camel","sheep","goat"]},"title":{"mn":"Шагай наадам","en":"Shagai games"},"learned":[{"mn":"Шагай 4 талтай: морь, тэмээ, хонь, ямаа","en":"A shagai has 4 sides: horse, camel, sheep, goat"},{"mn":"Шагайгаар морь уралдуулах тоглоом","en":"The shagai horse-race game"},{"mn":"Шагай харваа 2014 онд ЮНЕСКО-д бүртгэгдсэн","en":"Knucklebone shooting was listed by UNESCO in 2014"}],"desc":{"mn":"Шагай хаяж, морь уралдуулж, урт өвлийн оройн тоглоомуудыг сур.","en":"Roll knucklebones, race horses and learn the games of long winter evenings."},"steps":[{"type":"learn","set":{"sides":[]},"title":{"mn":"Шагай гэж юу вэ?","en":"What is shagai?"},"text":{"mn":"Шагай бол хонины шагай. Хаяхад морь, тэмээ, хонь, ямаа гэсэн 4 талын нэгээр нь буудаг.","en":"Shagai are sheep anklebones. When thrown, each lands on one of 4 sides: horse, camel, sheep or goat."}},{"type":"tap","n":4,"roll":true,"label":{"mn":"Шагай хаях","en":"Throw a shagai"},"title":{"mn":"Шагайгаа хая!","en":"Throw the bones!"},"text":{"mn":"4 удаа дарж дөрвөн шагайгаа хаяарай.","en":"Tap 4 times to throw four shagai."},"after":{"mn":"Аль талаар нь буусныг харж тоолоорой!","en":"See which side each one landed on!"}},{"type":"pick","title":{"mn":"Асуулт","en":"Question"},"text":{"mn":"Шагай хэдэн талтай вэ?","en":"How many sides does a shagai have?"},"options":[{"t":{"mn":"4","en":"4"},"ok":true},{"t":{"mn":"2","en":"2"},"ok":false},{"t":{"mn":"6","en":"6"},"ok":false}]},{"type":"pick","title":{"mn":"Морь уралдуулах","en":"Horse race game"},"text":{"mn":"“Морь уралдуулах” тоглоомд ямар тал буувал морио урагшлуулдаг вэ?","en":"In the horse-race game, which side moves your horse forward?"},"options":[{"t":{"mn":"Морь","en":"Horse"},"ok":true},{"t":{"mn":"Ямаа","en":"Goat"},"ok":false},{"t":{"mn":"Тэмээ","en":"Camel"},"ok":false}],"after":{"mn":"Хэдэн морь буусан тоогоор шагайн морио урагшлуулна.","en":"You move your shagai horse forward by the number of horse sides rolled."}},{"type":"pick","title":{"mn":"Шагай харваа","en":"Knucklebone shooting"},"text":{"mn":"Шагай харвааг хэрхэн тоглодог вэ?","en":"How is knucklebone shooting played?"},"options":[{"t":{"mn":"Шагайн сумыг няслан шагайн бай онох","en":"Flick a small piece to hit a target of shagai"},"ok":true},{"t":{"mn":"Шагайг усанд шидэх","en":"Throw shagai into water"},"ok":false},{"t":{"mn":"Шагайг өнхрүүлж гүйх","en":"Roll shagai and run"},"ok":false}]},{"type":"tf","answer":true,"title":{"mn":"Зөв үү, буруу юу?","en":"True or false?"},"text":{"mn":"Шагай харваа ЮНЕСКО-гийн биет бус өвд бүртгэлтэй.","en":"Knucklebone shooting is on UNESCO’s intangible heritage list."},"after":{"mn":"2014 онд бүртгэгдсэн.","en":"It was listed in 2014."}},{"type":"learn","title":{"mn":"Өвлийн оройн тоглоом","en":"Winter evening games"},"text":{"mn":"Урт өвлийн оройгоор гэр бүлээрээ шагай тоглож, тоо тоолж, хурдан сэтгэж сурдаг.","en":"On long winter evenings families play shagai, learning to count and think fast."}}],"family":{"say":{"mn":"“Ээж, аав аа, шагайгаар морь уралдуулъя!”","en":"“Mom, Dad, let’s race shagai horses!”"},"what":{"mn":"Гэр бүлээрээ шагай тоглох","en":"Play shagai as a family"},"materials":[{"mn":"4 шагай (эсвэл 4 талыг зурсан цаасан шоо)","en":"4 shagai (or paper cubes with the 4 sides drawn)"},{"mn":"Морь болгох жижиг юм (товч, чулуу)","en":"Small tokens as horses (buttons, pebbles)"}],"steps":[{"mn":"Хүн бүр нэг “морь” сонгоно.","en":"Everyone picks a “horse” token."},{"mn":"Ээлжлэн 4 шагай хаяна.","en":"Take turns throwing the 4 shagai."},{"mn":"Хэдэн морь буусан тоогоор морио урагшлуулна.","en":"Move forward by the number of horse sides."},{"mn":"Барианд хамгийн түрүүнд хүрсэн нь ялна!","en":"First to the finish wins!"}]}},{"id":"naadam","icon":"🏆","scene":"naadam","topic":"naadam","color":"#e9a91f","final":{},"title":{"mn":"Эрийн гурван наадам","en":"The three manly games"},"learned":[{"mn":"Наадам: бөх, морь уралдаан, сур харваа","en":"Naadam: wrestling, horse racing, archery"},{"mn":"Ялсан бөх гарьдын бүжиг хийдэг","en":"Winning wrestlers do the eagle dance"},{"mn":"Түрүү морийг айргаар цацаж, харвааны шүүгчид “уухай” гэдэг","en":"The winning horse is blessed with airag; archery judges sing “uukhai”"}],"desc":{"mn":"Бөх, морь уралдаан, сур харвааны ёс заншил, сонирхолтой баримтууд.","en":"The customs and fun facts of wrestling, horse racing and archery."},"steps":[{"type":"learn","set":{"focus":null},"title":{"mn":"Улсын баяр наадам","en":"The national Naadam"},"text":{"mn":"Жил бүр 7-р сарын 11–13-нд эрийн гурван наадам болдог: бөх, морь уралдаан, сур харваа.","en":"Every year on July 11–13 the three manly games take place: wrestling, horse racing and archery."}},{"type":"pick","set":{"focus":"bokh"},"title":{"mn":"Бөх","en":"Wrestling"},"text":{"mn":"Монгол бөх юу өмсдөг вэ?","en":"What do Mongolian wrestlers wear?"},"options":[{"t":{"mn":"Зодог, шуудаг, гутал","en":"Zodog, shuudag and gutal boots"},"ok":true},{"t":{"mn":"Цамц, өмд","en":"A shirt and trousers"},"ok":false},{"t":{"mn":"Дээл, малгай","en":"A deel and hat"},"ok":false}]},{"type":"pick","set":{"focus":"bokh"},"title":{"mn":"Бөх","en":"Wrestling"},"text":{"mn":"Ялсан бөх ямар бүжиг хийдэг вэ?","en":"What dance does the winner do?"},"options":[{"t":{"mn":"Гарьдын (шонхорын) бүжиг","en":"The eagle dance"},"ok":true},{"t":{"mn":"Ёохор","en":"Yokhor"},"ok":false},{"t":{"mn":"Вальс","en":"Waltz"},"ok":false}]},{"type":"pick","set":{"focus":"horse"},"title":{"mn":"Морь уралдаан","en":"Horse racing"},"text":{"mn":"Наадмын морь уралдаанд хэн унадаг вэ?","en":"Who rides in Naadam horse races?"},"options":[{"t":{"mn":"Хүүхэд унаачид","en":"Child jockeys"},"ok":true},{"t":{"mn":"Өвөө нар","en":"Grandfathers"},"ok":false},{"t":{"mn":"Бөхчүүд","en":"Wrestlers"},"ok":false}]},{"type":"pick","set":{"focus":"horse"},"title":{"mn":"Түрүү морь","en":"The winning horse"},"text":{"mn":"Түрүүлсэн морийг юугаар цацаж ерөөдөг вэ?","en":"What is sprinkled on the winning horse as a blessing?"},"options":[{"t":{"mn":"Айраг","en":"Airag"},"ok":true},{"t":{"mn":"Ус","en":"Water"},"ok":false},{"t":{"mn":"Элс","en":"Sand"},"ok":false}]},{"type":"pick","set":{"focus":"archer"},"title":{"mn":"Сур харваа","en":"Archery"},"text":{"mn":"Бай онох бүрт шүүгчид юу гэж дуулдаг вэ?","en":"What do the judges sing at every hit?"},"options":[{"t":{"mn":"Уухай!","en":"Uukhai!"},"ok":true},{"t":{"mn":"Чү!","en":"Chü!"},"ok":false},{"t":{"mn":"Баяртай!","en":"Goodbye!"},"ok":false}]},{"type":"tf","set":{"focus":null},"answer":true,"title":{"mn":"Зөв үү, буруу юу?","en":"True or false?"},"text":{"mn":"Наадам 2010 онд ЮНЕСКО-д бүртгэгдсэн.","en":"Naadam was listed by UNESCO in 2010."},"after":{"mn":"Наадмыг дэлхий нийт хүндэлдэг.","en":"Naadam is honoured around the world."}},{"type":"learn","title":{"mn":"Нутагт туршаад үз!","en":"Try it in Nutag!"},"text":{"mn":"Нутгийн Наадмын талбайд бөх барилдаж, морины уяанаас уралдаж, сурын талбайд харваарай!","en":"Wrestle at the arena, race from the horse line and shoot at the archery range in Nutag!"}}],"family":{"say":{"mn":"“Ээж, аав аа, гэртээ жижиг наадам хийцгээе!”","en":"“Mom, Dad, let’s hold a little Naadam at home!”"},"what":{"mn":"Гэр бүлийн жижиг наадам","en":"A family mini-Naadam"},"materials":[{"mn":"Олс эсвэл алчуур","en":"A rope or towel"},{"mn":"Цаасан бай, зөөлөн бөмбөг","en":"A paper target and a soft ball"}],"steps":[{"mn":"“Бөх”: олс таталтаар хүчээ үзнэ.","en":"“Wrestling”: a tug-of-war."},{"mn":"“Морь”: гэрийн гадаа уралдаж гүйнэ.","en":"“Horse race”: a running race outside."},{"mn":"“Сур”: зөөлөн бөмбөгөөр цаасан бай онооно.","en":"“Archery”: hit a paper target with a soft ball."},{"mn":"Ялагч гарьдын бүжиг хийнэ, бусад нь “Уухай!” гэнэ.","en":"The winner does the eagle dance; everyone else shouts “Uukhai!”"}]}}]
+[
+  {
+    "id": "ger",
+    "icon": "⛺",
+    "scene": "ger",
+    "topic": "ger",
+    "color": "#3f76db",
+    "final": {
+      "stage": 9
+    },
+    "title": {
+      "mn": "Монгол гэр барих",
+      "en": "Build a Mongol ger"
+    },
+    "learned": [
+      {
+        "mn": "Гэрийн хэсгүүд: шал, хана, хаалга, тооно, багана, унь, эсгий, бүрээс, бүслүүр",
+        "en": "The ger’s parts: floor, khana, door, toono, bagana, uni, felt, cover, ropes"
+      },
+      {
+        "mn": "Барих дараалал ба хаалга урагшаа харах шалтгаан",
+        "en": "The building order and why the door faces south"
+      },
+      {
+        "mn": "Эсгий гэрийг дулаан байлгадаг",
+        "en": "Felt keeps the ger warm"
+      }
+    ],
+    "desc": {
+      "mn": "Хана, тооно, униа зөв дарааллаар босгоод өөрийн гэрээ бариарай.",
+      "en": "Raise the walls, crown and poles in the right order and build your own ger."
+    },
+    "steps": [
+      {
+        "type": "learn",
+        "title": {
+          "mn": "Нүүдэлчдийн ухаалаг байшин",
+          "en": "The nomads’ clever home"
+        },
+        "text": {
+          "mn": "Монгол гэрийг гэр бүлээрээ 1–2 цагт барьж, буулгаж болдог. Өвөл дулаан, зун сэрүүн. Өнөөдөр чи өөрөө барина!",
+          "en": "A family can put up or take down a ger in 1–2 hours. Warm in winter, cool in summer. Today you will build one!"
+        }
+      },
+      {
+        "type": "pick",
+        "stage": 1,
+        "title": {
+          "mn": "1. Эхлээд юу бэлдэх вэ?",
+          "en": "1. What comes first?"
+        },
+        "text": {
+          "mn": "Тэгш газар сонгоод…",
+          "en": "Pick flat ground, then…"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Шалаа тавина",
+              "en": "Lay the floor"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Бүрээсээ хучна",
+              "en": "Put on the cover"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Тоноо өргөнө",
+              "en": "Lift the crown"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Зөв! Тэгш газар шалаа тавьснаар гэр тэгш, бат бөх болно.",
+          "en": "Right! A level floor keeps the ger straight and strong."
+        },
+        "drop": [
+          27,
+          60,
+          66,
+          7
+        ]
+      },
+      {
+        "type": "drag",
+        "stage": 2,
+        "dir": "side",
+        "n": 5,
+        "icon": "👐",
+        "label": {
+          "mn": "Ханаа дэлгэх",
+          "en": "Stretch the khana"
+        },
+        "title": {
+          "mn": "2. Ханаа дэлгэ!",
+          "en": "2. Unfold the walls!"
+        },
+        "text": {
+          "mn": "Хана бол эвхэгддэг сараалж. Хоёр тийш нь чирж дэлгээрэй. 5 удаа дэлгэвэл 5 ханатай гэр болно.",
+          "en": "The khana is a folding lattice. Drag left and right to stretch it open. Stretch it 5 times for a 5-khana ger."
+        },
+        "low": {
+          "mn": "Илүү өргөн дэлгэ!",
+          "en": "Stretch it wider!"
+        },
+        "after": {
+          "mn": "5 ханатай гэр гэр бүлд хамгийн түгээмэл хэмжээ.",
+          "en": "A 5-khana ger is the most common family size."
+        }
+      },
+      {
+        "type": "pick",
+        "stage": 3,
+        "title": {
+          "mn": "3. Хаалгыг аль зүг рүү харуулах вэ?",
+          "en": "3. Which way should the door face?"
+        },
+        "text": {
+          "mn": "Хана хоёрын дунд хаалгаа уяна.",
+          "en": "Tie the door between two walls."
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Урагш (өмнө)",
+              "en": "South"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Хойш",
+              "en": "North"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Баруун тийш",
+              "en": "West"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Урагш харсан хаалгаар нар сайн тусаж, хойд зүгийн хүйтэн салхинаас хамгаалагдана.",
+          "en": "A south-facing door gets the sun and is sheltered from cold northern winds."
+        },
+        "drop": [
+          52,
+          47,
+          16,
+          18
+        ]
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "4. Гэрийн “нүд” болох дугуй цонх",
+          "en": "4. The ger’s round “eye”"
+        },
+        "text": {
+          "mn": "Үүнийг хоёр баганаар тулж өргөнө. Түүнийг юу гэдэг вэ?",
+          "en": "It is lifted up on two posts. What is it called?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Тооно",
+              "en": "Toono"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Унь",
+              "en": "Uni"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Өрх",
+              "en": "Örkh"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Тоонг хоёр хүн хамт өргөдөг. Гэр барих бол гэр бүлийн ажил!",
+          "en": "Two people lift the toono together. Building a ger is family teamwork!"
+        },
+        "drop": [
+          49,
+          25,
+          22,
+          10
+        ]
+      },
+      {
+        "type": "timing",
+        "stage": 4,
+        "lo": 0.82,
+        "hi": 0.97,
+        "label": {
+          "mn": "Өргө!",
+          "en": "Lift!"
+        },
+        "title": {
+          "mn": "Тооноо хамт өргө!",
+          "en": "Lift the toono together!"
+        },
+        "text": {
+          "mn": "Тооно хүнд! Хоёр хүн хоёр баганыг зэрэг өргөнө. Зүү ногоон хэсэгт ирэхэд “Өргө!” дар: нэг, хоёр, гурав!",
+          "en": "The toono is heavy! Two people raise its two posts at the same time. Tap “Lift!” when the needle reaches the green zone: one, two, three!"
+        },
+        "after": {
+          "mn": "Өргөлөө! Тооно бол гэрийн нүд: гэрэл, агаар тэндээс орж, утаа гардаг.",
+          "en": "Up it goes! The toono is the ger’s eye: light and air come in and smoke goes out through it."
+        }
+      },
+      {
+        "type": "drag",
+        "stage": 5,
+        "dir": "up",
+        "alt": true,
+        "n": 9,
+        "icon": "✊",
+        "label": {
+          "mn": "Униа тооно руу шургуул",
+          "en": "Push the uni into the toono"
+        },
+        "title": {
+          "mn": "5. Униа хатга!",
+          "en": "5. Place the roof poles!"
+        },
+        "text": {
+          "mn": "Унийн үзүүрийг тооны нүхэнд дээш нь шургуулж, нөгөө үзүүрийг ханад уяна. Тэнцвэртэй байлгахын тулд зүүн, баруун талд ээлжлэн тавь.",
+          "en": "Push the end of each uni up into a hole in the toono and tie the other end to the wall. Place them left and right in turn to keep it balanced."
+        },
+        "altHint": {
+          "mn": "Ээлжлэн тавь! Одоо нөгөө талд нь униа шургуул, тэгэхгүй бол тооно хазайна.",
+          "en": "Take turns! Now do the other side, or the toono will tip."
+        },
+        "low": {
+          "mn": "Дээш нь бүр түлх!",
+          "en": "Push it all the way up!"
+        },
+        "after": {
+          "mn": "Жинхэнэ 5 ханатай гэрт 80 орчим унь байдаг!",
+          "en": "A real 5-khana ger has about 80 poles!"
+        }
+      },
+      {
+        "type": "pick",
+        "stage": 6,
+        "title": {
+          "mn": "6. Гэрийг дулаахан болгоё",
+          "en": "6. Make it warm"
+        },
+        "text": {
+          "mn": "Хана, униа юугаар бүрэх вэ?",
+          "en": "What covers the walls and roof?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Ноосон эсгий",
+              "en": "Wool felt"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Цаас",
+              "en": "Paper"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Шил",
+              "en": "Glass"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Хонины ноосоор хийсэн эсгий өвлийн хүйтэнд дулаан байлгадаг.",
+          "en": "Felt made from sheep’s wool keeps out the winter cold."
+        },
+        "drop": [
+          30,
+          30,
+          60,
+          35
+        ]
+      },
+      {
+        "type": "pick",
+        "stage": 7,
+        "title": {
+          "mn": "7. Борооноос хамгаалъя",
+          "en": "7. Keep the rain out"
+        },
+        "text": {
+          "mn": "Эсгийн гадуур юу хучих вэ?",
+          "en": "What goes over the felt?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Цагаан бүрээс",
+              "en": "The white cover"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Ширдэг",
+              "en": "A felt mat"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Тулга",
+              "en": "The stove stand"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Цагаан бүрээс бороо, нарнаас хамгаалж, гэрийг гоё харагдуулдаг.",
+          "en": "The white cover protects from rain and sun and makes the ger shine."
+        },
+        "drop": [
+          30,
+          30,
+          60,
+          35
+        ]
+      },
+      {
+        "type": "drag",
+        "stage": 8,
+        "dir": "down",
+        "n": 3,
+        "icon": "💪",
+        "label": {
+          "mn": "Бүсээ чангал",
+          "en": "Pull the rope tight"
+        },
+        "title": {
+          "mn": "8. Бүслүүрээ чангал!",
+          "en": "8. Tighten the ropes!"
+        },
+        "text": {
+          "mn": "Гурван бүслүүрээр гэрээ бүсэлбэл хүчтэй салхинд ч хөдлөхгүй.",
+          "en": "Three ropes around the ger keep it steady even in strong wind."
+        },
+        "low": {
+          "mn": "Хүчтэй тат!",
+          "en": "Pull harder!"
+        },
+        "after": {
+          "mn": "Гэр бат бөх боллоо! Салхитай өдөр ч хөдлөхгүй.",
+          "en": "The ger is firm now. It won’t move even on a windy day."
+        }
+      },
+      {
+        "type": "learn",
+        "stage": 9,
+        "title": {
+          "mn": "Гэр бэлэн боллоо! 🎉",
+          "en": "Your ger is ready! 🎉"
+        },
+        "text": {
+          "mn": "Тулгаа тавьж, анхны цайгаа чанана. Одоо Басарын асуултад хариулаад, дараа нь гэр бүлээрээ бяцхан гэр барьцгаая!",
+          "en": "Set up the stove and make the first tea. Now answer Basar’s questions, then build a mini ger with your family!"
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Ээж, аав аа, хамтдаа монгол гэр барьцгаая!”",
+        "en": "“Mom, Dad, let’s build a Mongol ger together!”"
+      },
+      "what": {
+        "mn": "Картон, цаасаар бяцхан гэр хийцгээе",
+        "en": "Make a mini ger from card and paper"
+      },
+      "materials": [
+        {
+          "mn": "Зузаан цаас эсвэл картон",
+          "en": "Thick paper or card"
+        },
+        {
+          "mn": "10 шүдний чигчлүүр эсвэл шорлог",
+          "en": "10 toothpicks or skewers"
+        },
+        {
+          "mn": "Цагаан даавуу эсвэл салфетка",
+          "en": "White cloth or a napkin"
+        },
+        {
+          "mn": "Утас, цавуу, хайч (том хүнтэй)",
+          "en": "String, glue, scissors (with a grown-up)"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "Картоныг тойруулан тавьж хана хийгээд хаалгыг нь урагш харуулна.",
+          "en": "Roll card into a circle for the walls; the door faces south."
+        },
+        {
+          "mn": "Цаасан цагираг хийж тооно болгоно.",
+          "en": "Make a paper ring for the toono."
+        },
+        {
+          "mn": "Чигчлүүрүүдийг тооноос хана руу унь болгож наана.",
+          "en": "Glue toothpicks from the toono to the walls as uni."
+        },
+        {
+          "mn": "Цагаан даавуугаар бүрээд, утсаар бүслүүр уяна.",
+          "en": "Cover with cloth and tie string ropes around it."
+        },
+        {
+          "mn": "Гэрийнхэндээ гэрийн хэсгүүдийн нэрийг заагаарай!",
+          "en": "Teach your family the names of every part!"
+        }
+      ]
+    }
+  },
+  {
+    "id": "idee",
+    "icon": "🥛",
+    "scene": "idee",
+    "topic": "idee",
+    "color": "#e9a91f",
+    "final": {
+      "stage": 7
+    },
+    "title": {
+      "mn": "Цагаан идээ хийх",
+      "en": "Make Mongolian dairy"
+    },
+    "learned": [
+      {
+        "mn": "Цагаан идээ гэж юу вэ: тараг, өрөм, ааруул, бяслаг, айраг",
+        "en": "What white foods are: yogurt, cream, aaruul, cheese, airag"
+      },
+      {
+        "mn": "Тараг исгэх: буцалгах, бүлээн болтол хөргөх, хөрөнгө хийх",
+        "en": "Making yogurt: boil, cool to lukewarm, add starter"
+      },
+      {
+        "mn": "Ааруулыг шахаж, наранд хатаадаг",
+        "en": "Aaruul is pressed and dried in the sun"
+      }
+    ],
+    "desc": {
+      "mn": "Үнээ саагаад сүүгээ буцалгаж, өрөм, тараг, ааруул хийцгээе.",
+      "en": "Milk the cow, boil the milk and make cream, yogurt and aaruul."
+    },
+    "steps": [
+      {
+        "type": "learn",
+        "stage": 0,
+        "title": {
+          "mn": "Цагаан идээ гэж юу вэ?",
+          "en": "What is “white food”?"
+        },
+        "text": {
+          "mn": "Монголчууд зун сүүгээр тараг, өрөм, ааруул, бяслаг, шар тос, айраг хийдэг. Үүнийг цагаан идээ гэнэ. Цагаан сараар ширээний тэргүүнд тавьдаг.",
+          "en": "In summer Mongols make yogurt, cream, aaruul, cheese, butter and airag from milk. These are “white foods”, placed first on the Tsagaan Sar table."
+        }
+      },
+      {
+        "type": "drag",
+        "stage": 0,
+        "dir": "down",
+        "alt": true,
+        "n": 8,
+        "icon": "✊",
+        "label": {
+          "mn": "Доош нь татаж саа",
+          "en": "Pull down to milk"
+        },
+        "title": {
+          "mn": "1. Үнээгээ саа!",
+          "en": "1. Milk the cow!"
+        },
+        "text": {
+          "mn": "Үхрийн дэлэнг атгаад доош нь тат. Хоёр гараараа ээлжлэн саана: зүүн, баруун, зүүн…",
+          "en": "Hold a teat and pull it down. Use both hands in turn: left, right, left…"
+        },
+        "altHint": {
+          "mn": "Ээлжлэн саа! Одоо нөгөө талын дэлэнг тат.",
+          "en": "Take turns! Now pull the other teat."
+        },
+        "low": {
+          "mn": "Доош нь бүр татаарай!",
+          "en": "Pull all the way down!"
+        },
+        "after": {
+          "mn": "Хувин дүүрлээ! Саахдаа үнээгээ зөөлөн илж, аялгуулан дуулж тайвшруулдаг.",
+          "en": "The bucket is full! Herders stroke the cow and sing softly to keep her calm."
+        }
+      },
+      {
+        "type": "drag",
+        "dir": "up",
+        "release": true,
+        "need": 0.8,
+        "n": 3,
+        "field": "flick",
+        "set": {
+          "tsatsal": true
+        },
+        "icon": "🥄",
+        "label": {
+          "mn": "Дээш цацах",
+          "en": "Flick up"
+        },
+        "title": {
+          "mn": "Сүүний дээж өргө",
+          "en": "Offer the first milk"
+        },
+        "text": {
+          "mn": "Шанагаар сүүний дээжийг авч тэнгэр өөд гурван удаа цацал өргө. Дээш нь шидэх шиг өргөөд тавиарай.",
+          "en": "Scoop the first milk and flick it up to the sky three times. Swing up and let go."
+        },
+        "low": {
+          "mn": "Илүү өндөр өргө!",
+          "en": "Higher!"
+        },
+        "after": {
+          "mn": "Цацал өргөхдөө сайн сайхныг ерөөдөг. Тэнгэр, газар, нутагтаа хүндэтгэл үзүүлж байгаа хэрэг.",
+          "en": "While offering, people wish for good things. It honours the sky, the land and home."
+        }
+      },
+      {
+        "type": "tap",
+        "stage": 1,
+        "n": 1,
+        "drop": [
+          45,
+          35,
+          30,
+          16
+        ],
+        "title": {
+          "mn": "Сүүгээ тогоонд хийе",
+          "en": "Pour the milk into the pot"
+        },
+        "label": {
+          "mn": "Сүү",
+          "en": "Milk"
+        },
+        "text": {
+          "mn": "Саасан сүүгээ тогоо руу чирж хийгээрэй.",
+          "en": "Drag the fresh milk to the pot."
+        },
+        "after": {
+          "mn": "Сайн байна! Одоо сүүгээ аажуухан халаая.",
+          "en": "Good! Now let’s warm the milk slowly."
+        }
+      },
+      {
+        "type": "hold",
+        "stage": 1,
+        "set": {
+          "tsatsal": false
+        },
+        "lo": 0.82,
+        "hi": 0.97,
+        "label": {
+          "mn": "Гал түлэх (дараад барина)",
+          "en": "Heat (press and hold)"
+        },
+        "title": {
+          "mn": "2. Сүүгээ буцалга",
+          "en": "2. Bring the milk to a boil"
+        },
+        "text": {
+          "mn": "Товчийг дараад барь. Сүү буцлах үед (ногоон хэсэгт) тавиарай. Удаан барьвал сүү халина!",
+          "en": "Press and hold. Let go when the milk boils (green zone). Hold too long and it boils over!"
+        },
+        "after": {
+          "mn": "Сайн байна! Халуун сүүг заавал том хүнтэй хамт буцалгаарай.",
+          "en": "Well done! Always boil hot milk with a grown-up."
+        }
+      },
+      {
+        "type": "drag",
+        "stage": 2,
+        "dir": "up",
+        "release": true,
+        "need": 0.8,
+        "n": 6,
+        "icon": "🥄",
+        "label": {
+          "mn": "Шанагаа өргөөд тавь",
+          "en": "Lift the ladle, let go"
+        },
+        "title": {
+          "mn": "3. Сүүгээ самра!",
+          "en": "3. Ladle the milk!"
+        },
+        "text": {
+          "mn": "Шанагаар сүүгээ утгаад өндөрт өргөж цутга. Өндрөөс цутгах тусам хөөс их гарч, өрөм зузаан тогтоно.",
+          "en": "Scoop milk with the ladle, lift it high and pour. The higher you pour, the more foam and the thicker the cream."
+        },
+        "low": {
+          "mn": "Арай намхан байна. Шанагаа өндөрт өргө!",
+          "en": "Too low. Lift the ladle higher!"
+        },
+        "after": {
+          "mn": "Хонуулахад сүүний дээр өрөм тогтоно. Өрөмөөс шар тос хийдэг.",
+          "en": "Overnight cream (öröm) forms on top. Butter is made from it."
+        }
+      },
+      {
+        "type": "timing",
+        "stage": 3,
+        "lo": 0.3,
+        "hi": 0.48,
+        "label": {
+          "mn": "Одоо!",
+          "en": "Now!"
+        },
+        "title": {
+          "mn": "4. Бүлээн болтол хөргө",
+          "en": "4. Cool it to lukewarm"
+        },
+        "text": {
+          "mn": "Сүү хөрч байна. Зүү ногоон “бүлээн” хэсэгт ирэхэд дар.",
+          "en": "The milk is cooling. Tap when the needle reaches the green “lukewarm” zone."
+        },
+        "after": {
+          "mn": "Хуруу тэвчихүйц бүлээн байх ёстой. Хэт халуунд тараг исэхгүй.",
+          "en": "It should be finger-warm. Too hot and the yogurt won’t set."
+        }
+      },
+      {
+        "type": "pick",
+        "stage": 4,
+        "title": {
+          "mn": "5. Тараг исгэхийн тулд юу нэмэх вэ?",
+          "en": "5. What do we add to make yogurt?"
+        },
+        "text": {
+          "mn": "Бүлээн сүүндээ…",
+          "en": "Into the warm milk goes…"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Хөрөнгө (бага зэрэг хуучин тараг)",
+              "en": "Starter (a little old yogurt)"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Давс",
+              "en": "Salt"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Чихэр",
+              "en": "Sugar"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Хөрөнгөнд байгаа сайн бактери сүүг тараг болгодог.",
+          "en": "Good bacteria in the starter turn milk into yogurt."
+        },
+        "drop": [
+          45,
+          35,
+          30,
+          16
+        ]
+      },
+      {
+        "type": "tap",
+        "stage": 5,
+        "n": 4,
+        "label": {
+          "mn": "Дулаан боох",
+          "en": "Wrap warm"
+        },
+        "title": {
+          "mn": "6. Дулаан боож хонуул",
+          "en": "6. Wrap it warm overnight"
+        },
+        "text": {
+          "mn": "Савыг дээл, хөнжлөөр боож дулаан газар хонуулна.",
+          "en": "Wrap the pot in a deel or blanket and leave it somewhere warm overnight."
+        },
+        "after": {
+          "mn": "Өглөө боллоо — тараг бэлэн! 🌞",
+          "en": "Morning — the yogurt is ready! 🌞"
+        }
+      },
+      {
+        "type": "drag",
+        "stage": 6,
+        "dir": "down",
+        "n": 4,
+        "icon": "🪨",
+        "label": {
+          "mn": "Чулуугаар дарах",
+          "en": "Press with the stone"
+        },
+        "title": {
+          "mn": "7. Ааруул хийцгээе",
+          "en": "7. Let’s make aaruul"
+        },
+        "text": {
+          "mn": "Тарагаа халааж ээдэм гаргаад даавуунд хийнэ. Дээр нь хавтгай чулуу тавиад доош нь дарж усыг нь шахаж гаргана.",
+          "en": "Heat the yogurt until curds form and put them in a cloth. Lay a flat stone on top and press down to squeeze out the water."
+        },
+        "low": {
+          "mn": "Хүчтэй дар!",
+          "en": "Press harder!"
+        }
+      },
+      {
+        "type": "drag",
+        "dir": "down",
+        "n": 3,
+        "field": "mold",
+        "set": {
+          "molding": true
+        },
+        "icon": "👐",
+        "label": {
+          "mn": "Хэвэнд дарах",
+          "en": "Press into the mould"
+        },
+        "title": {
+          "mn": "Ааруулаа хэвэнд хийж дар",
+          "en": "Press the aaruul into a mould"
+        },
+        "text": {
+          "mn": "Шахсан ээдмээ модон хэвэнд хийгээд гараараа доош нь дарж хэлбэржүүлнэ. Хэвний нүх бүрийг дүүргээрэй!",
+          "en": "Put the pressed curd into a wooden mould and push it down with your hands. Fill every hole!"
+        },
+        "low": {
+          "mn": "Хүчтэй дар!",
+          "en": "Press harder!"
+        },
+        "after": {
+          "mn": "Хэвний сийлсэн хээ ааруулан дээр тод гарна. Ааруулыг дөрвөлжин, дугуй, цэцэг хэлбэртэй хэвээр хийдэг.",
+          "en": "The carved pattern shows on each piece. Aaruul moulds come in squares, circles and flower shapes."
+        }
+      },
+      {
+        "type": "pick",
+        "stage": 7,
+        "title": {
+          "mn": "8. Ааруулаа хаана хатаах вэ?",
+          "en": "8. Where do we dry the aaruul?"
+        },
+        "text": {
+          "mn": "Хэрчсэн ааруулаа…",
+          "en": "Cut the curd into pieces and…"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Нар, салхинд",
+              "en": "In the sun and wind"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Хөргөгчинд",
+              "en": "In the fridge"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Усанд",
+              "en": "In water"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Гэрийн дээвэр эсвэл тавиур дээр наранд хатаадаг. Хатуу, амттай ааруул бэлэн!",
+          "en": "Dried on the ger roof or a rack in the sun. Crunchy aaruul is ready!"
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Ээж, аав аа, хамтдаа тараг исгэцгээе!”",
+        "en": "“Mom, Dad, let’s make yogurt together!”"
+      },
+      "what": {
+        "mn": "Гэртээ жинхэнэ тараг исгэцгээе",
+        "en": "Make real yogurt at home"
+      },
+      "materials": [
+        {
+          "mn": "1 литр сүү",
+          "en": "1 litre of milk"
+        },
+        {
+          "mn": "2 халбага тараг (хөрөнгө)",
+          "en": "2 spoons of yogurt (starter)"
+        },
+        {
+          "mn": "Таглаатай сав",
+          "en": "A pot with a lid"
+        },
+        {
+          "mn": "Алчуур эсвэл хөнжил",
+          "en": "A towel or blanket"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "Том хүн сүүг буцалгана.",
+          "en": "A grown-up boils the milk."
+        },
+        {
+          "mn": "Бүлээн болтол хөргөнө — хуруугаараа болгоомжтой шалгана.",
+          "en": "Cool it until lukewarm — test carefully with a finger."
+        },
+        {
+          "mn": "Хөрөнгөө хийж сайн хутгана.",
+          "en": "Stir in the starter."
+        },
+        {
+          "mn": "Таглаад дулаан боож 6–8 цаг байлгана.",
+          "en": "Cover, wrap it warm and wait 6–8 hours."
+        },
+        {
+          "mn": "Хөргөгчинд хөргөөд гэр бүлээрээ амсаарай!",
+          "en": "Chill it and taste it together!"
+        }
+      ]
+    }
+  },
+  {
+    "id": "customs",
+    "icon": "🙏",
+    "scene": "inside",
+    "topic": "customs",
+    "color": "#9466e0",
+    "final": {},
+    "title": {
+      "mn": "Гэрийн ёс заншил",
+      "en": "Ger manners"
+    },
+    "learned": [
+      {
+        "mn": "Хоймор, гал голомт, эрэгтэй ба эмэгтэй тал хаана байдаг",
+        "en": "Where the khoimor, hearth and men’s and women’s sides are"
+      },
+      {
+        "mn": "Босго гишгэхгүй, нар зөв явах, баганын дундуур гарахгүй",
+        "en": "Don’t step on the threshold, move sunwise, don’t pass between the posts"
+      },
+      {
+        "mn": "Ахмадад хоёр гараараа юм өгөх",
+        "en": "Hand things to elders with both hands"
+      }
+    ],
+    "desc": {
+      "mn": "Хоймор хаана вэ? Босго гишгэж болох уу? Гэрийн дотоод “газрын зураг”-ийг сур.",
+      "en": "Where is the khoimor? Can you step on the threshold? Learn the ger’s inside “map”."
+    },
+    "steps": [
+      {
+        "type": "learn",
+        "title": {
+          "mn": "Гэр бүр дотроо газрын зурагтай",
+          "en": "Every ger has a map inside"
+        },
+        "text": {
+          "mn": "Монгол гэрт хүн бүр, эд зүйл бүр өөрийн байртай. Дээрээс харахад хаалга доор (урд), хоймор дээр (хойд) байна.",
+          "en": "In a ger every person and thing has its place. From above, the door is at the bottom (south) and the khoimor at the top (north)."
+        }
+      },
+      {
+        "type": "tf",
+        "answer": false,
+        "title": {
+          "mn": "Зөв үү, буруу юу?",
+          "en": "True or false?"
+        },
+        "text": {
+          "mn": "Гэрт орохдоо босго гишгэж болно.",
+          "en": "You may step on the threshold when entering."
+        },
+        "after": {
+          "mn": "Босго гишгэх нь ёс бус. Босгыг алхаж давдаг.",
+          "en": "Stepping on the threshold is bad manners. Step over it."
+        }
+      },
+      {
+        "type": "zones",
+        "zone": "khoimor",
+        "title": {
+          "mn": "Хоймор хаана вэ?",
+          "en": "Where is the khoimor?"
+        },
+        "text": {
+          "mn": "Ахмад настан, хүндтэй зочин суудаг хамгийн хүндэт газрыг дар.",
+          "en": "Tap the place of honour where elders and honoured guests sit."
+        },
+        "after": {
+          "mn": "Хоймор хаалганы эсрэг талд, хойд хэсэгт байдаг.",
+          "en": "The khoimor is opposite the door, at the north."
+        }
+      },
+      {
+        "type": "zones",
+        "zone": "hearth",
+        "title": {
+          "mn": "Гал голомт хаана вэ?",
+          "en": "Where is the hearth?"
+        },
+        "text": {
+          "mn": "Гэрийн зүрх болох галыг дар.",
+          "en": "Tap the fire, the heart of the ger."
+        },
+        "after": {
+          "mn": "Гал голомт гэрийн яг голд байдаг. Гал руу хөлөө чиглүүлж, хог хаядаггүй.",
+          "en": "The hearth is in the very centre. Never point your feet at it or throw rubbish in it."
+        }
+      },
+      {
+        "type": "zones",
+        "zone": "west",
+        "title": {
+          "mn": "Эрэгтэй хүн, зочны тал",
+          "en": "The men’s and guests’ side"
+        },
+        "text": {
+          "mn": "Уламжлалаар эмээл, хазаар байдаг, эрэгтэй хүн, зочин суудаг талыг дар.",
+          "en": "Tap the side where saddles are kept and men and guests sit."
+        },
+        "after": {
+          "mn": "Баруун тал буюу орохдоо зүүн гар тал. Эмээл, хазаар энд байна.",
+          "en": "The west side — your left as you enter. Saddles and bridles are here."
+        }
+      },
+      {
+        "type": "zones",
+        "zone": "east",
+        "title": {
+          "mn": "Гал тогооны тал",
+          "en": "The kitchen side"
+        },
+        "text": {
+          "mn": "Аяга таваг, тогоо байдаг талыг дар.",
+          "en": "Tap the side with bowls and pots."
+        },
+        "after": {
+          "mn": "Зүүн тал буюу орохдоо баруун гар тал. Гэрийн эзэгтэйн тал.",
+          "en": "The east side — your right as you enter. The hostess’s side."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Гэр дотор ямар чигээр явах вэ?",
+          "en": "Which way do you walk inside?"
+        },
+        "text": {
+          "mn": "Нар явахтай адил…",
+          "en": "Like the sun travels…"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Нар зөв (цагийн зүүний дагуу)",
+              "en": "Sunwise (clockwise)"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Нар буруу",
+              "en": "Against the sun"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Голоор нь шууд",
+              "en": "Straight through the middle"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Нар зөв эргэх нь сайн сайхныг бэлгэддэг.",
+          "en": "Moving sunwise is a sign of good fortune."
+        }
+      },
+      {
+        "type": "tf",
+        "answer": true,
+        "title": {
+          "mn": "Зөв үү, буруу юу?",
+          "en": "True or false?"
+        },
+        "text": {
+          "mn": "Хоёр баганын дундуур гарч болохгүй.",
+          "en": "You should not walk between the two posts."
+        },
+        "after": {
+          "mn": "Зөв! Баганыг түшиж, дундуур нь гарахгүй.",
+          "en": "Right! Don’t lean on the posts or walk between them."
+        }
+      },
+      {
+        "type": "tf",
+        "answer": true,
+        "title": {
+          "mn": "Зөв үү, буруу юу?",
+          "en": "True or false?"
+        },
+        "text": {
+          "mn": "Ахмад хүнд юм өгөхдөө баруун гараараа эсвэл хоёр гараараа өгнө.",
+          "en": "Hand things to elders with your right hand or both hands."
+        },
+        "after": {
+          "mn": "Энэ бол хүндэтгэлийн тэмдэг.",
+          "en": "This is a sign of respect."
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Эмээ, өвөө өө, гэрийн ёс заншлаа надад заагаарай!”",
+        "en": "“Grandma, Grandpa, teach me our home customs!”"
+      },
+      "what": {
+        "mn": "Ахмадуудаасаа ёс заншил сурцгаая",
+        "en": "Learn customs from your elders"
+      },
+      "materials": [
+        {
+          "mn": "Эмээ, өвөө эсвэл ээж, аав",
+          "en": "Grandma, Grandpa, Mom or Dad"
+        },
+        {
+          "mn": "Naadamy-ийн Дурсамжийн ном",
+          "en": "The Naadamy memory book"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "Гэртээ хоймор хаана байгааг хамт олоорой.",
+          "en": "Find where the khoimor is in your home."
+        },
+        {
+          "mn": "Ахмадад цайгаа хоёр гараараа өргөж дадлага хий.",
+          "en": "Practise offering tea to an elder with both hands."
+        },
+        {
+          "mn": "Тэднээс өөр ямар ёс заншил мэддэгийг асуу.",
+          "en": "Ask what other customs they know."
+        },
+        {
+          "mn": "Ярьсныг нь Дурсамжийн номонд бичиж, дуу хоолойг нь хадгал.",
+          "en": "Save their words and voice in the memory book."
+        }
+      ]
+    }
+  },
+  {
+    "id": "nuuts",
+    "icon": "📜",
+    "scene": "story",
+    "topic": "nuuts",
+    "color": "#c8483c",
+    "final": {
+      "ch": "banner"
+    },
+    "title": {
+      "mn": "Нууц товчооны үлгэр",
+      "en": "Tales of the Secret History"
+    },
+    "learned": [
+      {
+        "mn": "Бөртэ чоно, Гуа марал: Нууц товчооны эхлэл",
+        "en": "Börte Chino and Gua Maral: how the Secret History begins"
+      },
+      {
+        "mn": "Алан гуагийн таван сумны эв нэгдлийн сургаал",
+        "en": "Alan Gua’s five arrows lesson on unity"
+      },
+      {
+        "mn": "Тэмүжиний бага нас ба 1206 онд Чингис хаан болсон нь",
+        "en": "Temüjin’s childhood and becoming Chinggis Khaan in 1206"
+      }
+    ],
+    "desc": {
+      "mn": "Бөртэ чоно, таван сумны сургаал, бяцхан Тэмүжин, Чингис хаан болсон түүх.",
+      "en": "The blue wolf, the five arrows, young Temüjin and how he became Chinggis Khaan."
+    },
+    "steps": [
+      {
+        "type": "story",
+        "ch": "wolf",
+        "title": {
+          "mn": "Бөртэ чоно, Гуа марал",
+          "en": "The blue wolf and the doe"
+        },
+        "text": {
+          "mn": "“Монголын нууц товчоо” ингэж эхэлдэг: Дээр тэнгэрээс заяат төрсөн Бөртэ чоно, гэргий Гуа марал хоёр далайг гэтэлж ирээд Онон голын эх, Бурхан халдун ууланд нутаглажээ.",
+          "en": "The Secret History begins: Börte Chino, born with destiny from Heaven, and his wife Gua Maral crossed the waters and settled at the source of the Onon river, by Mount Burkhan Khaldun."
+        }
+      },
+      {
+        "type": "pick",
+        "ch": "wolf",
+        "title": {
+          "mn": "Асуулт",
+          "en": "Question"
+        },
+        "text": {
+          "mn": "Нууц товчоонд гардаг монголчуудын домогт өвөг хэн бэ?",
+          "en": "Who are the legendary ancestors in the Secret History?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Бөртэ чоно, Гуа марал",
+              "en": "Börte Chino and Gua Maral"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Арслан, бар",
+              "en": "A lion and a tiger"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Луу, гарьд",
+              "en": "A dragon and a garuda"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "story",
+        "ch": "arrows",
+        "title": {
+          "mn": "Таван сумны сургаал",
+          "en": "The five arrows"
+        },
+        "text": {
+          "mn": "Алан гуа эх таван хүүдээ нэг нэг сум өгч “хугал” гэхэд тэд амархан хугалжээ. Дараа нь таван сумыг багцлан өгөхөд хэн ч хугалж чадсангүй. “Та нар салбал нэг сум шиг амархан хугарна. Эв нэгдэлтэй бол хэн ч дийлэхгүй” гэж сургажээ.",
+          "en": "Mother Alan Gua gave each of her five sons an arrow to break, and they snapped easily. Then she bound five together and no one could break them. “Apart you break like one arrow. Together no one can defeat you.”"
+        },
+        "broken": true
+      },
+      {
+        "type": "pick",
+        "ch": "arrows",
+        "title": {
+          "mn": "Асуулт",
+          "en": "Question"
+        },
+        "text": {
+          "mn": "Таван сумны сургаал юуны тухай вэ?",
+          "en": "What is the five arrows lesson about?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Эв нэгдэл",
+              "en": "Unity"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Хурдан гүйх",
+              "en": "Running fast"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Баян болох",
+              "en": "Getting rich"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "story",
+        "ch": "river",
+        "title": {
+          "mn": "Бяцхан Тэмүжин",
+          "en": "Young Temüjin"
+        },
+        "text": {
+          "mn": "Тэмүжин Онон голын Дэлүүн болдогт төржээ. Аавыг нь хорлон алсны дараа тэдний гэр бүл ганцаардсан ч Өэлүн эх хүүхдүүдээ Онон голын загас, зэрлэг жимс, ургамлын үндсээр хооллож, зоригтой өсгөжээ.",
+          "en": "Temüjin was born at Delüün Boldog by the Onon river. After his father was poisoned the family was left alone, but mother Hö’elün raised her children bravely on fish, berries and wild roots."
+        }
+      },
+      {
+        "type": "pick",
+        "ch": "river",
+        "title": {
+          "mn": "Асуулт",
+          "en": "Question"
+        },
+        "text": {
+          "mn": "Хэцүү үед Тэмүжиний гэр бүлийг хэн тэжээж өсгөсөн бэ?",
+          "en": "Who fed and raised Temüjin’s family in the hard times?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Өэлүн эх",
+              "en": "Mother Hö’elün"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Жамуха",
+              "en": "Jamukha"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Тоорил хан",
+              "en": "To’oril Khan"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "story",
+        "ch": "river",
+        "title": {
+          "mn": "Найз нөхөд",
+          "en": "True friends"
+        },
+        "text": {
+          "mn": "Залуу Тэмүжин Тайчуудын олзонд орсон ч Сорхон шарын гэр бүл түүнийг ноосон тэргэнд нууж аварчээ. Тэрээр анд Жамуха, үнэнч нөхөр Боорчи нартайгаа хүчээ нэгтгэжээ.",
+          "en": "Young Temüjin was captured by the Tayichi’ud, but Sorkhan Shira’s family hid him in a cart of wool. He joined forces with his anda Jamukha and loyal friend Bo’orchu."
+        }
+      },
+      {
+        "type": "story",
+        "ch": "banner",
+        "title": {
+          "mn": "Чингис хаан",
+          "en": "Chinggis Khaan"
+        },
+        "text": {
+          "mn": "1206 онд Онон голын эхэнд Их хурилдай хуралдаж, есөн хөлт цагаан туг мандуулан Тэмүжинийг Чингис хаан хэмээн өргөмжилж, Их Монгол Улсыг байгуулжээ.",
+          "en": "In 1206 the Great Khuriltai met at the source of the Onon, raised the nine-footed white banner, proclaimed Temüjin Chinggis Khaan and founded the Great Mongol State."
+        }
+      },
+      {
+        "type": "pick",
+        "ch": "banner",
+        "title": {
+          "mn": "Асуулт",
+          "en": "Question"
+        },
+        "text": {
+          "mn": "Тэмүжинийг Чингис хаан хэмээн өргөмжилсөн хурилдай хэдэн онд болсон бэ?",
+          "en": "In which year was Temüjin proclaimed Chinggis Khaan?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "1206",
+              "en": "1206"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "1162",
+              "en": "1162"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "1911",
+              "en": "1911"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "learn",
+        "ch": "banner",
+        "title": {
+          "mn": "Нууц товчоо",
+          "en": "The Secret History"
+        },
+        "text": {
+          "mn": "Ихэнх эрдэмтэд Нууц товчоог 1228 онд бичигдсэн гэж үздэг. 12 бүлэг, 282 зүйлтэй. Басараас илүү олон түүх асуугаарай!",
+          "en": "Most scholars date the Secret History to 1228. It has 12 chapters and 282 sections. Ask Basar for more stories!"
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Ээж, аав аа, таван сумны сургаалыг туршиж үзье!”",
+        "en": "“Mom, Dad, let’s try the five arrows lesson!”"
+      },
+      "what": {
+        "mn": "Эв нэгдлийн туршилт",
+        "en": "The unity experiment"
+      },
+      "materials": [
+        {
+          "mn": "5 нарийн хуурай мөчир эсвэл модон шорлог",
+          "en": "5 thin dry twigs or wooden skewers"
+        },
+        {
+          "mn": "Утас",
+          "en": "String"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "Хүн бүр нэг мөчир хугалж үзнэ — амархан!",
+          "en": "Everyone breaks one twig — easy!"
+        },
+        {
+          "mn": "Таван мөчрийг утсаар багцлаад хугалж үзнэ — хэцүү!",
+          "en": "Tie five together and try — hard!"
+        },
+        {
+          "mn": "Гэр бүлд эв нэгдэл яагаад чухал вэ гэж ярилцаарай.",
+          "en": "Talk about why unity matters in a family."
+        },
+        {
+          "mn": "Алан гуа эхийн түүхийг дүү, найздаа ярьж өгөөрэй.",
+          "en": "Tell Alan Gua’s story to a sibling or friend."
+        }
+      ]
+    }
+  },
+  {
+    "id": "herd",
+    "icon": "🐑",
+    "scene": "herd",
+    "topic": "nomad",
+    "color": "#2ea35f",
+    "final": {
+      "sub": 1
+    },
+    "title": {
+      "mn": "Таван хошуу мал",
+      "en": "The five herd animals"
+    },
+    "learned": [
+      {
+        "mn": "Таван хошуу мал: морь, үхэр, тэмээ, хонь, ямаа",
+        "en": "The five animals: horse, cattle, camel, sheep, goat"
+      },
+      {
+        "mn": "Мал бүрийн өгдөг зүйл: айраг, ноос, ноолуур, сүү, хүч",
+        "en": "What each gives: airag, wool, cashmere, milk, strength"
+      },
+      {
+        "mn": "Малчид жилд 4 удаа нүүдэг",
+        "en": "Herders move four times a year"
+      }
+    ],
+    "desc": {
+      "mn": "Морь, үхэр, тэмээ, хонь, ямаа: мал бүр малчин айлд юу өгдөг вэ?",
+      "en": "Horse, cattle, camel, sheep, goat: what does each give a herding family?"
+    },
+    "steps": [
+      {
+        "type": "learn",
+        "set": {
+          "sub": 0.2
+        },
+        "title": {
+          "mn": "Малчдын баялаг",
+          "en": "The herders’ wealth"
+        },
+        "text": {
+          "mn": "Монголчууд мянга мянган жил таван хошуу мал маллаж ирсэн. Мал бүр өөр өөр ашигтай.",
+          "en": "For thousands of years Mongols have herded five kinds of animals. Each one is useful in its own way."
+        }
+      },
+      {
+        "type": "tap",
+        "n": 5,
+        "field": "sub",
+        "label": {
+          "mn": "Малаа тоолох",
+          "en": "Count the herd"
+        },
+        "title": {
+          "mn": "Малаа тоол!",
+          "en": "Count the herd!"
+        },
+        "text": {
+          "mn": "5 удаа дарж таван хошуу малаа цуглуулаарай.",
+          "en": "Tap 5 times to gather all five animals."
+        },
+        "after": {
+          "mn": "Морь, үхэр, тэмээ, хонь, ямаа: таван хошуу мал.",
+          "en": "Horse, cattle, camel, sheep, goat: the five animals."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Айраг",
+          "en": "Airag"
+        },
+        "text": {
+          "mn": "Айргийг аль малын сүүгээр хийдэг вэ?",
+          "en": "Airag is made from which animal’s milk?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Морь (гүү)",
+              "en": "Horse (mare)"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Хонь",
+              "en": "Sheep"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Тэмээ",
+              "en": "Camel"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Гүүний сүүгээр айраг, тэмээний сүүгээр хоормог хийдэг.",
+          "en": "Mare’s milk makes airag; camel’s milk makes khoormog."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Эсгий",
+          "en": "Felt"
+        },
+        "text": {
+          "mn": "Гэрийн эсгий хийх ноосыг голдуу аль малаас авдаг вэ?",
+          "en": "The wool for ger felt mostly comes from which animal?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Хонь",
+              "en": "Sheep"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Морь",
+              "en": "Horse"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Үхэр",
+              "en": "Cattle"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Хонины ноосыг дэвтээж, өнхрүүлж эсгий хийдэг.",
+          "en": "Sheep’s wool is wetted and rolled into felt."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Ноолуур",
+          "en": "Cashmere"
+        },
+        "text": {
+          "mn": "Зөөлөн ноолуурыг аль малаас самнаж авдаг вэ?",
+          "en": "Which animal gives soft cashmere?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Ямаа",
+              "en": "Goat"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Тэмээ",
+              "en": "Camel"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Хонь",
+              "en": "Sheep"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Хавар ямааг самнаж ноолуур авдаг.",
+          "en": "In spring goats are combed for cashmere."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Говийн хөлөг",
+          "en": "Ship of the Gobi"
+        },
+        "text": {
+          "mn": "Говьд хүнд ачаа зөөж, ус ундгүй удаан тэсдэг мал аль вэ?",
+          "en": "Which animal carries heavy loads and goes long without water in the Gobi?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Тэмээ",
+              "en": "Camel"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Хонь",
+              "en": "Sheep"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Ямаа",
+              "en": "Goat"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Хоёр бөхтэй монгол тэмээг “говийн хөлөг” гэдэг.",
+          "en": "The two-humped Mongolian camel is called “the ship of the Gobi”."
+        }
+      },
+      {
+        "type": "tf",
+        "answer": true,
+        "title": {
+          "mn": "Зөв үү, буруу юу?",
+          "en": "True or false?"
+        },
+        "text": {
+          "mn": "Малчид жилд дөрвөн улирлын бууцанд нүүдэг.",
+          "en": "Herders move between four seasonal camps a year."
+        },
+        "after": {
+          "mn": "Хаваржаа, зуслан, намаржаа, өвөлжөө.",
+          "en": "Spring, summer, autumn and winter camps."
+        }
+      },
+      {
+        "type": "learn",
+        "title": {
+          "mn": "Морь бол далавч",
+          "en": "The horse is our wings"
+        },
+        "text": {
+          "mn": "“Морь бол монгол хүний далавч” гэдэг. Монголд хүнээс олон адуу бий!",
+          "en": "They say “the horse is a Mongol’s wings”. Mongolia has more horses than people!"
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Өвөө, эмээ ээ, та нар ямар мал маллаж байсан бэ?”",
+        "en": "“Grandpa, Grandma, which animals did you herd?”"
+      },
+      "what": {
+        "mn": "Ахмадуудаасаа малын тухай асуух",
+        "en": "Ask your elders about their animals"
+      },
+      "materials": [
+        {
+          "mn": "Өвөө, эмээ эсвэл ахмад хамаатан",
+          "en": "Grandparents or older relatives"
+        },
+        {
+          "mn": "Цаас, өнгийн харандаа",
+          "en": "Paper and coloured pencils"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "Тэд бага байхдаа ямар мал маллаж байсныг асуу.",
+          "en": "Ask which animals they herded as children."
+        },
+        {
+          "mn": "Хамгийн дуртай морь нь хэн гэдэг нэртэй байсныг асуу.",
+          "en": "Ask the name of their favourite horse."
+        },
+        {
+          "mn": "Таван хошуу малаа хамтдаа зураарай.",
+          "en": "Draw the five animals together."
+        },
+        {
+          "mn": "Түүхийг нь Дурсамжийн номонд бичээрэй.",
+          "en": "Save their story in the memory book."
+        }
+      ]
+    }
+  },
+  {
+    "id": "tsagaansar",
+    "icon": "🥟",
+    "scene": "table",
+    "topic": "customs",
+    "color": "#e14b3d",
+    "final": {
+      "buuz": 10,
+      "layers": 5
+    },
+    "title": {
+      "mn": "Цагаан сар",
+      "en": "Tsagaan Sar"
+    },
+    "learned": [
+      {
+        "mn": "Битүүнээр гэрээ цэвэрлэж, гэр бүлээрээ цуглардаг",
+        "en": "On Bituun, families clean the home and gather"
+      },
+      {
+        "mn": "Ул боовыг сондгой давхраар өрдөг, бууз чимхдэг",
+        "en": "Ul boov is stacked in odd layers; families make buuz"
+      },
+      {
+        "mn": "Золгохдоо хадаг барьж, ахмадын тохойг доороос түшдэг",
+        "en": "To greet elders, offer a khadag and support their elbows"
+      }
+    ],
+    "desc": {
+      "mn": "Бууз чимхэж, ул боов өрж, ахмадуудтайгаа хэрхэн золгохыг сур.",
+      "en": "Make buuz, stack ul boov and learn how to greet your elders."
+    },
+    "steps": [
+      {
+        "type": "learn",
+        "title": {
+          "mn": "Сар шинийн баяр",
+          "en": "Lunar New Year"
+        },
+        "text": {
+          "mn": "Цагаан сар бол монголчуудын шинэ жил. Өвлийг үдэж, хаврыг угтдаг. Битүүний орой гэр бүлээрээ цуглаж, шинийн нэгэнд ахмадуудтайгаа золгодог.",
+          "en": "Tsagaan Sar is the Mongolian New Year, seeing off winter and welcoming spring. On the eve families gather, and on the first day they greet their elders."
+        }
+      },
+      {
+        "type": "tap",
+        "n": 10,
+        "field": "buuz",
+        "scale": 10,
+        "label": {
+          "mn": "Бууз чимхэх",
+          "en": "Pinch a buuz"
+        },
+        "title": {
+          "mn": "Бууз чимхье!",
+          "en": "Let’s make buuz!"
+        },
+        "text": {
+          "mn": "Гэр бүлээрээ олон мянган бууз чимхдэг айл ч бий. 10 удаа дараарай!",
+          "en": "Some families make thousands of buuz together. Tap 10 times!"
+        },
+        "after": {
+          "mn": "Сайхан бууз боллоо! Битүүний өмнө бүгд хамтдаа чимхдэг.",
+          "en": "Lovely buuz! Everyone makes them together before the holiday."
+        },
+        "drop": [
+          56,
+          43,
+          36,
+          13
+        ]
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Ул боов",
+          "en": "Ul boov"
+        },
+        "text": {
+          "mn": "Ул боовыг ширээн дээр хэрхэн өрдөг вэ?",
+          "en": "How is ul boov stacked on the table?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Сондгой давхраар (3, 5, 7)",
+              "en": "In odd layers (3, 5, 7)"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Тэгш давхраар (2, 4, 6)",
+              "en": "In even layers (2, 4, 6)"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Ганцхан ширхэг",
+              "en": "Just one piece"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Сондгой тоо өсөлт, сайн сайхныг бэлгэддэг гэдэг.",
+          "en": "Odd numbers are said to symbolise growth and good fortune."
+        }
+      },
+      {
+        "type": "tap",
+        "n": 5,
+        "field": "layers",
+        "scale": 5,
+        "label": {
+          "mn": "Давхарга өрөх",
+          "en": "Add a layer"
+        },
+        "title": {
+          "mn": "Ул боовоо өрье",
+          "en": "Stack the ul boov"
+        },
+        "text": {
+          "mn": "5 давхар ул боов өрөөд оройд нь цагаан идээ, чихэр тавина.",
+          "en": "Stack 5 layers and put dairy foods and sweets on top."
+        },
+        "drop": [
+          18,
+          14,
+          32,
+          34
+        ]
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Битүүн",
+          "en": "Bituun"
+        },
+        "text": {
+          "mn": "Битүүний орой юу хийдэг вэ?",
+          "en": "What do families do on the eve, Bituun?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Гэрээ цэвэрлэж, гэр бүлээрээ цуглардаг",
+              "en": "Clean the home and gather as a family"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Ганцаараа унтдаг",
+              "en": "Sleep alone"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Дэлгүүр хэсдэг",
+              "en": "Go shopping"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Хуучин жилийн бүх зүйлийг цэгцэлж, шинэ жилийг цэвэр угтдаг.",
+          "en": "Everything is tidied so the new year starts fresh."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Золголт",
+          "en": "Greeting"
+        },
+        "text": {
+          "mn": "Золгохдоо ахмадад юу барьдаг вэ?",
+          "en": "What do you offer an elder when greeting them?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Хадаг",
+              "en": "A khadag scarf"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Ном",
+              "en": "A book"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Бөмбөг",
+              "en": "A ball"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Цэнхэр хадаг нь тэнгэр, хүндэтгэлийг бэлгэддэг.",
+          "en": "The blue khadag symbolises the sky and respect."
+        }
+      },
+      {
+        "type": "tf",
+        "answer": true,
+        "title": {
+          "mn": "Зөв үү, буруу юу?",
+          "en": "True or false?"
+        },
+        "text": {
+          "mn": "Золгохдоо залуу хүн ахмадын тохойг доороос нь түшдэг.",
+          "en": "When greeting, the younger person supports the elder’s elbows from below."
+        },
+        "after": {
+          "mn": "Энэ нь ахмадаа түших, хүндлэхийн бэлгэдэл.",
+          "en": "It shows that you support and respect your elder."
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Ээж, аав аа, хамтдаа бууз чимхэцгээе!”",
+        "en": "“Mom, Dad, let’s make buuz together!”"
+      },
+      "what": {
+        "mn": "Гэр бүлээрээ бууз чимхэж, золгох дадлага хийх",
+        "en": "Make buuz together and practise the greeting"
+      },
+      "materials": [
+        {
+          "mn": "Гурил, мах (том хүнтэй)",
+          "en": "Flour and meat (with a grown-up)"
+        },
+        {
+          "mn": "Хадаг",
+          "en": "A khadag"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "Том хүнтэй хамт гурилаа зуурч, махаа бэлдэнэ.",
+          "en": "With a grown-up, make the dough and filling."
+        },
+        {
+          "mn": "Хүн бүр бууз чимхэж үзнэ.",
+          "en": "Everyone tries pinching buuz."
+        },
+        {
+          "mn": "Хадаг барьж, ахмадын тохойг доороос түшиж золгох дадлага хийнэ.",
+          "en": "Practise the greeting: offer the khadag and support the elder’s elbows."
+        },
+        {
+          "mn": "Ахмадаасаа хуучин Цагаан сарын дурсамжийг асуугаарай.",
+          "en": "Ask your elders about Tsagaan Sar when they were young."
+        }
+      ]
+    }
+  },
+  {
+    "id": "khuur",
+    "icon": "🎻",
+    "scene": "khuur",
+    "topic": "arts",
+    "color": "#7d57c4",
+    "final": {
+      "lit": 1
+    },
+    "title": {
+      "mn": "Морин хуур ба уртын дуу",
+      "en": "Morin khuur & long song"
+    },
+    "learned": [
+      {
+        "mn": "Морин хуур хоёр утастай, морин толгойтой",
+        "en": "The morin khuur has two strings and a horse head"
+      },
+      {
+        "mn": "Хөөрхөн Намжилын домог",
+        "en": "The legend of Khökhöö Namjil"
+      },
+      {
+        "mn": "Уртын дуу, хөөмий, биелгээ, ёохор",
+        "en": "Long song, khöömii, biyelgee and yokhor"
+      }
+    ],
+    "desc": {
+      "mn": "Хөөрхөн Намжилын домог, морин хуур, уртын дуу, хөөмий, ардын бүжиг.",
+      "en": "The legend of Khökhöö Namjil, the horsehead fiddle, long song, throat singing and folk dance."
+    },
+    "steps": [
+      {
+        "type": "story",
+        "title": {
+          "mn": "Хөөрхөн Намжилын домог",
+          "en": "The legend of Khökhöö Namjil"
+        },
+        "text": {
+          "mn": "Эрт урьд цагт Хөөрхөн Намжил гэдэг залуу жигүүртэй хурдан морьтой байжээ. Морь нь үхэхэд Намжил ихэд гунигласан бөгөөд хайртай морио дурсан, түүний толгойн дүрсээр анхны морин хуурыг урласан гэдэг.",
+          "en": "Long ago a young man named Khökhöö Namjil had a swift, winged horse. When the horse died, Namjil grieved, and carved the first morin khuur in its memory, with a horse’s head."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Асуулт",
+          "en": "Question"
+        },
+        "text": {
+          "mn": "Морин хуурын толгой ямар дүрстэй вэ?",
+          "en": "What shape is the head of the morin khuur?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Морь",
+              "en": "A horse"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Луу",
+              "en": "A dragon"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Арслан",
+              "en": "A lion"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Утас",
+          "en": "Strings"
+        },
+        "text": {
+          "mn": "Морин хуур хэдэн утастай вэ?",
+          "en": "How many strings does the morin khuur have?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "2",
+              "en": "2"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "4",
+              "en": "4"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "6",
+              "en": "6"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Хоёр утсыг адууны сүүлний үсээр хийдэг уламжлалтай.",
+          "en": "Traditionally the two strings are made of horsetail hair."
+        }
+      },
+      {
+        "type": "tap",
+        "n": 6,
+        "field": "lit",
+        "scale": 1,
+        "tone": true,
+        "label": {
+          "mn": "Нумаа татах",
+          "en": "Draw the bow"
+        },
+        "title": {
+          "mn": "Хуураа хөгжимдье!",
+          "en": "Let’s play!"
+        },
+        "text": {
+          "mn": "6 удаа нумаа татаж аялгуу тоглоорой.",
+          "en": "Draw the bow 6 times to play a tune."
+        },
+        "after": {
+          "mn": "Морин хуурын дууг “талын салхи”, “морины янцгаалах” дуутай зүйрлэдэг.",
+          "en": "The fiddle’s sound is compared to the steppe wind and a horse’s neigh."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Уртын дуу",
+          "en": "Long song"
+        },
+        "text": {
+          "mn": "Уртын дууны онцлог юу вэ?",
+          "en": "What is special about the long song?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Удаан, сунжирсан аялгуутай",
+              "en": "Slow, long-stretched notes"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Маш хурдан",
+              "en": "Very fast"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Үггүй",
+              "en": "No words at all"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Хөөмий",
+          "en": "Khöömii"
+        },
+        "text": {
+          "mn": "Нэг хүн нэгэн зэрэг хоёр дуу авиа гаргадаг урлагийг юу гэдэг вэ?",
+          "en": "What is the art of singing two sounds at once called?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Хөөмий",
+              "en": "Khöömii"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Биелгээ",
+              "en": "Biyelgee"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Ёохор",
+              "en": "Yokhor"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "tf",
+        "answer": true,
+        "title": {
+          "mn": "Зөв үү, буруу юу?",
+          "en": "True or false?"
+        },
+        "text": {
+          "mn": "Морин хуур, уртын дуу, хөөмий ЮНЕСКО-гийн биет бус өвд бүртгэлтэй.",
+          "en": "The morin khuur, long song and khöömii are on UNESCO’s intangible heritage list."
+        },
+        "after": {
+          "mn": "Монголын соёлын өв дэлхийд хүлээн зөвшөөрөгдсөн.",
+          "en": "Mongolian heritage is recognised around the world."
+        }
+      },
+      {
+        "type": "learn",
+        "title": {
+          "mn": "Ардын бүжиг",
+          "en": "Folk dance"
+        },
+        "text": {
+          "mn": "Баруун Монголын биелгээг голдуу дээд биеэрээ бүжиглэдэг тул гэрийн бага зайд ч болдог. Буриадын ёохорыг гар гараасаа барьж тойрон бүжиглэдэг.",
+          "en": "Western Mongolia’s biyelgee uses mostly the upper body, so it fits inside a ger. The Buryat yokhor is danced holding hands in a circle."
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Ээж, аав аа, хамтдаа уртын дуу сонсъё!”",
+        "en": "“Mom, Dad, let’s listen to a long song together!”"
+      },
+      "what": {
+        "mn": "Гэр бүлээрээ монгол хөгжим сонсох, бүжиглэх",
+        "en": "Listen to Mongolian music and dance together"
+      },
+      "materials": [
+        {
+          "mn": "Утас эсвэл радио",
+          "en": "A phone or radio"
+        },
+        {
+          "mn": "Гэр бүлийн гишүүд",
+          "en": "Your family"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "Морин хуурын аялгуу, уртын дуу хамтдаа сонсоорой.",
+          "en": "Listen to morin khuur music and a long song together."
+        },
+        {
+          "mn": "Өвөө, эмээгээсээ мэддэг дууг нь заалгаарай.",
+          "en": "Ask your grandparents to teach you a song they know."
+        },
+        {
+          "mn": "Гар гараасаа барьж ёохор шиг тойрон бүжиглээрэй.",
+          "en": "Hold hands and dance in a circle like the yokhor."
+        }
+      ]
+    }
+  },
+  {
+    "id": "shagai",
+    "icon": "🦴",
+    "scene": "shagai",
+    "topic": "naadam",
+    "color": "#c98a4b",
+    "final": {
+      "sides": [
+        "horse",
+        "camel",
+        "sheep",
+        "goat"
+      ]
+    },
+    "title": {
+      "mn": "Шагай наадам",
+      "en": "Shagai games"
+    },
+    "learned": [
+      {
+        "mn": "Шагай 4 талтай: морь, тэмээ, хонь, ямаа",
+        "en": "A shagai has 4 sides: horse, camel, sheep, goat"
+      },
+      {
+        "mn": "Шагайгаар морь уралдуулах тоглоом",
+        "en": "The shagai horse-race game"
+      },
+      {
+        "mn": "Шагай харваа 2014 онд ЮНЕСКО-д бүртгэгдсэн",
+        "en": "Knucklebone shooting was listed by UNESCO in 2014"
+      }
+    ],
+    "desc": {
+      "mn": "Шагай хаяж, морь уралдуулж, урт өвлийн оройн тоглоомуудыг сур.",
+      "en": "Roll knucklebones, race horses and learn the games of long winter evenings."
+    },
+    "steps": [
+      {
+        "type": "learn",
+        "set": {
+          "sides": []
+        },
+        "title": {
+          "mn": "Шагай гэж юу вэ?",
+          "en": "What is shagai?"
+        },
+        "text": {
+          "mn": "Шагай бол хонины шагай. Хаяхад морь, тэмээ, хонь, ямаа гэсэн 4 талын нэгээр нь буудаг.",
+          "en": "Shagai are sheep anklebones. When thrown, each lands on one of 4 sides: horse, camel, sheep or goat."
+        }
+      },
+      {
+        "type": "tap",
+        "n": 4,
+        "roll": true,
+        "label": {
+          "mn": "Шагай хаях",
+          "en": "Throw a shagai"
+        },
+        "title": {
+          "mn": "Шагайгаа хая!",
+          "en": "Throw the bones!"
+        },
+        "text": {
+          "mn": "4 удаа дарж дөрвөн шагайгаа хаяарай.",
+          "en": "Tap 4 times to throw four shagai."
+        },
+        "after": {
+          "mn": "Аль талаар нь буусныг харж тоолоорой!",
+          "en": "See which side each one landed on!"
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Асуулт",
+          "en": "Question"
+        },
+        "text": {
+          "mn": "Шагай хэдэн талтай вэ?",
+          "en": "How many sides does a shagai have?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "4",
+              "en": "4"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "2",
+              "en": "2"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "6",
+              "en": "6"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Морь уралдуулах",
+          "en": "Horse race game"
+        },
+        "text": {
+          "mn": "“Морь уралдуулах” тоглоомд ямар тал буувал морио урагшлуулдаг вэ?",
+          "en": "In the horse-race game, which side moves your horse forward?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Морь",
+              "en": "Horse"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Ямаа",
+              "en": "Goat"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Тэмээ",
+              "en": "Camel"
+            },
+            "ok": false
+          }
+        ],
+        "after": {
+          "mn": "Хэдэн морь буусан тоогоор шагайн морио урагшлуулна.",
+          "en": "You move your shagai horse forward by the number of horse sides rolled."
+        }
+      },
+      {
+        "type": "pick",
+        "title": {
+          "mn": "Шагай харваа",
+          "en": "Knucklebone shooting"
+        },
+        "text": {
+          "mn": "Шагай харвааг хэрхэн тоглодог вэ?",
+          "en": "How is knucklebone shooting played?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Шагайн сумыг няслан шагайн бай онох",
+              "en": "Flick a small piece to hit a target of shagai"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Шагайг усанд шидэх",
+              "en": "Throw shagai into water"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Шагайг өнхрүүлж гүйх",
+              "en": "Roll shagai and run"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "tf",
+        "answer": true,
+        "title": {
+          "mn": "Зөв үү, буруу юу?",
+          "en": "True or false?"
+        },
+        "text": {
+          "mn": "Шагай харваа ЮНЕСКО-гийн биет бус өвд бүртгэлтэй.",
+          "en": "Knucklebone shooting is on UNESCO’s intangible heritage list."
+        },
+        "after": {
+          "mn": "2014 онд бүртгэгдсэн.",
+          "en": "It was listed in 2014."
+        }
+      },
+      {
+        "type": "learn",
+        "title": {
+          "mn": "Өвлийн оройн тоглоом",
+          "en": "Winter evening games"
+        },
+        "text": {
+          "mn": "Урт өвлийн оройгоор гэр бүлээрээ шагай тоглож, тоо тоолж, хурдан сэтгэж сурдаг.",
+          "en": "On long winter evenings families play shagai, learning to count and think fast."
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Ээж, аав аа, шагайгаар морь уралдуулъя!”",
+        "en": "“Mom, Dad, let’s race shagai horses!”"
+      },
+      "what": {
+        "mn": "Гэр бүлээрээ шагай тоглох",
+        "en": "Play shagai as a family"
+      },
+      "materials": [
+        {
+          "mn": "4 шагай (эсвэл 4 талыг зурсан цаасан шоо)",
+          "en": "4 shagai (or paper cubes with the 4 sides drawn)"
+        },
+        {
+          "mn": "Морь болгох жижиг юм (товч, чулуу)",
+          "en": "Small tokens as horses (buttons, pebbles)"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "Хүн бүр нэг “морь” сонгоно.",
+          "en": "Everyone picks a “horse” token."
+        },
+        {
+          "mn": "Ээлжлэн 4 шагай хаяна.",
+          "en": "Take turns throwing the 4 shagai."
+        },
+        {
+          "mn": "Хэдэн морь буусан тоогоор морио урагшлуулна.",
+          "en": "Move forward by the number of horse sides."
+        },
+        {
+          "mn": "Барианд хамгийн түрүүнд хүрсэн нь ялна!",
+          "en": "First to the finish wins!"
+        }
+      ]
+    }
+  },
+  {
+    "id": "naadam",
+    "icon": "🏆",
+    "scene": "naadam",
+    "topic": "naadam",
+    "color": "#e9a91f",
+    "final": {},
+    "title": {
+      "mn": "Эрийн гурван наадам",
+      "en": "The three manly games"
+    },
+    "learned": [
+      {
+        "mn": "Наадам: бөх, морь уралдаан, сур харваа",
+        "en": "Naadam: wrestling, horse racing, archery"
+      },
+      {
+        "mn": "Ялсан бөх гарьдын бүжиг хийдэг",
+        "en": "Winning wrestlers do the eagle dance"
+      },
+      {
+        "mn": "Түрүү морийг айргаар цацаж, харвааны шүүгчид “уухай” гэдэг",
+        "en": "The winning horse is blessed with airag; archery judges sing “uukhai”"
+      }
+    ],
+    "desc": {
+      "mn": "Бөх, морь уралдаан, сур харвааны ёс заншил, сонирхолтой баримтууд.",
+      "en": "The customs and fun facts of wrestling, horse racing and archery."
+    },
+    "steps": [
+      {
+        "type": "learn",
+        "set": {
+          "focus": null
+        },
+        "title": {
+          "mn": "Улсын баяр наадам",
+          "en": "The national Naadam"
+        },
+        "text": {
+          "mn": "Жил бүр 7-р сарын 11–13-нд эрийн гурван наадам болдог: бөх, морь уралдаан, сур харваа.",
+          "en": "Every year on July 11–13 the three manly games take place: wrestling, horse racing and archery."
+        }
+      },
+      {
+        "type": "pick",
+        "set": {
+          "focus": "bokh"
+        },
+        "title": {
+          "mn": "Бөх",
+          "en": "Wrestling"
+        },
+        "text": {
+          "mn": "Монгол бөх юу өмсдөг вэ?",
+          "en": "What do Mongolian wrestlers wear?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Зодог, шуудаг, гутал",
+              "en": "Zodog, shuudag and gutal boots"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Цамц, өмд",
+              "en": "A shirt and trousers"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Дээл, малгай",
+              "en": "A deel and hat"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "pick",
+        "set": {
+          "focus": "bokh"
+        },
+        "title": {
+          "mn": "Бөх",
+          "en": "Wrestling"
+        },
+        "text": {
+          "mn": "Ялсан бөх ямар бүжиг хийдэг вэ?",
+          "en": "What dance does the winner do?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Гарьдын (шонхорын) бүжиг",
+              "en": "The eagle dance"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Ёохор",
+              "en": "Yokhor"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Вальс",
+              "en": "Waltz"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "pick",
+        "set": {
+          "focus": "horse"
+        },
+        "title": {
+          "mn": "Морь уралдаан",
+          "en": "Horse racing"
+        },
+        "text": {
+          "mn": "Наадмын морь уралдаанд хэн унадаг вэ?",
+          "en": "Who rides in Naadam horse races?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Хүүхэд унаачид",
+              "en": "Child jockeys"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Өвөө нар",
+              "en": "Grandfathers"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Бөхчүүд",
+              "en": "Wrestlers"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "pick",
+        "set": {
+          "focus": "horse"
+        },
+        "title": {
+          "mn": "Түрүү морь",
+          "en": "The winning horse"
+        },
+        "text": {
+          "mn": "Түрүүлсэн морийг юугаар цацаж ерөөдөг вэ?",
+          "en": "What is sprinkled on the winning horse as a blessing?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Айраг",
+              "en": "Airag"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Ус",
+              "en": "Water"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Элс",
+              "en": "Sand"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "pick",
+        "set": {
+          "focus": "archer"
+        },
+        "title": {
+          "mn": "Сур харваа",
+          "en": "Archery"
+        },
+        "text": {
+          "mn": "Бай онох бүрт шүүгчид юу гэж дуулдаг вэ?",
+          "en": "What do the judges sing at every hit?"
+        },
+        "options": [
+          {
+            "t": {
+              "mn": "Уухай!",
+              "en": "Uukhai!"
+            },
+            "ok": true
+          },
+          {
+            "t": {
+              "mn": "Чү!",
+              "en": "Chü!"
+            },
+            "ok": false
+          },
+          {
+            "t": {
+              "mn": "Баяртай!",
+              "en": "Goodbye!"
+            },
+            "ok": false
+          }
+        ]
+      },
+      {
+        "type": "tf",
+        "set": {
+          "focus": null
+        },
+        "answer": true,
+        "title": {
+          "mn": "Зөв үү, буруу юу?",
+          "en": "True or false?"
+        },
+        "text": {
+          "mn": "Наадам 2010 онд ЮНЕСКО-д бүртгэгдсэн.",
+          "en": "Naadam was listed by UNESCO in 2010."
+        },
+        "after": {
+          "mn": "Наадмыг дэлхий нийт хүндэлдэг.",
+          "en": "Naadam is honoured around the world."
+        }
+      },
+      {
+        "type": "learn",
+        "title": {
+          "mn": "Нутагт туршаад үз!",
+          "en": "Try it in Nutag!"
+        },
+        "text": {
+          "mn": "Нутгийн Наадмын талбайд бөх барилдаж, морины уяанаас уралдаж, сурын талбайд харваарай!",
+          "en": "Wrestle at the arena, race from the horse line and shoot at the archery range in Nutag!"
+        }
+      }
+    ],
+    "family": {
+      "say": {
+        "mn": "“Ээж, аав аа, гэртээ жижиг наадам хийцгээе!”",
+        "en": "“Mom, Dad, let’s hold a little Naadam at home!”"
+      },
+      "what": {
+        "mn": "Гэр бүлийн жижиг наадам",
+        "en": "A family mini-Naadam"
+      },
+      "materials": [
+        {
+          "mn": "Олс эсвэл алчуур",
+          "en": "A rope or towel"
+        },
+        {
+          "mn": "Цаасан бай, зөөлөн бөмбөг",
+          "en": "A paper target and a soft ball"
+        }
+      ],
+      "steps": [
+        {
+          "mn": "“Бөх”: олс таталтаар хүчээ үзнэ.",
+          "en": "“Wrestling”: a tug-of-war."
+        },
+        {
+          "mn": "“Морь”: гэрийн гадаа уралдаж гүйнэ.",
+          "en": "“Horse race”: a running race outside."
+        },
+        {
+          "mn": "“Сур”: зөөлөн бөмбөгөөр цаасан бай онооно.",
+          "en": "“Archery”: hit a paper target with a soft ball."
+        },
+        {
+          "mn": "Ялагч гарьдын бүжиг хийнэ, бусад нь “Уухай!” гэнэ.",
+          "en": "The winner does the eagle dance; everyone else shouts “Uukhai!”"
+        }
+      ]
+    }
+  }
+]
