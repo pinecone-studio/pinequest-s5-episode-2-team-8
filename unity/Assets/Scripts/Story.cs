@@ -394,20 +394,41 @@ public sealed partial class Game
         }
         void DrawLine(Game g, Line l, float vw, float vh)
         {
-            float U = g.UiScale, w = Mathf.Min(vw - 20, 760), pic = Mathf.Min(120, vh * 0.26f), pad = 14, tx = pic + pad * 2, tw = w - tx - pad;
+            // waist-up framing: the portrait sits in a tall box on the left, a little bigger than the dialogue frame
+            float U = g.UiScale, w = Mathf.Min(vw - 20, 760), pic = Mathf.Min(170, vh * 0.38f), picH = pic * 1.35f, pad = 14, tx = pic + pad * 2, tw = w - tx - pad;
             var st = new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(U * 17), wordWrap = true, normal = { textColor = new Color(1, 0.97f, 0.9f) } };
             float th = st.CalcHeight(new GUIContent(l.text), tw * U) / U, n = l.choices?.Length ?? 0, oht = 0;
             for (int i = 0; i < n; i++) oht += Mathf.Max(38, g.sOpt.CalcHeight(new GUIContent(l.choices[i]), tw * U) / U) + 6; // an answer grows to fit its words
-            float h = Mathf.Max(pic * 0.72f + pad, pad + 26 + th + (n > 0 ? 10 + oht : 20) + pad), x = vw / 2 - w / 2, y = vh - h - 10;
+            float h = Mathf.Max(picH * 0.68f + pad, pad + 26 + th + (n > 0 ? 10 + oht : 20) + pad), x = vw / 2 - w / 2, y = vh - h - 10;
             // a dark box with a gold frame; the portrait stands on its left, a little taller than the box
             g.Box(g.URect(x - 2, y - 2, w + 4, h + 4), Px.Col("#e0b04a")); g.Box(g.URect(x, y, w, h), new Color(0.04f, 0.03f, 0.07f, 0.94f));
-            bool talking = l.shown < l.text.Length && (int)(Time.time * 8) % 2 == 0, blink = Time.time % 4.1f < 0.12f;
+            // every narration character uses the same rig as Bolormaa: a mouth that opens while the text streams in, slow blinks and a soft idle sway
+            float t = Time.time, nameHash = string.IsNullOrEmpty(l.who) ? 0 : l.who.Length * 0.17f;
+            bool streaming = l.shown < l.text.Length;
+            bool talking = streaming && (int)(t * 9) % 2 == 0;                     // 9 Hz mouth while the words are typing (Bolormaa's bust cadence, GameUI DrawModal)
+            bool blink = (t + nameHash) % 3.4f < 0.12f;                            // one long blink every 3.4 s, offset per character
+            float breathe = Mathf.Sin(t * 1.6f + nameHash * 3) * U * 1.4f;         // slow vertical breath
+            float sway = Mathf.Sin(t * 0.9f + nameHash * 5) * U * 0.9f;            // soft side-to-side sway (idle only)
+            float emphasis = streaming ? Mathf.Sin(t * 11f) * U * 0.6f : 0;        // tiny extra sway while talking, so the head reads as "speaking"
             if (l.who != null && WHO.ContainsKey(l.who))
             {
-                var fr = g.URect(x + pad, y - pic * 0.28f, pic, pic);
+                // the portrait box is tall enough to show the shoulders and a hint of torso under the head (waist-up framing)
+                var fr = g.URect(x + pad, y - picH * 0.42f, pic, picH);
                 g.Box(new Rect(fr.x - U * 3, fr.y - U * 3, fr.width + U * 6, fr.height + U * 6), Px.Col("#e0b04a"));
-                g.Box(fr, Px.Col(l.who == "merkit" ? "#3a1c22" : "#1c2440"));
-                GUI.DrawTexture(fr, g.Tex(StoryFace(l.who, l.expr, blink ? 2 : talking ? 1 : 0)));
+                string skin = l.who == "merkit" ? "#3a1c22" : "#1c2440";
+                g.Box(fr, Px.Col(skin));
+                // a soft under-shadow for a sense of depth, then a shoulder silhouette so the figure reads as a body not a floating head
+                float faceSide = Mathf.Min(fr.width, fr.height) * 0.72f;
+                float faceX = fr.x + (fr.width - faceSide) * 0.5f + sway + emphasis;
+                float faceY = fr.y + fr.height * 0.06f + breathe;
+                // shoulders: a flat trapezoid-ish pair of boxes under the face, tinted a touch lighter than the backdrop
+                var shColM = l.who == "merkit" ? new Color(0.45f, 0.22f, 0.22f, 1) : new Color(0.24f, 0.28f, 0.52f, 1);
+                var shColD = l.who == "merkit" ? new Color(0.28f, 0.14f, 0.15f, 1) : new Color(0.16f, 0.20f, 0.36f, 1);
+                float shoulderY = faceY + faceSide * 0.78f;
+                g.Box(new Rect(fr.x + fr.width * 0.08f, shoulderY + U * 6, fr.width * 0.84f, fr.height - (shoulderY + U * 6 - fr.y)), shColD);
+                g.Box(new Rect(fr.x + fr.width * 0.14f, shoulderY, fr.width * 0.72f, U * 10 + Mathf.Abs(breathe)), shColM);
+                // the face itself, blink or talk sprite picked from the character's story_face sheet
+                GUI.DrawTexture(new Rect(faceX, faceY, faceSide, faceSide), g.Tex(StoryFace(l.who, l.expr, blink ? 2 : talking ? 1 : 0)));
                 GUI.Label(g.URect(x + tx, y + pad - 4, tw, 24), WHO[l.who].name.ToString().ToUpper(), new GUIStyle(g.sPixel) { alignment = TextAnchor.UpperLeft, fontSize = PxSize(U * 16), normal = { textColor = Px.Col("#f7c646") } });
             }
             string vis = l.text.Substring(0, Mathf.Min(l.text.Length, (int)l.shown));
