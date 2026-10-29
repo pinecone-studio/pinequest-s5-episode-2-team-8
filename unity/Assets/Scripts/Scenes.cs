@@ -287,7 +287,7 @@ public static class Scenes
     public static void Khuur(PxCanvas x, SceneState st, float t)
     {
         R(x, 0, 0, W, H, "#2b1e3a"); for (int i = 0; i < 20; i++) P(x, (i * 37) % W, (i * 17) % 40, "#f7e6b0");
-        float glow = st.lit; const int cx = 60;
+        float glow = Math.Max(st.lit, st.heat ? 0.6f : 0); const int cx = 60; // the strings glow as you play, and while you sing
         R(x, cx - 1, 8, 3, 46, K.woodD); R(x, cx, 8, 1, 46, K.wood);
         R(x, cx - 4, 4, 8, 5, K.wood); R(x, cx + 3, 3, 3, 3, K.woodD); P(x, cx + 5, 4, K.eye); P(x, cx - 2, 2, K.woodD);
         R(x, cx - 6, 14, 3, 2, K.woodL); R(x, cx + 4, 16, 3, 2, K.woodL);
@@ -295,7 +295,8 @@ public static class Scenes
         R(x, cx - 9, 56, 19, 10, K.woodL);
         string sc = glow > 0.05f ? "rgba(255,230,130," + (0.5 + glow * 0.5).ToString("0.00", CultureInfo.InvariantCulture) + ")" : "#d8cfba";
         Line(x, cx - 1, 10, cx - 1, 66, sc); Line(x, cx + 1, 10, cx + 1, 66, sc);
-        int bowY = 58 + Js.Round(Math.Sin(t * 4) * (glow != 0 ? 3 : 0)); Line(x, cx - 22, bowY - 6, cx + 22, bowY + 4, K.woodD); Line(x, cx - 22, bowY - 5, cx + 22, bowY + 5, "#e8e0d0");
+        int bowY = 58 + Js.Round(Math.Sin(t * 4) * (glow != 0 && st.pull == 0 ? 3 : 0)), bx = (st.side == "l" ? -1 : 1) * Js.Round(st.pull * 12); // the bow follows your hand
+        Line(x, cx - 22 + bx, bowY - 6, cx + 22 + bx, bowY + 4, K.woodD); Line(x, cx - 22 + bx, bowY - 5, cx + 22 + bx, bowY + 5, "#e8e0d0");
         if (glow > 0.05f) for (int i = 0; i < 4; i++) { double ny = 40 - ((t * 20 + i * 10) % 36), nx = cx + 18 + Math.Sin(t * 2 + i) * 6; R(x, nx, ny, 2, 2, K.gold); R(x, nx + 2, ny - 4, 1, 5, K.gold); }
     }
     // ------------------------------------------------------------ shagai: four knucklebones (st.sides = ["horse", ...])

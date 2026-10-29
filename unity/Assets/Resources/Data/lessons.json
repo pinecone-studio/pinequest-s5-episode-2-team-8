@@ -2073,6 +2073,12 @@
             },
             "ok": false
           }
+        ],
+        "drop": [
+          52,
+          0,
+          16,
+          12
         ]
       },
       {
@@ -2114,13 +2120,15 @@
         }
       },
       {
-        "type": "tap",
+        "type": "drag",
+        "dir": "side",
+        "alt": true,
         "n": 6,
         "field": "lit",
-        "scale": 1,
         "tone": true,
+        "icon": "✋",
         "label": {
-          "mn": "Нумаа татах",
+          "mn": "Хэлбэгээр татах",
           "en": "Draw the bow"
         },
         "title": {
@@ -2128,8 +2136,16 @@
           "en": "Let’s play!"
         },
         "text": {
-          "mn": "6 удаа нумаа татаж аялгуу тоглоорой.",
-          "en": "Draw the bow 6 times to play a tune."
+          "mn": "Хэлбэгээ утсан дээгүүр зүүн, баруун тийш ээлжлэн 6 удаа тат.",
+          "en": "Draw the bow across the strings, left and right in turn, 6 times."
+        },
+        "altHint": {
+          "mn": "Хэлбэгээ нөгөө тийш нь тат!",
+          "en": "Now draw the bow the other way!"
+        },
+        "low": {
+          "mn": "Хэлбэгээ урт татаарай!",
+          "en": "Draw the bow all the way!"
         },
         "after": {
           "mn": "Морин хуурын дууг “талын салхи”, “морины янцгаалах” дуутай зүйрлэдэг.",
@@ -2169,6 +2185,31 @@
             "ok": false
           }
         ]
+      },
+      {
+        "type": "hold",
+        "lo": 0.82,
+        "hi": 0.97,
+        "label": {
+          "mn": "Дуулах (дараад барина)",
+          "en": "Sing (press and hold)"
+        },
+        "title": {
+          "mn": "Уртын дуу дуул",
+          "en": "Sing a long song"
+        },
+        "text": {
+          "mn": "Уртын дууны нэг авиа маш удаан сунжирдаг. Товчийг дараад барьж дуул, ногоон хэсэгт хүрэхэд тавь. Хэт удаан барьвал амьсгаа чинь хүрэхгүй!",
+          "en": "In a long song one note stretches on and on. Press and hold to sing, and let go in the green zone. Hold too long and you run out of breath!"
+        },
+        "over": {
+          "mn": "Амьсгаа хүрсэнгүй! Дахиад оролдоё.",
+          "en": "Out of breath! Let’s try again."
+        },
+        "after": {
+          "mn": "Гоё сонсогдлоо! Уртын дуу нэг амьсгаагаар маш урт аялгуу дуулдаг.",
+          "en": "Beautiful! A long song carries a very long tune on a single breath."
+        }
       },
       {
         "type": "pick",

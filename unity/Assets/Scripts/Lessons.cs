@@ -540,7 +540,7 @@ public sealed partial class Game
             if (s["alt"].B && side == lastSide) { Sfx.Bad(); altMsg = s["altHint"].T.ToString(); return; }
             lastSide = side; tapN++; st.fx = Time.time; altMsg = null;
             string field = s["field"].S; if (field != null) Lessons.SetFloat(st, field, tapN / (float)s["n"].I); else st.sub = tapN / (float)s["n"].I;
-            Sfx.Pop();
+            if (s["tone"].B) Sfx.Chime(); else Sfx.Pop();
             if (tapN >= s["n"].I) Success(s);
         }
         void Done(Game g)
