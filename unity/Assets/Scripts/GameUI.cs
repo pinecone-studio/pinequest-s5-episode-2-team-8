@@ -327,7 +327,7 @@ public sealed partial class Game
             // a dark glassy ring with arrows, and a gold knob under the thumb with a soft shadow
             var b = new Vector2(drag.p0.x, Screen.height - drag.p0.y); float R = StickR;
             GUI.DrawTexture(new Rect(b.x - R, b.y - R, R * 2, R * 2), Tex(StickBase()));
-            var k = b + new Vector2(stick.x, -stick.y) * R; float kr = R * 0.5f, sh = R * 0.08f;
+            var k = b + stick * R; float kr = R * 0.5f, sh = R * 0.08f; // stick.y grows downwards, as GUI y does
             var old = GUI.color; GUI.color = new Color(0, 0, 0, 0.3f); GUI.DrawTexture(new Rect(k.x - kr + sh, k.y - kr + sh * 1.5f, kr * 2, kr * 2), Tex(Disc())); GUI.color = old;
             GUI.DrawTexture(new Rect(k.x - kr, k.y - kr, kr * 2, kr * 2), Tex(StickKnob()));
         }
