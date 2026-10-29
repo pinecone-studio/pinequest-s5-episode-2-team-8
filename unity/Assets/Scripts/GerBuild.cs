@@ -11,7 +11,10 @@ using UnityEngine;
 public sealed partial class Game
 {
     bool gbOn; int gbLot = -1, gbWrong;
-    readonly List<int> gbSlots = new List<int>(), gbSides = new List<int>();   // roof poles placed so far: slot round the crown, and which side of the ger it is on
+    static readonly List<int> gbNoSlots = new List<int>();
+    List<int> gbSlots => V?.ger == null ? gbNoSlots : V.ger.poles ??= new List<int>();   // roof poles placed so far (slots round the crown, in order), kept in the save
+    static float PoleA(int j) => j * Mathf.PI * 2 / Bodies.GER_POLES;
+    List<int> GbSides() => gbSlots.Select(j => SideOfAngle(PoleA(j))).ToList();   // which side of the ger each pole is on
     Tx gbSay; float gbSayT = -99; bool gbList;
     sealed class GbHold { public int id; public string part; public Vector2 gui, from; }
     GbHold gbHold;
@@ -35,13 +38,14 @@ public sealed partial class Game
     void GerBuildOpen(int i)
     {
         if (gbOn) return;
-        gbLot = V.lot.i >= 0 ? V.lot.i : i; gbOn = true; gbWrong = 0; gbSlots.Clear(); gbSides.Clear(); gbSayT = -99; gbList = false;
+        gbLot = V.lot.i >= 0 ? V.lot.i : i; gbOn = true; gbWrong = 0; gbSayT = -99; gbList = false; together = false;
+        if (G.stage != 4) gbSlots.Clear(); // poles only wait at the roof-pole step
         Sfx.Tap();
         Toast(Loc.L("Хэсгүүдээ тавиураас гэр рүүгээ чир!", "Drag the parts from the tray onto your ger!"));
     }
     string StepOfPart(string part) => part == "shal" || part == "tulga" ? part : GerRules.STEPS.First(s => GerRules.NEEDS[s].ContainsKey(part));
     string PartLabel(string k) => k == "shal" ? GB_FLOOR.ToString() : k == "tulga" ? GB_STOVE.ToString() : PartName(k);
-    int PartCount(string k) => k == "shal" || k == "tulga" ? 1 : Part(k) - (k == "uni" ? gbSlots.Count : 0);
+    int PartCount(string k) => k == "shal" || k == "tulga" ? 1 : Part(k) - (k == "uni" && G.stage == 4 ? gbSlots.Count : 0);
 
     /** Called with every pointer event; true when the tray's drag takes it. pos: screen pixels, y up. */
     bool GerBuildPointer(int id, Vector2 pos, bool down, bool up)
@@ -99,8 +103,20 @@ public sealed partial class Game
         }
         if (!res.ok) { Sfx.Bad(); GbFlyBack(h, true); GbSaySet(GbMissingTx(res.missing)); return; }
         gbWrong = 0;
-        if (step == "uni") { GbPole(h, screen); return; }
-        int st = G.stage;
+        if (step == "uni") { GbPole(h, screen); return; } // placing the poles round the crown is the hands-on part here
+        StartCoroutine(GbHands(step, h));
+    }
+    /** The right part: now do the step by hand (GerWork.StepSpec: lay the boards, turn the door south, lift the toono…). Only a
+     *  finished task builds it; backing out sends the part back to the tray and nothing is lost. */
+    IEnumerator GbHands(string step, GbHold h)
+    {
+        if (building) yield break;
+        building = true; int st = G.stage; TaskWait sw;
+        try { sw = Task(StepSpec(step)); yield return sw; }
+        finally { building = false; }
+        if (!sw.r.done || G.stage != st) { GbFlyBack(h, false); yield break; }
+        if (sw.r.together) together = true;
+        G.mistakes += sw.r.mistakes;
         GbCommit(step);
         GbAnimStart(new GbAnim { step = st, baseStage = st, t0 = Time.time });
     }
@@ -113,7 +129,7 @@ public sealed partial class Game
     void GbCommit(string step)
     {
         foreach (var kv in GerRules.NEEDS[step]) PartAdd(kv.Key, -kv.Value);
-        G.stage++; gbSlots.Clear(); gbSides.Clear(); gbSayT = -99;
+        G.stage++; gbSlots.Clear(); gbSayT = -99;
         PutLot(gbLot, G.stage == 1);
         Sfx.Good(); Float(px + 0.5f, py - 0.6f, "✓", new Color(0.5f, 0.9f, 0.4f)); Confetti(10);
         if (G.stage >= GerRules.DONE) { gbOn = false; gbHold = null; FinishGer(); } // at once, so a reload can't leave a finished ger without its reward
@@ -127,17 +143,16 @@ public sealed partial class Game
         var o = GbLotObj; var c = cam.WorldToScreenPoint(new Vector3(o.x + o.w / 2f, -(o.y + o.h / 2f), -0.9f)); float u = ScreenPpu * 0.70710678f;
         float a = (screen.x - c.x) / u, b = -(screen.y - c.y) / (u * 0.5f); // the drop as a push on the ground: a = x - y, b = x + y
         float ang = Mathf.Atan2((b - a) / 2, (b + a) / 2);
-        float SlotA(int j) => j * Mathf.PI * 2 / Bodies.GER_POLES;
-        var free = Enumerable.Range(0, Bodies.GER_POLES).Where(j => !gbSlots.Contains(j)).OrderBy(j => Mathf.Abs(Mathf.DeltaAngle(SlotA(j) * Mathf.Rad2Deg, ang * Mathf.Rad2Deg))).ToList();
+        var free = Enumerable.Range(0, Bodies.GER_POLES).Where(j => !gbSlots.Contains(j)).OrderBy(j => Mathf.Abs(Mathf.DeltaAngle(PoleA(j) * Mathf.Rad2Deg, ang * Mathf.Rad2Deg))).ToList();
         int slot = free[0];
-        bool Tilts(int j) => GerRules.UnisTilt(new List<int>(gbSides) { SideOfAngle(SlotA(j)) });
+        var sides = GbSides(); bool Tilts(int j) => GerRules.UnisTilt(new List<int>(sides) { SideOfAngle(PoleA(j)) });
         if (Tilts(slot) && free.Any(j => !Tilts(j))) // only when another pole could still go in elsewhere
         {
             G.mistakes++; V.Save(); Sfx.Bad(); GbFlyBack(h, true);
             GbSaySet(T2("Өвөө: Тооно хазайчихлаа! Нөгөө талд нь унь хатга.", "Grandpa: The toono is tilting! Put a pole on the other side.")); return;
         }
         var before = new List<int>(gbSlots);
-        gbSlots.Add(slot); gbSides.Add(SideOfAngle(SlotA(slot)));
+        gbSlots.Add(slot); V.Save(); // a pole in stays in, even if the tray closes or the game does
         GbAnimStart(new GbAnim { step = 4, slot = slot, baseStage = 4, baseSlots = before, t0 = Time.time });
         if (gbSlots.Count >= Bodies.GER_POLES) GbCommit("uni"); else { Sfx.Good(); Float(px + 0.5f, py - 0.6f, gbSlots.Count + "/" + Bodies.GER_POLES, new Color(1f, 0.85f, 0.3f)); }
     }
@@ -291,7 +306,7 @@ public sealed partial class Game
         float textH = bs.CalcHeight(new GUIContent(body), U(cardW - 28)) / UiScale, cardH = 34 + textH + 8 + 38, cardY = Mathf.Min(ty0 - 6, vh - 100) - cardH;
         var card = UR(cardX, cardY, cardW, cardH); GUI.Box(card, "", sPanel); Ui(card);
         GUI.Label(UR(cardX + 14, cardY + 8, cardW - 70, 20), "<b>" + title + "</b>", gbTitle);
-        if (Button(UR(cardX + cardW - 34, cardY + 6, 28, 26), "✕", sBtn)) Later(() => { gbOn = false; gbHold = null; gbSlots.Clear(); gbSides.Clear(); Sfx.Tap(); });
+        if (Button(UR(cardX + cardW - 34, cardY + 6, 28, 26), "✕", sBtn)) Later(() => { gbOn = false; gbHold = null; Sfx.Tap(); }); // the poles in so far stay (they are in the save)
         GUI.Label(UR(cardX + 14, cardY + 30, cardW - 28, textH + 4), body, bs);
         float by = cardY + 34 + textH + 4, bx = cardX + 14;
         if (guide != null) { var gd = guide.Value; if (Button(UR(bx, by, 190, 32), Loc.L("Тийшээ очих · ", "Go there · ") + gd.name, sPrimary)) Later(() => GbGoThere(gd)); }

@@ -192,7 +192,7 @@ public sealed partial class Game
                 if (!sw.r.done) yield break;
                 if (sw.r.together) together = true;
                 foreach (var kv in GerRules.NEEDS[step]) PartAdd(kv.Key, -kv.Value);
-                G.stage++; G.mistakes += sw.r.mistakes;
+                G.stage++; G.mistakes += sw.r.mistakes; G.poles?.Clear(); // poles half-placed in the isometric view are done with
                 PutLot(i, G.stage == 1);
             }
             FinishGer();
