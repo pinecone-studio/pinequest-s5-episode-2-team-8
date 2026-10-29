@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = process.env.ROOT || resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const fails = [], ok = (c, m) => { if (c) console.log('✓ ' + m); else { console.log('✗ ' + m); fails.push(m); } };
 const seen = [];
+const sys = (b) => (Array.isArray(b.system) ? b.system.map((x) => x.text).join('\n') : String(b.system)); // the system prompt's text, block by block
 let mode = 'normal';
 const fake = createServer((req, res) => {
   let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
@@ -39,9 +40,11 @@ try {
   ok(r1.headers['x-api-key'] === 'secret-test-key' && r1.headers['anthropic-version'] === '2023-06-01', 'API key and version header are sent server-side');
   ok(r1.body.model === 'claude-opus-5-5' && r1.body.output_config.effort === 'low' && r1.body.fallbacks === 'default', 'model, effort and refusal fallback are set');
   ok(r1.body.messages.length === 1 && r1.body.messages[0].role === 'user', 'history is cleaned to start with the child');
-  ok(/Bankhar/.test(r1.body.system) && /7 years old/.test(r1.body.system) && /personal information/.test(r1.body.system), 'kid-safe Basar system prompt with the child’s age');
+  ok(Array.isArray(r1.body.system) && r1.body.system.length === 2 && r1.body.system[0].cache_control && r1.body.system[0].cache_control.type === 'ephemeral' && !r1.body.system[1].cache_control, 'the fixed part of the system prompt is cached, the child’s part comes after it');
+  ok(/Delüün Boldog/.test(r1.body.system[0].text) && /Boorchu/.test(r1.body.system[0].text) && !/7 years old/.test(r1.body.system[0].text), 'the cached part carries the Chinggis Khaan history sheet and nothing about the child');
+  ok(/Bankhar/.test(sys(r1.body)) && /7 years old/.test(sys(r1.body)) && /personal information/.test(sys(r1.body)), 'kid-safe Basar system prompt with the child’s age');
   await post(a.base, { mode: 'chat', messages: [{ role: 'user', content: 'What is a ger?' }], lang: 'en' });
-  ok(/same language/.test(seen[1].body.system) && /right now that is English/.test(seen[1].body.system) && /anything a curious child asks/.test(seen[1].body.system), 'Basar answers in English when asked in English, and helps with any topic');
+  ok(/same language/.test(sys(seen[1].body)) && /right now that is English/.test(sys(seen[1].body)) && /anything a curious child asks/.test(sys(seen[1].body)), 'Basar answers in English when asked in English, and helps with any topic');
   const quiz = await post(a.base, { mode: 'quiz', topic: 'nuuts', age: 9 });
   ok(quiz.ok && quiz.quiz.answer === 2 && quiz.quiz.options.length === 4, 'quiz returns 4 options and the right answer');
   ok(seen[2].body.output_config.format.type === 'json_schema', 'quiz uses structured JSON output');
