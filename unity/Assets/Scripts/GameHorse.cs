@@ -25,7 +25,7 @@ public sealed partial class Game
             GUILayout.BeginHorizontal(); g.IconAt(Px.Horse(coat, 0, true), 88);
             GUILayout.BeginVertical(); g.Title(Loc.L("Морины уяа", "Horse line")); g.Small(Loc.L("Морь унаж Нутгаар чөлөөтэй давхих, эсвэл Наадмын уралдаанд оролцоорой!", "Ride freely around Nutag, or join the Naadam horse race!")); GUILayout.EndVertical();
             GUILayout.EndHorizontal();
-            GUILayout.Label(Loc.L("Морио сонго", "Pick your horse"), g.sSmall);
+            g.Gap(6); GUILayout.Label(Loc.L("Морио сонго", "Pick your horse"), g.sSmall);
             var coats = Px.COATS.Keys.ToList();
             int hit = g.Chips(coats.Select(k => Rules.COAT_NAMES[k].ToString()).ToList(), coats.IndexOf(coat), 70);
             if (hit >= 0) { var c = coats[hit]; g.Later(() => coat = c); }
@@ -34,20 +34,23 @@ public sealed partial class Game
             GUILayout.Label(Loc.L("Тэсвэр", "Stamina"), g.sSmall, GUILayout.Width(g.U(60))); g.Bar(GUILayoutUtility.GetRect(g.U(80), g.U(12), GUILayout.ExpandWidth(true)), hs.sta / 10f, Px.Col("#2ea35f")); GUILayout.Label($"{hs.sta}/10", g.sSmall, GUILayout.Width(g.U(40)));
             GUILayout.EndHorizontal();
             g.Small(Loc.L("Уралдаан бүрийн дараа морь чинь дасгалжиж хүчирхэгжинэ.", "Your horse trains and gets stronger after every race."));
-            GUILayout.Label(Loc.L("Уралдааны ангилал (морины нас)", "Race class (horse age)"), g.sSmall);
-            GUILayout.BeginHorizontal();
+            g.Gap(6); GUILayout.Label(Loc.L("Уралдааны ангилал (морины нас)", "Race class (horse age)"), g.sSmall);
+            g.Gap(4);
             for (int i = 0; i < Rules.CLASSES.Length; i++)
             {
+                if (i % 3 == 0) { if (i > 0) { GUILayout.EndHorizontal(); g.Gap(6); } GUILayout.BeginHorizontal(); }
                 var c = Rules.CLASSES[i]; bool open = i <= hs.cls;
-                if (i == 3) { GUILayout.EndHorizontal(); GUILayout.BeginHorizontal(); }
+                var cs = new GUIStyle(cls == i ? g.sPrimary : g.sBtn) { wordWrap = true, richText = true, alignment = TextAnchor.MiddleCenter, fontSize = g.Ts(11), padding = new RectOffset(4, 4, 2, 2) };
+                var r = GUILayoutUtility.GetRect(g.U(60), g.U(58), GUILayout.ExpandWidth(true), GUILayout.Height(g.U(58)));
                 bool was = GUI.enabled; GUI.enabled = open;
-                if (GUILayout.Button($"<b>{c.name}</b>\n<size={g.Ts(10)}>{c.age} · {c.laps} {Loc.L("тойрог", c.laps > 1 ? "laps" : "lap")}</size>", cls == i ? g.sPrimary : g.sBtn, GUILayout.MinHeight(g.U(44)))) { int k = i; g.Later(() => cls = k); }
+                if (GUI.Button(r, $"<b>{c.name}</b>\n<size={g.Ts(9)}>{c.age} · {c.laps} {Loc.L("тойрог", c.laps > 1 ? "laps" : "lap")}</size>", cs)) { int k = i; g.Later(() => cls = k); }
                 GUI.enabled = was;
+                if (i % 3 != 2 && i < Rules.CLASSES.Length - 1) GUILayout.Space(g.U(6));
             }
-            GUILayout.EndHorizontal();
+            GUILayout.EndHorizontal(); g.Gap(6);
             g.Small(Rules.CLASSES[cls].fact + " " + (hs.cls < Rules.CLASSES.Length - 1 ? Loc.L("Эхний гуравт орж дараагийн ангиллыг нээгээрэй.", "Finish in the top three to unlock the next class.") : ""));
             g.Stats((Loc.L("Уралдаан", "Races"), hs.races.ToString()), (Loc.L("Түрүү", "Wins"), hs.wins.ToString()), (Loc.L("Айргийн тав", "Top five"), hs.top5.ToString()));
-            GUILayout.BeginHorizontal();
+            g.Gap(8); GUILayout.BeginHorizontal();
             if (g.riding) { if (g.Btn(Loc.L("Буух", "Get off"))) g.Later(() => { g.Close(); g.Dismount(); }); }
             else if (g.Btn(Loc.L("Морь унах", "Ride"))) g.Later(() => { g.Close(); g.Mount(coat); g.Toast(Loc.L("Чөлөөтэй давхиарай!", "Ride free!")); });
             if (g.Btn(Loc.L("Уралдах", "Race"), true)) g.Later(() => { g.Close(); g.V.horse.coat = coat; g.RaceStart(cls); });

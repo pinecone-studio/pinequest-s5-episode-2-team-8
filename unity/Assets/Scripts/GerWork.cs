@@ -330,13 +330,20 @@ public sealed partial class Game
         foreach (var t in GerRules.TRADES)
         {
             var goods = t.goods; var coins = new Dictionary<string, int> { ["coins"] = t.coins }; bool have = t.gives.All(kv => Part(kv.Key) >= kv.Value);
-            Row(Px.Icon("part:" + t.id), string.Join(", ", t.gives.Select(kv => $"{PartName(kv.Key)} ×{kv.Value}")), have ? "√ " + Loc.L("Танд байгаа", "You have these") : MADE[t.id].ToString());
+            // the name and its line wrap across the row; the two prices sit side by side under them, their words wrapping too
+            GUILayout.BeginVertical(sBtn);
+            GUILayout.BeginHorizontal(); IconAt(Px.Icon("part:" + t.id), 32);
+            GUILayout.BeginVertical(); GUILayout.Label("<b>" + string.Join(", ", t.gives.Select(kv => $"{PartName(kv.Key)} ×{kv.Value}")) + "</b>", sLabel, GUILayout.ExpandWidth(true)); GUILayout.Label(have ? "√ " + Loc.L("Танд байгаа", "You have these") : MADE[t.id].ToString(), sSmall, GUILayout.ExpandWidth(true)); GUILayout.EndVertical();
+            GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal();
             foreach (var cost in new[] { goods, coins })
             {
-                var c2 = cost; var t2 = t;
-                if (SmallBtn(CostTxt(cost), cost == goods, 120, CanPay(cost))) Later(() => { if (!CanPay(c2)) return; Pay(c2); foreach (var kv in t2.gives) PartAdd(kv.Key, kv.Value); Sfx.Chime(); Toast(string.Join(", ", t2.gives.Keys.Select(PartName)) + Loc.L(" авлаа!", " — got it!")); V.Save(); });
+                var c2 = cost; var t2 = t; bool was = GUI.enabled; GUI.enabled = CanPay(cost);
+                var bs = new GUIStyle(cost == goods ? sPrimary : sBtn) { wordWrap = true, alignment = TextAnchor.MiddleCenter, fontSize = Ts(11) };
+                if (GUILayout.Button(CostTxt(cost), bs, GUILayout.ExpandWidth(true), GUILayout.MinHeight(U(38)))) Later(() => { if (!CanPay(c2)) return; Pay(c2); foreach (var kv in t2.gives) PartAdd(kv.Key, kv.Value); Sfx.Chime(); Toast(string.Join(", ", t2.gives.Keys.Select(PartName)) + Loc.L(" авлаа!", " — got it!")); V.Save(); });
+                GUI.enabled = was;
             }
-            EndRow();
+            GUILayout.EndHorizontal(); GUILayout.EndVertical(); Gap(4);
         }
     }
     /** The white cover in the shop's tools tab. */
