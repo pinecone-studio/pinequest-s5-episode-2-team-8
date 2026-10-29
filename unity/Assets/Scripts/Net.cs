@@ -418,10 +418,12 @@ public sealed partial class Game
             else { Shadow(o.px * T, o.py * T, o.py); var lk = look.Copy(); lk.pet = null; Person(lk, o.dir, z != 0 ? 0 : Frame(o.moving, false), o.px, o.py, o.py, z, null, o.moving); }
         }
     }
+    /** Where a ger's title goes: over its roof (in the isometric view the ger stands up from its lot), or above the lot when flat. */
+    Vector2 GerTop(WObj o) => IsoOn ? WorldGui(o.x + 1.5f, o.y + 2.7f, 3f) : PxGui(o.x * T + 24, o.y * T - 4);
     void NetLabels(float ts)
     {
         float t = Time.time; Color gold = Px.Col("#f7c646");
-        if (net.lots != null) for (int i = 0; i < net.lots.Length; i++) { var l = LotOf(i); if (l == null) continue; var o = World.objects.Find(q => q.kind == "lot" && q.i == i); if (o == null) continue; var p = PxGui(o.x * T + 24, o.y * T - 4); Outlined(p.x, p.y, l.n ?? "", ts * 0.85f, Color.white); }
+        if (net.lots != null) for (int i = 0; i < net.lots.Length; i++) { var l = LotOf(i); if (l == null) continue; var o = World.objects.Find(q => q.kind == "lot" && q.i == i); if (o == null) continue; var p = GerTop(o); Outlined(p.x, p.y, l.n ?? "", ts * 0.85f, Color.white); }
         foreach (var o in net.others.Values)
         {
             var p = PxGui(o.px * T + 8, o.py * T - (o.look?.ride == "horse" ? 30 : 16)); Outlined(p.x, p.y, o.name + "  " + Loc.L("Т", "Lv") + o.lvl, ts * 0.8f, Color.white);
