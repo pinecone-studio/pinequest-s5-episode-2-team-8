@@ -32,7 +32,7 @@ public sealed partial class Game : MonoBehaviour
     Act pending, ctx;
 
     // Басар trots behind you and sits beside you when you stop
-    float dgx, dgy, dgIdle; bool dgMoving, dgFlip;
+    float dgx, dgy, dgIdle, dgStuck; bool dgMoving, dgFlip, dgFollow;
 
     public sealed class Sheep { public int i, x, y; public float px, py, next; public bool right; }
     readonly List<Sheep> sheep = new List<Sheep>();
@@ -280,12 +280,32 @@ public sealed partial class Game : MonoBehaviour
         var pt = new Vector2(px - 0.45f, py + 0.25f); if ((pt - petPos).magnitude > 4) petPos = pt; else petPos += (pt - petPos) * Mathf.Min(1, dt * 4);
     }
 
+    /** Basar walks on the ground like you (water, trees and walls stop him) and only follows when you get away from him:
+     *  once he is near you he stops and sits down wherever he is. Stuck or left far behind, he catches up at your heels. */
     void Dog(float dt)
     {
         int ddx = DIRS[dir, 0], ddy = DIRS[dir, 1];
-        float tx = moving ? px - ddx * 0.95f + (ddy != 0 ? 0.6f : 0) : px + 1.1f, ty = moving ? py - ddy * 0.7f + 0.15f : py + 0.25f;
-        float ox = dgx, oy = dgy, q = Mathf.Min(1, dt * 3); dgx += (tx - dgx) * q; dgy += (ty - dgy) * q;
-        if (Mathf.Abs(px - dgx) + Mathf.Abs(py - dgy) > 5) { dgx = tx; dgy = ty; }
+        float tx = moving ? px - ddx * 0.95f + (ddy != 0 ? 0.6f : 0) : px, ty = moving ? py - ddy * 0.7f + 0.15f : py; // a step behind you, or you when you stand
+        float ox = dgx, oy = dgy, dist = new Vector2(px - dgx, py - dgy).magnitude;
+        dgFollow = dist > (dgFollow ? (moving ? 0.6f : 1.3f) : 2.4f); // starts after you a little way off, keeps up while you walk, stops close by when you stop (so he doesn't fidget)
+        if (dgFollow)
+        {
+            var to = new Vector2(tx - dgx, ty - dgy);
+            if (to.sqrMagnitude > 0.0025f)
+            {
+                var step = to.normalized * Mathf.Clamp(dist * 2.2f, 2f, RUN_SPEED * 1.1f) * dt; if (step.sqrMagnitude > to.sqrMagnitude) step = to;
+                bool over = !FreeAt(dgx + 0.5f, dgy + 0.82f); // already stuck in something: let him walk out of it
+                if (FreeAt(dgx + 0.5f + step.x, dgy + 0.82f, over)) dgx += step.x; // each axis on its own, so he slides along water and walls
+                if (FreeAt(dgx + 0.5f, dgy + 0.82f + step.y, over)) dgy += step.y;
+            }
+        }
+        dgStuck = dgFollow && Mathf.Abs(dgx - ox) + Mathf.Abs(dgy - oy) < 0.002f ? dgStuck + dt : 0;
+        if (dist > 7 || dgStuck > 0.8f) // round the lake or over the fence: he comes to your heels
+        {
+            dgStuck = 0;
+            if (FreeAt(tx + 0.5f, ty + 0.82f) && Los(px + 0.5f, py + 0.82f, tx + 0.5f, ty + 0.82f)) { dgx = tx; dgy = ty; } else { dgx = px; dgy = py; }
+            ox = dgx; oy = dgy;
+        }
         float sp = Mathf.Sqrt((dgx - ox) * (dgx - ox) + (dgy - oy) * (dgy - oy)) / Mathf.Max(dt, 1e-3f);
         dgMoving = sp > 0.4f; dgIdle = dgMoving ? 0 : dgIdle + dt;
         if (IsoOn) { float s0 = ox - oy, s1 = dgx - dgy; if (Mathf.Abs(s1 - s0) > 0.002f) dgFlip = s1 < s0; else if (!dgMoving) dgFlip = px - py + 0.2f < s1; }
@@ -438,7 +458,7 @@ public sealed partial class Game : MonoBehaviour
                 Shadow(px * T, py * T, py); var me = Px.Char(look, dir, z != 0 ? 0 : Frame(moving, running));
                 if (IsoOn) Person(look, dir, 0, px, py, py, z, lastMove, moving, running); else Spr(me, px * T, py * T - 12 - z, false, py);
             }
-            int df = dgMoving ? 1 + (int)(t * 8) % 2 : dgIdle > 1.5f ? 3 : 0;
+            int df = dgMoving ? 1 + (int)(t * 8) % 2 : dgIdle > 0.6f ? 3 : 0;
             Shadow(dgx * T, dgy * T + 1, dgy + 0.05f); if (IsoOn) // Basar: an isometric pixel picture, turned eight ways, walking or sitting (Critter.Picture)
             {
                 float bfx = dgx + 0.5f, bfy = dgy + 1f; var bh = Track("basar", bfx, bfy, Facing(dgFlip), out _);
