@@ -1185,8 +1185,67 @@
         "text": {
           "mn": "Алан гуа эх таван хүүдээ нэг нэг сум өгч “хугал” гэхэд тэд амархан хугалжээ. Дараа нь таван сумыг багцлан өгөхөд хэн ч хугалж чадсангүй. “Та нар салбал нэг сум шиг амархан хугарна. Эв нэгдэлтэй бол хэн ч дийлэхгүй” гэж сургажээ.",
           "en": "Mother Alan Gua gave each of her five sons an arrow to break, and they snapped easily. Then she bound five together and no one could break them. “Apart you break like one arrow. Together no one can defeat you.”"
+        }
+      },
+      {
+        "type": "drag",
+        "stage": 0,
+        "ch": "arrows",
+        "dir": "down",
+        "n": 1,
+        "icon": "✊",
+        "label": {
+          "mn": "Сумаа хугал",
+          "en": "Snap the arrow"
         },
-        "broken": true
+        "title": {
+          "mn": "Нэг сумаа хугал",
+          "en": "Snap one arrow"
+        },
+        "text": {
+          "mn": "Алан гоа эх хүү бүртээ нэг нэг сум өгчээ. Доош нь нугалж хугал!",
+          "en": "Mother Alan Gua gave each son one arrow. Bend it down and snap it!"
+        },
+        "low": {
+          "mn": "Хүчтэй нугал!",
+          "en": "Bend it harder!"
+        },
+        "after": {
+          "mn": "Хялбархан хугарлаа!",
+          "en": "It snapped easily!"
+        }
+      },
+      {
+        "type": "drag",
+        "stage": 0,
+        "ch": "arrows",
+        "broken": true,
+        "set": {
+          "focus": "bundle"
+        },
+        "dir": "down",
+        "n": 3,
+        "icon": "💪",
+        "label": {
+          "mn": "Боодлыг хугал",
+          "en": "Break the bundle"
+        },
+        "title": {
+          "mn": "Одоо таван сумыг хамт хугал",
+          "en": "Now break all five together"
+        },
+        "text": {
+          "mn": "Таван сумыг нэг боодол болгон уяжээ. Хугалж чадах уу? 3 удаа оролдоорой!",
+          "en": "The five arrows are tied in one bundle. Can you break it? Try 3 times!"
+        },
+        "low": {
+          "mn": "Хүчтэй нугал!",
+          "en": "Bend it harder!"
+        },
+        "after": {
+          "mn": "Хугарсангүй! Ах дүүс эв нэгтэй байвал хэн ч хугалж чадахгүй гэж Алан гоа эх сургажээ.",
+          "en": "It won’t break! Alan Gua taught that brothers who stand together can’t be broken by anyone."
+        }
       },
       {
         "type": "pick",
@@ -1271,6 +1330,39 @@
         ]
       },
       {
+        "type": "tap",
+        "stage": 0,
+        "ch": "river",
+        "set": {
+          "layers": 0
+        },
+        "field": "layers",
+        "scale": 3,
+        "n": 3,
+        "drop": [
+          0,
+          60,
+          120,
+          14
+        ],
+        "label": {
+          "mn": "Загас барих",
+          "en": "Catch a fish"
+        },
+        "title": {
+          "mn": "Онон голоос загас барь",
+          "en": "Fish in the Onon river"
+        },
+        "text": {
+          "mn": "Хэцүү үед Тэмүжин дүү нартайгаа Онон голоос загас барьж ээждээ тусалдаг байжээ. Дэгээгээ гол руу 3 удаа чирж тавь!",
+          "en": "In the hard times Temüjin and his brothers fished in the Onon to help their mother. Drag the hook into the river 3 times!"
+        },
+        "after": {
+          "mn": "Сайн байна! Өэлүн эх хүүхдүүдээ зэрлэг жимс, ногоо, загасаар тэжээн өсгөжээ.",
+          "en": "Well done! Mother Hö’elün raised her children on wild fruit, roots and fish."
+        }
+      },
+      {
         "type": "story",
         "ch": "river",
         "title": {
@@ -1280,6 +1372,30 @@
         "text": {
           "mn": "Залуу Тэмүжин Тайчуудын олзонд орсон ч Сорхон шарын гэр бүл түүнийг ноосон тэргэнд нууж аварчээ. Тэрээр анд Жамуха, үнэнч нөхөр Боорчи нартайгаа хүчээ нэгтгэжээ.",
           "en": "Young Temüjin was captured by the Tayichi’ud, but Sorkhan Shira’s family hid him in a cart of wool. He joined forces with his anda Jamukha and loyal friend Bo’orchu."
+        }
+      },
+      {
+        "type": "drag",
+        "stage": 0,
+        "ch": "banner",
+        "dir": "up",
+        "n": 3,
+        "icon": "💪",
+        "label": {
+          "mn": "Тугаа өргө",
+          "en": "Raise the banner"
+        },
+        "title": {
+          "mn": "Есөн хөлт цагаан тугаа мандуул!",
+          "en": "Raise the nine-footed white banner!"
+        },
+        "text": {
+          "mn": "1206 онд Их хуралдайгаар есөн хөлт цагаан тугаа мандуулжээ. Дээш нь 3 удаа түлхэж тугаа өргө!",
+          "en": "At the Great Khuriltai of 1206 the nine-footed white banner was raised. Push up 3 times to raise it!"
+        },
+        "low": {
+          "mn": "Илүү өндөр!",
+          "en": "Higher!"
         }
       },
       {
