@@ -359,7 +359,7 @@ public sealed partial class Game
             if (finished || quiz != null) { base.Draw(g); return; }
             // full screen while a lesson runs: only the close button, the progress dots, the scene and the instruction
             g.Box(new Rect(0, 0, Screen.width, Screen.height), Px.Col(Bg));
-            var sf = Screen.safeArea; float fw = Mathf.Min(sf.width - g.U(16), g.U(1000));
+            var sf = Screen.safeArea; float fw = Mathf.Min(sf.width - g.U(16), g.U(1400)); // wide enough that the picture can fill a desktop screen
             GUILayout.BeginArea(new Rect(sf.x + (sf.width - fw) / 2, Screen.height - sf.yMax + g.U(6), fw, sf.height - g.U(12)));
             GUILayout.BeginHorizontal(); if (GUILayout.Button("←", g.sBtn, GUILayout.Width(g.U(44)), GUILayout.Height(g.U(36)))) g.Later(g.Close); if (GUILayout.Button("?", g.sBtn, GUILayout.Width(g.U(44)), GUILayout.Height(g.U(36)))) g.Later(() => g.Open(new BasarChat(g, Loc.L($"Вуф! Бид “{l["title"].T.mn}” хичээл үзэж байна. Ойлгомжгүй юм байвал асуугаарай!", $"Woof! We’re doing “{l["title"].T.en}”. Ask me anything you’re unsure about!"), null)));
             GUILayout.Label(Dots(), g.sLabel, GUILayout.Height(g.U(36))); GUILayout.FlexibleSpace(); GUILayout.EndHorizontal();
@@ -373,7 +373,8 @@ public sealed partial class Game
             bool run = !finished && quiz == null;
             if (!run) GUILayout.Label(Dots(), g.sLabel);
             draw(live.c, st, Time.time);
-            var rr = live.Show(g, run ? Screen.height / g.UiScale * (Screen.height / g.UiScale < 560 ? 0.38f : 0.46f) : Mathf.Min(260, Screen.height / g.UiScale * 0.42f)); sceneRect = rr;
+            float avail = Screen.height / g.UiScale; // the picture takes all the height but what the tray, instruction and buttons below need
+            var rr = live.Show(g, run ? Mathf.Max(avail * 0.38f, avail - 330) : Mathf.Min(260, avail * 0.42f)); sceneRect = rr;
             var e = Event.current; var s = Step;
             if (s != null && Tp(s) == "zones" && !solved && e.type == EventType.MouseDown && rr.Contains(e.mousePosition))
             {
