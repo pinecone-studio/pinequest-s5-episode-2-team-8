@@ -305,7 +305,8 @@ public sealed partial class Game
             var pr = g.V.Lesson(id); pr.step = Mathf.Max(pr.step, i); g.V.Save();
             turn++;
         }
-        void Success(J s) { Sfx.Good(); if (s.Has("stage")) { st.stage = s["stage"].I; st.sub = s.Has("sub") ? s["sub"].F : 1; } // sub 0: the part is in place but not done yet (folded walls, the crown on the floor…) say = s.Has("after") ? s["after"].T.ToString() : null; solved = true; }
+        // a step with sub 0 leaves its part placed but not done yet (folded walls, the crown on the floor…)
+        void Success(J s) { Sfx.Good(); if (s.Has("stage")) { st.stage = s["stage"].I; st.sub = s.Has("sub") ? s["sub"].F : 1; } say = s.Has("after") ? s["after"].T.ToString() : null; solved = true; }
         void Next(Game g) { i++; Show(g); }
         void StartQuiz(Game g)
         {
