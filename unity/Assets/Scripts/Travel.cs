@@ -31,7 +31,7 @@ public sealed partial class Game
     }
     public static PxCanvas Bolormaa(string face, string pose, int frame, bool open, bool blink) => Folk("bolormaa", face, pose, frame, open, blink);
     static readonly Dictionary<string, PxCanvas> busts = new Dictionary<string, PxCanvas>();
-    /** Someone's dialogue portrait (Tools/art/bust.py): a 56×72 pixel-art head and shoulders, with the same 14 faces as Folk,
+    /** Someone's dialogue portrait (Tools/art/bust.py): a 112×144 pixel-art head and shoulders, with the same 14 faces as Folk,
      *  talking (open) and blinking. Null for someone without one. */
     public static PxCanvas Portrait(string id, string face, bool open, bool blink)
     {

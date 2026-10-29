@@ -1,15 +1,17 @@
 # Dialogue portraits in a JRPG pixel-art style: a head-and-shoulders bust with bold black linework, flat cel shading and a
-# clear, anime-realistic face. Each bust is drawn smooth at a high resolution (on a 112×144 grid of units), then reduced to
-# 56×72 pixels with a limited palette, and the linework is put back as crisp black pixels.
+# clear, anime-realistic face. Each bust is drawn smooth at a high resolution (on a 112×144 grid of units), then reduced
+# to the dialogue frame size with a limited palette, and the linework is put back as crisp black pixels.
 import math
+import os
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 UW, UH = 112, 144          # drawing units
-PW, PH = 56, 72            # the finished portrait in pixels
-K = 8                      # hi-res pixels per unit (the reduction is K*UW/PW = 16 to 1)
+PW, PH = 112, 144          # dialogue portrait pixels, rendered at the displayed size
+K = 8                      # hi-res pixels per unit
 INK = (26, 16, 20)
+REFERENCE = os.path.join(os.path.dirname(__file__), 'reference', 'bolormaa-narration.png')
 
 
 def rgb(h): h = h.lstrip('#'); return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
@@ -245,6 +247,30 @@ def bust(c, expr='happy', talk=0, blink=False):
     return finish(cv)
 
 
+def bolormaa_reference():
+    """Fit the supplied Bolormaa design to one dialogue frame without changing its colors or pixel edges."""
+    im = Image.open(REFERENCE).convert('RGBA')
+    w, h = im.size; fit_h = round(w * PH / PW); y = max(0, (h - fit_h) // 2)
+    return im.crop((0, y, w, y + fit_h)).resize((PW, PH), Image.Resampling.NEAREST)
+
+
+def bolormaa_frame(base, talk, blink):
+    """Use the exact reference portrait and add only the small mouth/eyelid changes needed for dialogue animation."""
+    frame = base.copy(); d = ImageDraw.Draw(frame)
+    skin = base.getpixel((44, 70)); ink = rgb('#08060a') + (255,)
+    if blink:
+        d.polygon([(39, 68), (43, 66), (51, 66), (58, 68), (59, 71), (55, 74), (45, 74), (40, 72)], fill=skin)
+        d.polygon([(71, 66), (75, 64), (82, 64), (88, 66), (89, 69), (85, 72), (77, 72), (72, 70)], fill=skin)
+        d.line([(40, 70), (45, 67), (51, 67), (58, 70)], fill=ink, width=2)
+        d.line([(72, 68), (77, 65), (82, 65), (88, 68)], fill=ink, width=2)
+    if talk:
+        d.polygon([(61, 92), (64, 90), (77, 90), (80, 93), (77, 97), (68, 99), (63, 96)], fill=skin)
+        d.ellipse((65, 92, 78, 98), fill=rgb('#7e3437') + (255,), outline=ink, width=1)
+        d.line([(67, 93), (75, 93)], fill=(255, 239, 224, 255), width=2)
+        d.line([(68, 97), (75, 97)], fill=(208, 105, 103, 255), width=1)
+    return frame
+
+
 WARM, TAN, BROWN, LIGHT = ('#eaa77c', '#c9805a'), ('#d9986c', '#b87850'), ('#c08458', '#9a6440'), ('#f2b890', '#d48e68')
 DARK, GREY = ('#2e170e', '#4a2818', '#6e3e26'), ('#8a8690', '#c4c0c8', '#ecebf0')
 BLACKH = ('#1c1014', '#2e1c22', '#4a3440')
@@ -271,7 +297,11 @@ def main():
     out = os.environ.get('ART_OUT', os.path.join(root, 'Art')); prev = sys.argv[1] if len(sys.argv) > 1 else None
     demo = []
     for pid, c in PEOPLE.items():
-        frames = [bust(c, e, talk, blink) for e in FACES for (talk, blink) in ((0, False), (1, False), (0, True), (1, True))]
+        states = [(e, talk, blink) for e in FACES for (talk, blink) in ((0, False), (1, False), (0, True), (1, True))]
+        frames = [bust(c, e, talk, blink) for e, talk, blink in states]
+        if pid == 'bolormaa':
+            base = bolormaa_reference()
+            frames = [bolormaa_frame(base, talk, blink) for _expr, talk, blink in states]
         sh = Image.new('RGBA', (PW * 4, PH * len(FACES)))
         for i, im in enumerate(frames): sh.paste(im, ((i % 4) * PW, (i // 4) * PH))
         sh.save(os.path.join(out, f'bust_{pid}.png.bytes'), 'PNG', optimize=True)
