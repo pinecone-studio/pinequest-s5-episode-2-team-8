@@ -18,7 +18,7 @@ const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-voice-'));
 const unitDir = mkdtempSync(join(tmpdir(), 'naadamy-voice-unit-'));
 const env = { ...process.env, PORT: '0', DATA_DIR: dataDir, RENDER: 'true', VOICE_ON_DISK: 'true', VOICE_MAX_CLIPS: '3', VOICE_MAX_MB: '1' };
 for (const key of ['DATABASE_URL', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_VOICE_BUCKET']) env[key] = '';
-const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
+const server = spawn(process.execPath, [(process.env.NAADAMY_SERVER || join(root, 'server', 'server.js'))], { env, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
 const port = await new Promise((res, rej) => { server.on('message', (m) => m.port && res(m.port)); server.on('exit', (c) => rej(new Error('server exited ' + c))); setTimeout(() => rej(new Error('server did not start')), 8000); });
 const results = [];
 const ok = (label) => results.push('✓ ' + label);

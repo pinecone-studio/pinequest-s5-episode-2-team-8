@@ -15,7 +15,7 @@ const dataDir = mkdtempSync(join(tmpdir(), 'naadamy-hardening-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fails = [], ok = (c, m) => { if (c) console.log('✓ ' + m); else { console.log('✗ ' + m); fails.push(m); } };
 
-const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, DATABASE_URL: '' }, stdio: ['ignore', 'ignore', 'inherit', 'ipc'] });
+const server = spawn(process.execPath, [(process.env.NAADAMY_SERVER || join(root, 'server', 'server.js'))], { env: { ...process.env, PORT: '0', DATA_DIR: dataDir, DATABASE_URL: '' }, stdio: ['ignore', 'ignore', 'inherit', 'ipc'] });
 const port = await new Promise((resolveP, reject) => {
   server.on('message', (m) => m.port && resolveP(m.port));
   server.once('exit', (c) => reject(new Error('server exited ' + c)));

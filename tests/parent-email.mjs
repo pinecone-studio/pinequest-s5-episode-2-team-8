@@ -311,7 +311,7 @@ try {
   ok("without RESEND_API_KEY set-email answers 'email-off' and nothing is sent");
 
   // ---- the real server: routes are wired, and with no key the feature is off
-  const server = spawn(process.execPath, [join(root, 'server', 'server.js')], { env: { ...process.env, PORT: '0', DATA_DIR: serverDir, RENDER: 'true', RESEND_API_KEY: '' }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
+  const server = spawn(process.execPath, [(process.env.NAADAMY_SERVER || join(root, 'server', 'server.js'))], { env: { ...process.env, PORT: '0', DATA_DIR: serverDir, RENDER: 'true', RESEND_API_KEY: '' }, stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });
   try {
     const port = await new Promise((res, rej) => { server.on('message', (m) => m.port && res(m.port)); server.on('exit', (c) => rej(new Error('server exited ' + c))); setTimeout(() => rej(new Error('server did not start')), 8000); });
     const base = `http://localhost:${port}`;
