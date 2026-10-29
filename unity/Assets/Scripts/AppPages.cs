@@ -4,7 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Collections;
 using UnityEngine;
+using UnityEngine.Networking;
 
 public sealed partial class Game
 {
@@ -469,16 +471,143 @@ public sealed partial class Game
 
     // ================================================================ the family memory book: elders' voices, kept on this device
     static string MemDir { get { string d = Path.Combine(Application.persistentDataPath, "memories"); Directory.CreateDirectory(d); return d; } }
+    /** Voice clips kept on the server for the family (docs/PROTOCOL.md, "Voice clips"). Everything is best effort: with no family,
+     *  no network or no storage on the server the clip simply stays on this device. */
+    static class VoiceSync
+    {
+        public static readonly Dictionary<string, string> state = new Dictionary<string, string>(); // memory id -> "busy" | "fail" | "local" | "dl"
+        public static HashSet<string> remote; // ids the server listed, null until it answered
+        public static bool local;             // the server can't be used right now: say "this device only", quietly
+        static readonly List<Memory> queue = new List<Memory>(); static bool sending; // one upload at a time, in order
+        static string Base(Game g, SaveData me)
+        {
+            string s = (Family.ServerOf(g, me) ?? "").Trim().TrimEnd('/'); if (s == "") return null;
+            if (!s.StartsWith("http")) s = Family.SCHEME + s; return s + "/api/voice";
+        }
+        static UnityWebRequest Req(Game g, SaveData me, string url, string method, string pin = null)
+        {
+            var r = new UnityWebRequest(url, method) { downloadHandler = new DownloadHandlerBuffer(), timeout = 120 }; // a 13 MB clip on a slow line
+            r.SetRequestHeader("x-family", g.App.familyCode ?? ""); r.SetRequestHeader("x-player", me.id); r.SetRequestHeader("x-ticket", me.ticket);
+            if (!string.IsNullOrEmpty(pin)) r.SetRequestHeader("x-pin", pin);
+            return r;
+        }
+        /** The JSON answer, or { ok: false, reason: "offline" }; a clip body (not JSON) counts as ok. */
+        static J Answer(UnityWebRequest r, int max = 4096)
+        {
+            string text = r.downloadHandler != null && r.downloadHandler.data != null && r.downloadHandler.data.Length < max ? r.downloadHandler.text : "";
+            if (!string.IsNullOrEmpty(text) && text.TrimStart().StartsWith("{")) { try { var a = J.Parse(text); if (a.IsObject) return a; } catch (Exception) { } }
+            return J.Parse(r.result == UnityWebRequest.Result.Success ? "{\"ok\":true}" : "{\"ok\":false,\"reason\":\"offline\"}");
+        }
+        /** Reasons that mean "this device only" (nothing to retry by hand). */
+        static bool Quiet(string why) => why == "offline" || why == "no-server" || why == "storage-off" || why == "storage" || why == "no-family" || why == "identity";
+        public static IEnumerator Sync(Game g)
+        {
+            local = false; foreach (var k in state.Where(kv => kv.Value == "local").Select(kv => kv.Key).ToList()) state.Remove(k);
+            var me = Family.Member(g); string b = me == null ? null : Base(g, me);
+            if (b == null) { local = true; yield break; }
+            using (var r = Req(g, me, b, "GET"))
+            {
+                yield return r.SendWebRequest(); var a = Answer(r, 1 << 20); // the list grows with the clips: no 4 KB cap here
+                if (a["ok"].B && !a.Has("clips")) a = J.Parse("{\"ok\":false,\"reason\":\"offline\"}"); // a cut answer is no list: never take it as "the server has nothing"
+                if (!a["ok"].B) { if (Quiet(a["reason"].S)) local = true; yield break; }
+                remote = new HashSet<string>(); foreach (var c in a["clips"]) remote.Add(c["id"].S);
+            }
+            foreach (var id in g.App.voiceDel.ToList()) { if (remote.Contains(id)) yield return g.StartCoroutine(Delete(g, id, null, true)); else g.App.voiceDel.Remove(id); }
+            bool save = false;
+            foreach (var m in g.App.memories.ToList())
+            {
+                if (string.IsNullOrEmpty(m.audio) || m.cloud == "x") continue; // "x": the server refused it for good (too long, not a recording)
+                if (remote.Contains(m.id)) { if (m.cloud != "up") { m.cloud = "up"; save = true; } }
+                else if (File.Exists(Path.Combine(MemDir, m.audio)) && !state.ContainsKey(m.id)) { if (m.cloud != "") { m.cloud = ""; save = true; } Upload(g, m); }
+            }
+            if (save) g.App.Save();
+        }
+        /** Puts the clip in line to be sent; the clips go one by one. */
+        public static void Upload(Game g, Memory m)
+        {
+            if (string.IsNullOrEmpty(m.audio) || m.cloud == "x" || state.ContainsKey(m.id) || queue.Contains(m)) return;
+            queue.Add(m); if (!sending) g.StartCoroutine(Send(g));
+        }
+        static IEnumerator Send(Game g)
+        {
+            sending = true;
+            while (queue.Count > 0)
+            {
+                var m = queue[0]; int tries = 0;
+                while (true)
+                {
+                    string path = Path.Combine(MemDir, m.audio);
+                    var me = Family.Member(g); string b = me == null ? null : Base(g, me);
+                    if (!File.Exists(path) || b == null || !g.App.memories.Contains(m)) { state.Remove(m.id); break; } // deleted meanwhile, or no family any more
+                    state[m.id] = "busy"; string why = null;
+                    using (var r = Req(g, me, b + "/" + m.id, "PUT"))
+                    {
+                        r.uploadHandler = new UploadHandlerRaw(File.ReadAllBytes(path)) { contentType = "audio/wav" };
+                        yield return r.SendWebRequest(); var a = Answer(r);
+                        if (a["ok"].B) { state.Remove(m.id); m.cloud = "up"; remote?.Add(m.id); g.App.Save(); break; }
+                        why = a["reason"].S;
+                    }
+                    if (why == "busy" && ++tries < 6) { yield return new WaitForSecondsRealtime(5 * tries); continue; } // the server is taking another clip: wait our turn
+                    if (why == "too-big" || why == "not-wav" || why == "invalid") { state.Remove(m.id); m.cloud = "x"; g.App.Save(); break; } // trying again won't help
+                    state[m.id] = Quiet(why) ? "local" : "fail"; break;
+                }
+                queue.Remove(m);
+            }
+            sending = false;
+        }
+        /** Fetches a clip this device doesn't have and caches it in MemDir; done(true) when it is there. */
+        public static IEnumerator Download(Game g, Memory m, Action<bool> done)
+        {
+            var me = Family.Member(g); string b = me == null ? null : Base(g, me);
+            if (b == null) { done(false); yield break; }
+            state[m.id] = "dl"; bool ok = false;
+            using (var r = Req(g, me, b + "/" + m.id, "GET"))
+            {
+                yield return r.SendWebRequest();
+                if (r.result == UnityWebRequest.Result.Success && r.downloadHandler.data != null && r.downloadHandler.data.Length > 44) { try { File.WriteAllBytes(Path.Combine(MemDir, m.audio), r.downloadHandler.data); ok = true; } catch (Exception) { } }
+            }
+            state.Remove(m.id); done(ok);
+        }
+        /** Deletes the server's copy. If it wants the family PIN (the clip is another child's), the PinModal asks once. */
+        public static IEnumerator Delete(Game g, string id, string pin = null, bool later = false)
+        {
+            var me = Family.Member(g); string b = me == null ? null : Base(g, me); if (b == null) { Later(g, id); yield break; }
+            string sent = pin ?? Family.pin;
+            using (var r = Req(g, me, b + "/" + id, "DELETE", sent))
+            {
+                yield return r.SendWebRequest(); var a = Answer(r); string why = a["reason"].S;
+                if (a["ok"].B || why == "no-clip") { remote?.Remove(id); if (g.App.voiceDel.Remove(id)) g.App.Save(); if (a["ok"].B && !string.IsNullOrEmpty(sent)) Family.pin = sent; }
+                else if (Quiet(why) || why == "busy") Later(g, id); // offline: try again at the next sync
+                else if (later) { if (g.App.voiceDel.Remove(id)) g.App.Save(); } // a retry that wants the PIN: don't pop a window during a sync
+                else if (why == "pin" && string.IsNullOrEmpty(sent)) g.Later(() => g.Open(new PinModal(Loc.L("Том хүний ПИН код", "Grown-up PIN"), Loc.L("Энэ бичлэг бусдынх. Серверээс устгахын тулд ПИН кодоо оруулаарай:", "This clip is someone else's. Enter the PIN to delete it from the server:"), p => g.StartCoroutine(Delete(g, id, p)))));
+                else if (why == "pin" || why == "pin-locked" || why == "needs-pin") { Family.pin = ""; g.Later(() => g.Toast(Family.Why(a))); }
+            }
+        }
+        static void Later(Game g, string id) { if (!g.App.voiceDel.Contains(id)) { g.App.voiceDel.Add(id); g.App.Save(); } }
+        /** The small mark under a memory with a voice clip, or null. */
+        public static string Mark(Game g, Memory m)
+        {
+            if (string.IsNullOrEmpty(m.audio)) return null;
+            state.TryGetValue(m.id, out var s);
+            if (m.cloud == "up") return Loc.L("√ Гэр бүлийн сервер дээр хадгалагдсан", "√ Saved for the family");
+            if (m.cloud == "x") return Loc.L("Сервер хүлээж авсангүй (хэт урт). Зөвхөн энэ төхөөрөмж дээр хадгалагдсан", "The server can't take it (too long): saved on this device only");
+            if (s == "busy") return Loc.L("… Сервер рүү илгээж байна", "… Sending to the family");
+            if (s == "fail") return Loc.L("! Илгээж чадсангүй", "! Could not send");
+            if (local || s == "local" || string.IsNullOrEmpty(g.App.familyCode)) return Loc.L("Зөвхөн энэ төхөөрөмж дээр хадгалагдсан", "Saved on this device only");
+            return Loc.L("… Илгээхийг хүлээж байна", "… Waiting to send");
+        }
+    }
     sealed class MemoriesPage : Page
     {
-        AudioSource player; string playing;
+        AudioSource player; string playing; bool started, closed;
         protected override string Title => Loc.L("Гэр бүлийн дурсамжийн ном", "Family memory book");
         protected override void Body(Game g)
         {
+            if (!started) { started = true; g.Later(() => g.StartCoroutine(VoiceSync.Sync(g))); }
             GUILayout.BeginVertical(g.sPanel);
             g.Text(Loc.L("Эмээ, өвөөгийн дуу хоолой, үлгэр, амьдралын сургамжийг үүрд хадгал. Үүнийг ямар ч хиймэл оюун орлож чадахгүй.", "Keep your grandparents' voices, stories and life lessons forever. No AI can replace this."));
             if (g.Btn(Loc.L("Шинэ дурсамж бичих", "Record a new memory"), true, 48)) g.Later(() => g.Open(new MemoryForm()));
-            g.Small(Loc.L("Бүх бичлэг зөвхөн энэ төхөөрөмж дээр хадгалагдана.", "Recordings are stored only on this device."));
+            g.Small(string.IsNullOrEmpty(g.App.familyCode) || VoiceSync.local ? Loc.L("Бүх бичлэг зөвхөн энэ төхөөрөмж дээр хадгалагдана.", "Recordings are stored only on this device.") : Loc.L("Бичлэгүүд энэ төхөөрөмж болон гэр бүлийн сервер дээр хадгалагдана.", "Recordings are kept on this device and on the family's server."));
             GUILayout.EndVertical();
             var list = g.App.memories.OrderByDescending(m => m.ts).ToList();
             if (list.Count == 0) g.Text(Loc.L("Одоохондоо дурсамж алга. Эмээ, өвөөгөөсөө анхны түүхээ асуугаарай!", "No memories yet. Ask your grandparents for the first story!"));
@@ -488,21 +617,27 @@ public sealed partial class Game
                 GUILayout.BeginHorizontal(); g.IconAt(Px.Face(m.whoFace), 36); GUILayout.BeginVertical(); GUILayout.Label("<b>" + m.who + "</b>", g.sLabel); g.Small(DateTimeOffset.FromUnixTimeMilliseconds(m.ts).LocalDateTime.ToString("yyyy.MM.dd")); GUILayout.EndVertical(); GUILayout.EndHorizontal();
                 GUILayout.Label("<i>“" + m.prompt + "”</i>", g.sLabel);
                 if (!string.IsNullOrEmpty(m.text)) g.Text(m.text);
+                string mark = VoiceSync.Mark(g, m); if (mark != null) g.Small(mark);
                 GUILayout.BeginHorizontal();
-                if (!string.IsNullOrEmpty(m.audio) && File.Exists(Path.Combine(MemDir, m.audio)) && g.Btn(playing == m.id ? Loc.L("■ Зогсоох", "■ Stop") : Loc.L("► Сонсох", "► Listen"))) { var mm = m; g.Later(() => Play(g, mm)); }
-                if (g.Btn(Loc.L("Устгах", "Delete"), false, 34)) { var mm = m; g.Later(() => g.Open(new ConfirmModal(Loc.L("Энэ дурсамжийг устгах уу?", "Delete this memory?"), Loc.L("Буцаах боломжгүй.", "This cannot be undone."), () => { g.App.memories.Remove(mm); if (!string.IsNullOrEmpty(mm.audio)) File.Delete(Path.Combine(MemDir, mm.audio)); g.App.Save(); }))); }
+                bool onServer = VoiceSync.remote != null && VoiceSync.remote.Contains(m.id);
+                if (!string.IsNullOrEmpty(m.audio) && (File.Exists(Path.Combine(MemDir, m.audio)) || onServer) && g.Btn(playing == m.id ? Loc.L("■ Зогсоох", "■ Stop") : Loc.L("► Сонсох", "► Listen"))) { var mm = m; g.Later(() => Play(g, mm)); }
+                if (VoiceSync.state.TryGetValue(m.id, out var cs) && cs == "fail" && g.Btn(Loc.L("↻ Дахин илгээх", "↻ Retry"), false, 34)) { var mm = m; g.Later(() => { VoiceSync.state.Remove(mm.id); VoiceSync.Upload(g, mm); }); }
+                if (g.Btn(Loc.L("Устгах", "Delete"), false, 34)) { var mm = m; g.Later(() => g.Open(new ConfirmModal(Loc.L("Энэ дурсамжийг устгах уу?", "Delete this memory?"), Loc.L("Буцаах боломжгүй.", "This cannot be undone."), () => { g.App.memories.Remove(mm); if (!string.IsNullOrEmpty(mm.audio)) { File.Delete(Path.Combine(MemDir, mm.audio)); VoiceSync.state.Remove(mm.id); if (mm.cloud == "up" || (VoiceSync.remote != null && VoiceSync.remote.Contains(mm.id))) g.StartCoroutine(VoiceSync.Delete(g, mm.id)); } g.App.Save(); }))); }
                 GUILayout.EndHorizontal();
                 GUILayout.EndVertical();
             }
         }
         void Play(Game g, Memory m)
         {
+            if (closed) return; // a download that finished after the page closed
             if (player == null) player = g.gameObject.AddComponent<AudioSource>();
             if (playing == m.id) { player.Stop(); playing = null; return; }
-            var clip = Wav.Load(Path.Combine(MemDir, m.audio)); if (clip == null) return;
+            string path = Path.Combine(MemDir, m.audio);
+            if (!File.Exists(path)) { if (!VoiceSync.state.ContainsKey(m.id)) g.StartCoroutine(VoiceSync.Download(g, m, ok => g.Later(() => { if (ok) Play(g, m); else g.Toast(Loc.L("Бичлэгийг татаж чадсангүй.", "Could not download the recording.")); }))); return; }
+            var clip = Wav.Load(path); if (clip == null) return;
             player.clip = clip; player.Play(); playing = m.id;
         }
-        public override void Closed(Game g) { if (player != null) { player.Stop(); Destroy(player); } }
+        public override void Closed(Game g) { closed = true; if (player != null) { player.Stop(); Destroy(player); } player = null; playing = null; }
     }
     sealed class MemoryForm : Modal
     {
@@ -562,7 +697,7 @@ public sealed partial class Game
             if (text.Trim() == "" && samples == null) { g.Toast(Loc.L("Бичвэр эсвэл дуу хоолой нэмээрэй.", "Add text or a voice recording.")); return; }
             var f = g.App.family[Mathf.Clamp(who, 0, g.App.family.Count - 1)]; string id = "m" + SaveData.NowMs(); string audio = null;
             if (samples != null) { audio = id + ".wav"; Wav.Save(Path.Combine(MemDir, audio), samples, rec.frequency, rec.channels); }
-            g.App.memories.Add(new Memory { id = id, pid = g.V.id, ts = SaveData.NowMs(), d = SaveData.DayKey(), prompt = Prompts[pi % Prompts.Count].ToString(), who = f.Name.ToString(), whoFace = f.face, text = text.Trim(), audio = audio });
+            var mem = new Memory { id = id, pid = g.V.id, ts = SaveData.NowMs(), d = SaveData.DayKey(), prompt = Prompts[pi % Prompts.Count].ToString(), who = f.Name.ToString(), whoFace = f.face, text = text.Trim(), audio = audio }; g.App.memories.Add(mem); if (audio != null) VoiceSync.Upload(g, mem);
             g.App.familyStars += 5; g.App.Save(); g.Close(); Sfx.Win(); g.Confetti(40); g.CheckAchievements();
             g.Toast(Loc.L("Дурсамж хадгалагдлаа! +5 од", "Memory saved! +5 stars"));
         }
