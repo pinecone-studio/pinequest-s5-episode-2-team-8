@@ -695,20 +695,26 @@
         ]
       },
       {
-        "type": "tap",
+        "type": "drag",
         "stage": 5,
+        "dir": "side",
         "n": 4,
+        "icon": "👐",
         "label": {
-          "mn": "Дулаан боох",
-          "en": "Wrap warm"
+          "mn": "Хөнжлөөр ороох",
+          "en": "Wrap it up"
         },
         "title": {
           "mn": "6. Дулаан боож хонуул",
           "en": "6. Wrap it warm overnight"
         },
         "text": {
-          "mn": "Савыг дээл, хөнжлөөр боож дулаан газар хонуулна.",
-          "en": "Wrap the pot in a deel or blanket and leave it somewhere warm overnight."
+          "mn": "Тогоогоо дээл юм уу хөнжлөөр ороо: зүүн, баруун тийш 4 удаа чирж бүтэн ороогоод, шөнөжин дулаан газар тавина.",
+          "en": "Wrap the pot in a deel or blanket: drag left and right 4 times to wrap it all round, then leave it somewhere warm overnight."
+        },
+        "low": {
+          "mn": "Бүр ороо!",
+          "en": "Wrap it all the way!"
         },
         "after": {
           "mn": "Өглөө боллоо — тараг бэлэн! 🌞",
@@ -805,7 +811,13 @@
         "after": {
           "mn": "Гэрийн дээвэр эсвэл тавиур дээр наранд хатаадаг. Хатуу, амттай ааруул бэлэн!",
           "en": "Dried on the ger roof or a rack in the sun. Crunchy aaruul is ready!"
-        }
+        },
+        "drop": [
+          92,
+          0,
+          26,
+          22
+        ]
       }
     ],
     "family": {
