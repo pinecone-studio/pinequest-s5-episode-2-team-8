@@ -43,9 +43,10 @@ public sealed partial class Game
             allies.Add(new Fighter { kind = "ally", name = "kereit", look = new Look { deel = "red", hat = "loovuuz", skin = "#D9A06E", coat = "gray" }, mounted = true, x = 20, y = 164, hp = 9, max = 9 });
             NextSeg();
         }
+        // the stage draws at most four buttons; rally stays reachable from the keyboard (T) through the KEYS table in Story.cs
         public override (string id, Tx label)[] Buttons => seg == 3
-            ? new[] { ("call", new Tx("Дуудах", "Call")), ("dash", new Tx("Бултах", "Dodge")) }
-            : new[] { ("strike", new Tx("Цохих", "Strike")), ("shoot", new Tx("Сум", "Arrow")), ("dash", new Tx("Бултах", "Dodge")), ("rally", new Tx("Холбоо", "Allies")) };
+            ? new[] { ("call", new Tx("Дуудах", "Call")), ("dash", new Tx("Бултах", "Dodge")), ("roll", new Tx("Эргэх", "Roll")) }
+            : new[] { ("strike", new Tx("Цохих", "Strike")), ("shoot", new Tx("Сум", "Arrow")), ("dash", new Tx("Бултах", "Dodge")), ("roll", new Tx("Эргэх", "Roll")) };
 
         // ---------------------------------------------------------------- the four parts of the fight
         void NextSeg()
@@ -117,18 +118,26 @@ public sealed partial class Game
         {
             hintT += Time.deltaTime;
         }
-        string Hint => seg == 0 && hintT < 26 ? (hintT < 6 ? Loc.L(TouchUI ? "Зүүн талд чирж морио жолоод" : "WASD / сумаар морио жолоод", TouchUI ? "Drag on the left to ride" : "Ride with WASD / the arrow keys")
-            : hintT < 13 ? Loc.L(TouchUI ? "“Цохих”-ыг 3 удаа дараалан дар: 3 дахь нь хүчтэй" : "J / Space: цохих. 3 удаа дараалан дарвал хүчтэй", TouchUI ? "Tap Strike three times: the third blow is strong" : "J / Space: strike. Three in a row is a strong blow")
-            : hintT < 20 ? Loc.L(TouchUI ? "Улаан “!” гарвал “Бултах”-ыг дар" : "Улаан “!” гарвал L / Shift-ээр булт", TouchUI ? "When a red “!” shows, tap Dodge" : "When a red “!” shows, dodge with L / Shift")
-            : Loc.L(TouchUI ? "“Сум”: исгэрэх сумаа хол руу харва" : "K: исгэрэх сумаа харва", TouchUI ? "Arrow: loose a whistling arrow at enemies far away" : "K: loose a whistling arrow")) : null;
+        string Hint => seg == 0 && hintT < 32 ? (hintT < 6 ? Loc.L(TouchUI ? "Зүүн талд чирж морио жолоод" : "WASD / сумаар морио жолоод", TouchUI ? "Drag on the left to ride" : "Ride with WASD / the arrow keys")
+            : hintT < 13 ? Loc.L(TouchUI ? "“Цохих”-ыг 3 удаа дараалан дар: 3 дахь нь хүчтэй" : "E / Space: цохих. 3 удаа дараалан дарвал хүчтэй", TouchUI ? "Tap Strike three times: the third blow is strong" : "E / Space: strike. Three in a row is a strong blow")
+            : hintT < 20 ? Loc.L(TouchUI ? "Улаан “!” гарвал “Бултах”-ыг дар" : "Улаан “!” гарвал Shift-ээр булт", TouchUI ? "When a red “!” shows, tap Dodge" : "When a red “!” shows, dodge with Shift")
+            : hintT < 26 ? Loc.L(TouchUI ? "“Сум”: исгэрэх сумаа хол руу харва" : "R: исгэрэх сумаа харва", TouchUI ? "Arrow: loose a whistling arrow at enemies far away" : "R: loose a whistling arrow")
+            : Loc.L(TouchUI ? "“Эргэх”: удаан бултаад илүү удаан хамгаалагдана" : "C: удаан эргэж бултна, илүү удаан хамгаалагдана", TouchUI ? "Roll: a longer tumble with a longer safety window" : "C: a longer tumble with a longer safety window")) : null;
 
         void PlayerTick(StoryScene s, float dt, float t)
         {
             var m = s.Move(); me.iframe -= dt; me.cd -= dt; me.st += dt; me.comboT -= dt;
             arrowT += dt; if (arrowT > 1.3f && arrows < 8) { arrowT = 0; arrows++; }
             if (me.knock != 0) { me.x += me.knock * dt; me.knock = Mathf.MoveTowards(me.knock, 0, 300 * dt); }
-            bool busy = me.state == "strike" || me.state == "dash";
+            bool busy = me.state == "strike" || me.state == "dash" || me.state == "roll";
             if (me.state == "dash") { me.x += me.vx * dt; me.y += me.vy * dt; if (me.st > 0.22f) me.state = "idle"; }
+            else if (me.state == "roll")
+            {
+                // a tumble: longer than a dash, cannot be cancelled, slower lateral speed but a long i-frame window
+                float decel = 1f - Mathf.Clamp01(me.st / 0.48f);
+                me.x += me.vx * decel * dt; me.y += me.vy * decel * dt;
+                if (me.st > 0.48f) me.state = "idle";
+            }
             else if (!busy || me.state == "strike")
             {
                 float sp = me.state == "strike" ? 0.35f : 1;
@@ -160,10 +169,16 @@ public sealed partial class Game
                 }
                 if (s.Pressed("rally") && rally >= 1) Rally(s);
             }
-            if (s.Pressed("dash") && me.state != "dash" && me.cd <= 0.2f)
+            if (s.Pressed("dash") && me.state != "dash" && me.state != "roll" && me.cd <= 0.2f)
             {
                 var d = m.sqrMagnitude > 0.04f ? m.normalized : new Vector2(me.face, 0);
                 me.state = "dash"; me.st = 0; me.vx = d.x * 230; me.vy = d.y * 120; me.iframe = Mathf.Max(me.iframe, 0.32f); me.cd = 0.55f; Sfx.Swish();
+            }
+            // C key: a longer tumble with a bigger i-frame window and a bigger cooldown, cannot interrupt itself
+            if (s.Pressed("roll") && me.state != "roll" && me.state != "dash" && me.cd <= 0.3f)
+            {
+                var d = m.sqrMagnitude > 0.04f ? m.normalized : new Vector2(me.face, 0);
+                me.state = "roll"; me.st = 0; me.vx = d.x * 150; me.vy = d.y * 80; me.iframe = Mathf.Max(me.iframe, 0.5f); me.cd = 0.9f; Sfx.Pop();
             }
         }
         void StrikeHits(StoryScene s)
@@ -368,11 +383,13 @@ public sealed partial class Game
         void DrawFighter(StoryScene s, PxCanvas c, Fighter f, float t)
         {
             bool blink = (t - f.hitT < 0.3f && (int)(t * 30) % 2 == 0) || (f == me && me.iframe > 0 && me.iframe < HURT_I && (int)(t * 16) % 2 == 0);
-            bool moving = f.state == "attack" || f.state == "flee" || f.state == "dash" || f.knock != 0 || (f.state == "idle" && f.kind != "archer");
-            if (f == me) moving = s.Move().sqrMagnitude > 0.02f || f.state == "dash";
+            bool moving = f.state == "attack" || f.state == "flee" || f.state == "dash" || f.state == "roll" || f.knock != 0 || (f.state == "idle" && f.kind != "archer");
+            if (f == me) moving = s.Move().sqrMagnitude > 0.02f || f.state == "dash" || f.state == "roll";
             float x = f.x - camX, y = f.y;
+            // the roll draws a bit closer to the ground: a short vertical tuck during the tumble sells the motion without new art
+            if (f.state == "roll") y -= Mathf.Sin(Mathf.Clamp01(f.st / 0.48f) * Mathf.PI) * 3f;
             if (f.state == "flee") c.Alpha = 0.75f;
-            StoryScene.DrawPerson(c, f.look, x, y, f.Face, moving, f.mounted, t, f.state == "attack" || f.state == "dash", blink);
+            StoryScene.DrawPerson(c, f.look, x, y, f.Face, moving, f.mounted, t, f.state == "attack" || f.state == "dash" || f.state == "roll", blink);
             c.Alpha = 1;
             if (blink) return;
             int hy = Mathf.RoundToInt(y - (f.mounted ? 30 : 18)), hx = Mathf.RoundToInt(x + f.face * 6);

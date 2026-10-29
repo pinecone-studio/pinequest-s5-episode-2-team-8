@@ -193,8 +193,12 @@ public sealed partial class Game
         public bool Pressed(string b) => pressed.Contains(b);
         static readonly Dictionary<string, KeyCode[]> KEYS = new Dictionary<string, KeyCode[]>
         {
-            ["strike"] = new[] { KeyCode.J, KeyCode.Space }, ["shoot"] = new[] { KeyCode.K }, ["dash"] = new[] { KeyCode.L, KeyCode.LeftShift },
-            ["rally"] = new[] { KeyCode.R }, ["act"] = new[] { KeyCode.E, KeyCode.Return }, ["call"] = new[] { KeyCode.E, KeyCode.Return },
+            ["strike"] = new[] { KeyCode.E, KeyCode.Space },           // melee: E (new standard) + Space on keyboards without an E (and advances dialog, same as before)
+            ["shoot"] = new[] { KeyCode.R },                           // arrow: R (new standard)
+            ["dash"] = new[] { KeyCode.LeftShift, KeyCode.RightShift },// Shift still dodges; a short burst with brief i-frames
+            ["roll"] = new[] { KeyCode.C },                            // C rolls: a longer tumble with a long i-frame window and a bigger cooldown
+            ["rally"] = new[] { KeyCode.T },                           // moved off R so Arrow owns R
+            ["act"] = new[] { KeyCode.E, KeyCode.Return }, ["call"] = new[] { KeyCode.E, KeyCode.Return },
             ["hide"] = new[] { KeyCode.H, KeyCode.E }, ["fish"] = new[] { KeyCode.E, KeyCode.Space },
         };
         bool KeyHeld(string b) => KEYS.TryGetValue(b, out var ks) && ks.Any(Input.GetKey);
