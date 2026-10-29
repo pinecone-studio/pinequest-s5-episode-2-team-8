@@ -19,13 +19,9 @@ public static partial class Bodies
         for (int ty = 0; ty < World.H; ty++) for (int tx = 0; tx < World.W; tx++)
         {
             char ch = World.g[ty, tx];
-            if (ch == 'f') Fence(tx, ty);
-            else if (ch == 'r') Rock(tx, ty);
-            else if (ch == 'd') Dock(tx, ty);
+            if (ch == 'd') Dock(tx, ty); // (fences, rocks, flags and trees are pictures, like the buildings: Pictures)
         }
-        Flags();
         foreach (var o in World.objects) if (!PICTURED.Contains(o.kind)) Thing(o);
-        foreach (var t in World.trees) Tree(t.x, t.y, t.pine);
         var mesh = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
         mesh.SetVertices(vs); mesh.SetColors(cs); mesh.SetTriangles(ts, 0); mesh.RecalculateBounds();
         var go = new GameObject("Solid things");
@@ -81,17 +77,19 @@ public static partial class Bodies
         foreach (var (px, py) in new[] { (0.12f, 0.16f), (0.88f, 0.16f), (0.12f, 0.84f), (0.88f, 0.84f) }) Box(tx + px, ty + py, -0.1f, 0.1f, 0.1f, 0.34f, dark);
     }
 
-    static void Flags()
+    /** The 16 flags round the wrestling arena: where flag i stands. */
+    const int FLAGS = 16;
+    static Vector2 FlagAt(int i)
+    {
+        double a = i / (double)FLAGS * Mathf.PI * 2;
+        return new Vector2((float)(World.ARENA_CX + System.Math.Cos(a) * (World.ARENA_RX + 0.6)), (float)(World.ARENA_CY + System.Math.Sin(a) * (World.ARENA_RY + 0.6)));
+    }
+    static void Flag(int i)
     {
         string[] cols = { Px.K.blue, Px.K.red, Px.K.gold, Px.K.white };
-        Color pole = Px.Col(Px.K.woodD);
-        for (int i = 0; i < 16; i++)
-        {
-            double a = i / 16.0 * Mathf.PI * 2;
-            float fx = (float)(World.ARENA_CX + System.Math.Cos(a) * (World.ARENA_RX + 0.6)), fy = (float)(World.ARENA_CY + System.Math.Sin(a) * (World.ARENA_RY + 0.6));
-            Box(fx, fy, 0, 0.07f, 0.07f, 0.95f, pole);
-            Box(fx + 0.17f, fy, 0.66f, 0.3f, 0.04f, 0.24f, Px.Col(cols[i % 4]));
-        }
+        var f = FlagAt(i);
+        Box(f.x, f.y, 0, 0.07f, 0.07f, 0.95f, Px.Col(Px.K.woodD));
+        Box(f.x + 0.17f, f.y, 0.66f, 0.3f, 0.04f, 0.24f, Px.Col(cols[i % 4]));
     }
 
     /** зэл: two posts with the rope sagging between them, where the foals are tied. */
@@ -469,8 +467,9 @@ public static partial class Bodies
     // ---------------------------------------------------------------- isometric pixel pictures
     /** Buildings drawn as isometric pixel art instead of standing in 3D: the same shapes, seen from the camera's angle,
      *  painted into a 16-pixels-per-tile picture with a dark outline and darker lines where one face meets another. */
-    public static readonly HashSet<string> PICTURED = new HashSet<string> { "ger", "shop", "well", "academy", "bleachers", "ovoo", "statue", "board", "uya", "churn", "tulga", "rack", "lantern", "felt" };
-    // (the archery range stays in 3D: it's spread over a field people walk across, which one standing picture can't sort with)
+    public static readonly HashSet<string> PICTURED = new HashSet<string> { "zel", "ger", "shop", "well", "academy", "bleachers", "ovoo", "statue", "board", "uya", "churn", "tulga", "rack", "lantern", "felt" };
+    // (the archery range stays in 3D: it's spread over a field people walk across, which one standing picture can't sort with;
+    // so do the dock's planks, which people walk on)
     static List<(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Color col)> cap;
 
     /** Each pictured building: its picture, and the world point (the middle of its ground) where it stands, facing the camera. */
@@ -487,7 +486,53 @@ public static partial class Bodies
             cap = null;
             list.Add((art, px, py, depth, at));
         }
+        // the fences, rocks, flags and trees, painted like the buildings so they share their outline and shading
+        void AddPicture(System.Action build, Vector3 at) { cap = new List<(Vector3, Vector3, Vector3, Vector3, Color)>(); build(); var (art, px, py, depth) = Paint(cap, at); cap = null; list.Add((art, px, py, depth, at)); }
+        foreach (var run in FenceRuns())
+        {
+            float mx = 0, my = 0; foreach (var (tx, ty) in run) { mx += tx + 0.5f; my += ty + 0.5f; }
+            AddPicture(() => { foreach (var (tx, ty) in run) Fence(tx, ty); }, new Vector3(mx / run.Count, -my / run.Count, 0));
+        }
+        for (int ty = 0; ty < World.H; ty++) for (int tx = 0; tx < World.W; tx++) if (World.g[ty, tx] == 'r') { int x = tx, y = ty; AddPicture(() => Rock(x, y), new Vector3(x + 0.5f, -(y + 0.62f), 0)); }
+        for (int i = 0; i < FLAGS; i++) { int k = i; var f = FlagAt(k); AddPicture(() => Flag(k), new Vector3(f.x, -f.y, 0)); }
+        // trees: a few shapes of each kind painted once and stood up wherever a tree grows (hundreds of trees, a handful of pictures)
+        var shapes = new Dictionary<(bool, int), (PxCanvas art, float px, float py, float[] depth)>();
+        foreach (var t in World.trees)
+        {
+            int v = Mathf.Min(TREE_SHAPES - 1, (int)(Px.Hash(t.x, t.y) * TREE_SHAPES)); var key = (t.pine, v);
+            if (!shapes.TryGetValue(key, out var pic))
+            {
+                cap = new List<(Vector3, Vector3, Vector3, Vector3, Color)>();
+                Tree(v * 5, 0, t.pine); // painted at tile (v·5, 0): only its shape matters, the picture is stood up at each tree
+                pic = Paint(cap, new Vector3(v * 5 + 0.5f, -0.72f, 0)); cap = null;
+                shapes[key] = pic;
+            }
+            list.Add((pic.art, pic.px, pic.py, pic.depth, new Vector3(t.x + 0.5f, -(t.y + 0.72f), 0)));
+        }
         return list;
+    }
+    const int TREE_SHAPES = 4;
+    /** The fence tiles cut into straight runs: each row of fence across, then what is left of each column down. One straight
+     *  picture each, like a wall, so someone in a pen is wholly in front of or behind each side of it. */
+    static List<List<(int x, int y)>> FenceRuns()
+    {
+        var runs = new List<List<(int, int)>>(); var used = new HashSet<(int, int)>();
+        bool F(int x, int y) => World.At(x, y) == 'f';
+        for (int ty = 0; ty < World.H; ty++) for (int tx = 0; tx < World.W; tx++)
+        {
+            if (!F(tx, ty) || F(tx - 1, ty) || !F(tx + 1, ty)) continue; // the start of a row of at least two
+            var run = new List<(int, int)>();
+            for (int x = tx; F(x, ty); x++) { run.Add((x, ty)); used.Add((x, ty)); }
+            runs.Add(run);
+        }
+        for (int tx = 0; tx < World.W; tx++) for (int ty = 0; ty < World.H; ty++)
+        {
+            if (!F(tx, ty) || used.Contains((tx, ty)) || (F(tx, ty - 1) && !used.Contains((tx, ty - 1)))) continue; // the start of what is left of a column
+            var run = new List<(int, int)>();
+            for (int y = ty; F(tx, y) && !used.Contains((tx, y)); y++) { run.Add((tx, y)); used.Add((tx, y)); }
+            runs.Add(run);
+        }
+        return runs;
     }
 
     /** Paints quads (world points) as seen by the isometric camera, at 16 pixels a tile; pivot: where the point at lands in the picture. */
