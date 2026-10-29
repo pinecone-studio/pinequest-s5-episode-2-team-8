@@ -1704,6 +1704,31 @@
         ]
       },
       {
+        "type": "hold",
+        "lo": 0.8,
+        "hi": 0.95,
+        "label": {
+          "mn": "Жигнэх (дараад барина)",
+          "en": "Steam (press and hold)"
+        },
+        "title": {
+          "mn": "Буузаа жигнэ",
+          "en": "Steam the buuz"
+        },
+        "text": {
+          "mn": "Буузаа жигнүүрт хийгээд товчийг дараад барь. Болсон үед (ногоон хэсэгт) тавь. Удаан барьвал ус нь буцлаад асгарна!",
+          "en": "Put the buuz in the steamer. Press and hold, and let go when they’re done (green zone). Too long and the water boils over!"
+        },
+        "over": {
+          "mn": "Ой! Ус нь буцлаад асгарлаа. Дахиад оролдоё.",
+          "en": "Oops! The water boiled over. Try again."
+        },
+        "after": {
+          "mn": "Амттай бууз боллоо! Цагаан сараар айл бүр олон зуун бууз чимхдэг.",
+          "en": "Delicious! At Tsagaan Sar every family makes hundreds of buuz."
+        }
+      },
+      {
         "type": "pick",
         "title": {
           "mn": "Ул боов",
@@ -1739,7 +1764,13 @@
         "after": {
           "mn": "Сондгой тоо өсөлт, сайн сайхныг бэлгэддэг гэдэг.",
           "en": "Odd numbers are said to symbolise growth and good fortune."
-        }
+        },
+        "drop": [
+          18,
+          14,
+          32,
+          34
+        ]
       },
       {
         "type": "tap",

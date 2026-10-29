@@ -250,6 +250,7 @@ public static class Scenes
         int buuz = Js.Round(st.buuz);
         Ell(x, 74, 50, 18, 5, K.white); Ell(x, 74, 50, 16, 4, "#e6f7ff");
         for (int i = 0; i < buuz; i++) { int bx = 62 + (i % 5) * 6, by = 46 + (i / 5) * 4; Blob(x, bx, by, 2, 2, "#fbf3e0", "#c9b893"); P(x, bx, by - 2, "#c9b893"); }
+        if (st.heat || st.over) for (int i = 0; i < 4; i++) { double ph = (t * 8 + i * 5) % 14; Ell(x, 64 + i * 6 + Js.Round(Math.Sin(t * 3 + i)), (int)(44 - ph), 2, 1, A(0.85 - ph / 16)); } // steam while it cooks
         R(x, 92, 34, 6, 12, K.outl); R(x, 93, 35, 4, 10, K.white); R(x, 93, 37, 4, 2, K.blue);
         if ((int)Math.Floor(t * 2) % 2 != 0) P(x, 95, 32, "#ffffff");
     }
