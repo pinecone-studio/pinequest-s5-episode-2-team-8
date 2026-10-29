@@ -559,10 +559,10 @@ public sealed partial class Game
                     GUILayout.BeginHorizontal();
                     for (int c = 0; c < 4; c++)
                     {
-                        int i = r * 4 + c; var rr = GUILayoutUtility.GetRect(g.U(70), g.U(64), GUILayout.ExpandWidth(true));
+                        int i = r * 4 + c; var rr = GUILayoutUtility.GetRect(g.U(70), g.U(72), GUILayout.ExpandWidth(true));
                         if (GUI.Button(rr, "", i == avatar ? g.sSel : g.sTile)) { avatar = i; Sfx.Pop(); }
                         GUI.DrawTexture(new Rect(rr.center.x - g.U(18), rr.y + g.U(4), g.U(36), g.U(36)), g.Tex(Px.Mascot(i)));
-                        GUI.Label(new Rect(rr.x, rr.y + g.U(42), rr.width, g.U(18)), Profiles.MASCOTS[i].name.ToString(), new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = Mathf.RoundToInt(g.U(10.5f)) });
+                        GUI.Label(new Rect(rr.x + g.U(2), rr.y + g.U(40), rr.width - g.U(4), g.U(30)), Profiles.MASCOTS[i].name.ToString(), new GUIStyle(g.sLabel) { alignment = TextAnchor.MiddleCenter, fontSize = Mathf.RoundToInt(g.U(10.5f)) });
                     }
                     GUILayout.EndHorizontal();
                 }

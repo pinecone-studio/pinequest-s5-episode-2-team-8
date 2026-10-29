@@ -228,7 +228,9 @@ public sealed partial class Game
     {
         if (string.IsNullOrEmpty(text)) return;
         var st = new GUIStyle(sPixel) { fontSize = PxSize(size) };
-        var r = new Rect(x - U(150), y - size, U(300), size * 2); float o = Mathf.Max(1, Mathf.Round(PxSize(size) / 8f));
+        float o = Mathf.Max(1, Mathf.Round(PxSize(size) / 8f)), hw = st.CalcSize(new GUIContent(text)).x / 2 + o;
+        if (GUI.matrix.isIdentity && x > 0 && x < Screen.width) x = Mathf.Clamp(x, hw, Mathf.Max(hw, Screen.width - hw)); if (GUI.matrix.isIdentity && y > 0 && y < Screen.height) y = Mathf.Max(y, PxSize(size) * 0.5f + o); // (not while rotated: the race arrow turns round its rider) a name tag at the screen's edge stays whole (one off the screen stays off it)
+        var r = new Rect(x - U(150), y - size, U(300), size * 2);
         st.normal.textColor = new Color(0.17f, 0.12f, 0.18f, alpha);
         foreach (var (dx, dy) in new[] { (-o, 0f), (o, 0f), (0f, -o), (0f, o), (-o, -o), (o, o), (-o, o), (o, -o) }) GUI.Label(new Rect(r.x + dx, r.y + dy, r.width, r.height), text, st);
         st.normal.textColor = new Color(col.r, col.g, col.b, alpha); GUI.Label(r, text, st);
@@ -607,12 +609,12 @@ public sealed partial class Game
         if (dogBubble != null && modal == null)
         {
             float age = Time.time - dogBubble.t0, sl = BackOut(Mathf.Clamp01(age / 0.4f)) * Mathf.Clamp01((12 - age) / 0.4f), cwid = Mathf.Min(300, vw - 20), tW = U(cwid - 46 - 34);
-            string ft = dogBubble.fact.ToString(); float ch = Mathf.Max(U(52), sPopText.CalcHeight(new GUIContent(ft), tW) + U(34));
+            string ft = dogBubble.fact.ToString(); float whoH = sPopWho.CalcHeight(new GUIContent("БАСАР"), tW), ch = Mathf.Max(U(52), sPopText.CalcHeight(new GUIContent(ft), tW) + whoH + U(18));
             var cr = new Rect(U(vw) - (U(cwid) + U(10)) * sl, U(vh - 12 - 86 - 10) - ch, U(cwid), ch);
             GUI.Box(cr, GUIContent.none, sPopBasar);
             var cb = new Rect(cr.x + U(10), cr.y + (ch - U(46)) / 2, U(46), U(46)); GUI.DrawTexture(cb, Tex(Badge("#f7c646"))); GUI.DrawTexture(new Rect(cb.x + U(5), cb.y + U(5), cb.width - U(10), cb.height - U(10)), Tex(Px.BankharFace(1)), ScaleMode.ScaleToFit);
-            GUI.Label(new Rect(cb.xMax + U(12), cr.y + U(4), tW, U(16)), Loc.L("БАСАР", "BASAR"), sPopWho);
-            GUI.Label(new Rect(cb.xMax + U(12), cr.y + U(18), tW, ch - U(24)), ft, sPopText);
+            GUI.Label(new Rect(cb.xMax + U(12), cr.y + U(8), tW, whoH), Loc.L("БАСАР", "BASAR"), sPopWho);
+            GUI.Label(new Rect(cb.xMax + U(12), cr.y + U(8) + whoH, tW, ch - whoH - U(16)), ft, sPopText);
             Ui(cr); if (GUI.Button(cr, GUIContent.none, GUIStyle.none)) Later(() => OpenBasar());
         }
         // bottom middle: your milk and the dairy foods you made. Tap a food to eat it.

@@ -393,8 +393,9 @@ public sealed partial class Game
         {
             float U = g.UiScale, w = Mathf.Min(vw - 20, 760), pic = Mathf.Min(120, vh * 0.26f), pad = 14, tx = pic + pad * 2, tw = w - tx - pad;
             var st = new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(U * 17), wordWrap = true, normal = { textColor = new Color(1, 0.97f, 0.9f) } };
-            float th = st.CalcHeight(new GUIContent(l.text), tw * U) / U, n = l.choices?.Length ?? 0;
-            float h = Mathf.Max(pic * 0.72f + pad, pad + 26 + th + (n > 0 ? 10 + n * 44 : 20) + pad), x = vw / 2 - w / 2, y = vh - h - 10;
+            float th = st.CalcHeight(new GUIContent(l.text), tw * U) / U, n = l.choices?.Length ?? 0, oht = 0;
+            for (int i = 0; i < n; i++) oht += Mathf.Max(38, g.sOpt.CalcHeight(new GUIContent(l.choices[i]), tw * U) / U) + 6; // an answer grows to fit its words
+            float h = Mathf.Max(pic * 0.72f + pad, pad + 26 + th + (n > 0 ? 10 + oht : 20) + pad), x = vw / 2 - w / 2, y = vh - h - 10;
             // a dark box with a gold frame; the portrait stands on its left, a little taller than the box
             g.Box(g.URect(x - 2, y - 2, w + 4, h + 4), Px.Col("#e0b04a")); g.Box(g.URect(x, y, w, h), new Color(0.04f, 0.03f, 0.07f, 0.94f));
             bool talking = l.shown < l.text.Length && (int)(Time.time * 8) % 2 == 0, blink = Time.time % 4.1f < 0.12f;
@@ -410,8 +411,15 @@ public sealed partial class Game
             GUI.Label(g.URect(x + tx, y + pad + 22, tw, th + 4), vis + "<color=#00000000>" + l.text.Substring(vis.Length) + "</color>", st);
             if (n == 0 && l.shown >= l.text.Length) GUI.Label(g.URect(x + w - 30, y + h - 26, 20, 20), (int)(Time.time * 2) % 2 == 0 ? "▼" : "", new GUIStyle(st) { alignment = TextAnchor.MiddleCenter });
             if (n > 0 && l.shown >= l.text.Length)
+            {
+                float oy = y + pad + 26 + th + 10;
                 for (int i = 0; i < n; i++)
-                    if (GUI.Button(g.URect(x + tx, y + pad + 26 + th + 10 + i * 44, tw, 38), l.choices[i], g.sOpt)) { int k = i; g.Later(() => { l.picked = k; l.done = true; Sfx.Tap(); }); }
+                {
+                    float oh = Mathf.Max(38, g.sOpt.CalcHeight(new GUIContent(l.choices[i]), tw * U) / U);
+                    if (GUI.Button(g.URect(x + tx, oy, tw, oh), l.choices[i], g.sOpt)) { int k = i; g.Later(() => { l.picked = k; l.done = true; Sfx.Tap(); }); }
+                    oy += oh + 6;
+                }
+            }
         }
         void DrawCard(Game g, float vw, float vh)
         {

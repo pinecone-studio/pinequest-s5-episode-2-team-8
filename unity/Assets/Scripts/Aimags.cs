@@ -161,7 +161,7 @@ public sealed partial class Game
                     var st = new GUIStyle(got ? g.sPrimary.Clean() : g.sLabel) { alignment = TextAnchor.MiddleCenter, wordWrap = false, fontSize = g.Ts(11) };
                     GUI.Label(new Rect(r.x, r.y + g.U(44), r.width, g.U(20)), "<b>" + a.name + "</b>", st);
                     string sub = got ? DateTimeOffset.FromUnixTimeMilliseconds(g.V.stamps.Find(s => s.k == id).v).LocalDateTime.ToString("yyyy.MM.dd") : open ? Loc.L("Аялах →", "Visit →") : !paid && k == PASS_FREE ? Fmt(PASS_PRICE) : "";
-                    GUI.Label(new Rect(r.x, r.y + g.U(62), r.width, g.U(16)), sub + (home ? " · " + Loc.L("Миний нутаг", "Home") : ""), new GUIStyle(st) { fontSize = g.Ts(9) });
+                    GUI.Label(new Rect(r.x + g.U(2), r.y + g.U(61), r.width - g.U(4), g.U(32)), sub + (home ? " · " + Loc.L("Миний нутаг", "Home") : ""), new GUIStyle(st) { fontSize = g.Ts(9), wordWrap = true }); // a stamped home province wraps to two lines
                     GUI.color = old;
                 }
                 g.PadRow(i + cols - Mathf.Min(order.Count, i + cols), 110, 96);
@@ -300,7 +300,7 @@ public sealed partial class Game
                 g.Box(pv, Px.Col("#c99a5a")); g.Box(new Rect(pv.x + g.U(2), pv.y + g.U(2), pv.width - g.U(4), pv.height - g.U(4)), Px.Col("#a2d8f4"));
                 float chH = g.U(184), chW = chH * 16 / 28f; GUI.DrawTexture(new Rect(pv.center.x - chW - g.U(6), pv.y + g.U(14), chW, chH), g.Tex(Px.Char(look, 0, 0)));
                 GUI.Label(new Rect(pv.center.x + g.U(10), pv.center.y - g.U(26), pv.width / 2 - g.U(16), g.U(28)), V.name, new GUIStyle(g.sTitle) { fontSize = Mathf.RoundToInt(g.U(20)), wordWrap = false });
-                GUI.Label(new Rect(pv.center.x + g.U(10), pv.center.y + g.U(2), pv.width / 2 - g.U(16), g.U(22)), string.Join(" · ", new[] { e?.name.ToString(), Aimags.ById(aimag)?.name.ToString() }.Where(s => !string.IsNullOrEmpty(s))), new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(13)), wordWrap = false });
+                GUI.Label(new Rect(pv.center.x + g.U(10), pv.center.y + g.U(2), pv.width / 2 - g.U(16), g.U(38)), string.Join(" · ", new[] { e?.name.ToString(), Aimags.ById(aimag)?.name.ToString() }.Where(s => !string.IsNullOrEmpty(s))), new GUIStyle(g.sLabel) { fontSize = Mathf.RoundToInt(g.U(13)) });
                 g.Gap(10);
                 GUILayout.Label(Loc.L("Би бол", "I am a"), g.sSmall);
                 int gi = g.Chips(new[] { Loc.L("Хүү", "Boy"), Loc.L("Охин", "Girl") }, look.Girl ? 1 : 0, 70);
