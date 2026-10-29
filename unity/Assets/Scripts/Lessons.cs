@@ -332,7 +332,7 @@ public sealed partial class Game
             if (ty == "hold" && !gaugeOk)
             {
                 gauge += heating ? dt * 0.32f : -dt * 0.04f; gauge = Mathf.Max(0.1f, gauge);
-                if (gauge > 1.02f) { heating = false; gauge = 0.3f; st.over = true; Sfx.Bad(); say = Loc.L("Ой! Сүү халилаа. Дахиад болгоомжтой оролдоё.", "Oops! It boiled over. Try again, carefully."); g.StartCoroutine(OverOff()); }
+                if (gauge > 1.02f) { heating = false; gauge = 0.3f; st.over = true; Sfx.Bad(); say = s.Has("over") ? s["over"].T.ToString() : Loc.L("Ой! Сүү халилаа. Дахиад болгоомжтой оролдоё.", "Oops! It boiled over. Try again, carefully."); g.StartCoroutine(OverOff()); }
                 st.temp = gauge; st.heat = heating;
             }
             if (ty == "timing" && !gaugeOk) { gauge = 0.62f + 0.38f * Mathf.Cos((Time.time - t0) * 1.5f); st.temp = gauge; }
@@ -539,7 +539,7 @@ public sealed partial class Game
             if (s["alt"].B && side == lastSide) { Sfx.Bad(); altMsg = s["altHint"].T.ToString(); return; }
             lastSide = side; tapN++; st.fx = Time.time; altMsg = null;
             string field = s["field"].S; if (field != null) Lessons.SetFloat(st, field, tapN / (float)s["n"].I); else st.sub = tapN / (float)s["n"].I;
-            Sfx.Pop();
+            if (s["tone"].B) Sfx.Chime(); else Sfx.Pop();
             if (tapN >= s["n"].I) Success(s);
         }
         void Done(Game g)
