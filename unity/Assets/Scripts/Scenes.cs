@@ -159,6 +159,15 @@ public static class Scenes
 
     // ------------------------------------------------------------ inside the ger, from above (etiquette)
     public static readonly Dictionary<string, int[]> ZONES = new Dictionary<string, int[]> { ["khoimor"] = new[] { 44, 6, 32, 15 }, ["hearth"] = new[] { 51, 31, 18, 18 }, ["door"] = new[] { 48, 64, 24, 14 }, ["west"] = new[] { 6, 22, 34, 36 }, ["east"] = new[] { 80, 22, 34, 36 } };
+    /** The five animals in the herd picture, to tap. */
+    public static readonly Dictionary<string, int[]> HERD_ZONES = new Dictionary<string, int[]> { ["horse"] = new[] { 2, 36, 28, 24 }, ["cattle"] = new[] { 28, 42, 22, 18 }, ["camel"] = new[] { 50, 36, 22, 26 }, ["sheep"] = new[] { 70, 44, 18, 16 }, ["goat"] = new[] { 88, 42, 18, 16 } };
+    /** What is at canvas pixel (ax, ay) in a lesson's picture, for the "tap the right place" steps. */
+    public static string ZoneAt(string scene, float ax, float ay)
+    {
+        if (scene != "herd") return ZoneAt(ax, ay);
+        foreach (var kv in HERD_ZONES) { var z = kv.Value; if (ax >= z[0] && ax < z[0] + z[2] && ay >= z[1] && ay < z[1] + z[3]) return kv.Key; }
+        return null;
+    }
     public static string ZoneAt(float ax, float ay)
     {
         float d = Mathf.Sqrt((ax - 60) * (ax - 60) + (ay - 40) * (ay - 40));
@@ -254,6 +263,8 @@ public static class Scenes
             i => Goat(90, 46, Bob(i)),
         };
         for (int i = 0; i < Math.Min(n, 5); i++) list[i](i);
+        if (st.hl != null && HERD_ZONES.TryGetValue(st.hl, out var z))
+            R(x, z[0], z[1], z[2], z[3], st.hlBad ? "rgba(225,75,61,.45)" : "rgba(255,230,80," + (0.35 + 0.2 * Math.Sin(t * 6)).ToString("0.00", CultureInfo.InvariantCulture) + ")");
         Dog(x, 98, 62);
     }
     // ------------------------------------------------------------ Tsagaan Sar table (st.buuz, st.layers)
