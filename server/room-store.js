@@ -104,6 +104,8 @@ function cleanFamily(family) {
 const PIN_COUNTS = ['pin', 'join', 'rec'].flatMap((c) => [c + 'Fails', c + 'Until', c + 'Locks', c + 'WrongAt']).concat('pinSetAt');
 const pinOf = (family) => ({ pinHash: family.pinHash, pinSalt: family.pinSalt, recoveryHash: family.recoveryHash, recoverySalt: family.recoverySalt,
   ...Object.fromEntries(PIN_COUNTS.map((key) => [key, family[key]])) });
+const emailDue = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
+const emailOut = (row) => ({ ...(isRecord(row.data) ? row.data : {}), dueAt: emailDue(Number(row.dueAt ?? row.due_at)) });
 const ERASED_KEEP_MS = 30 * 24 * 60 * 60 * 1000; // an erased child's id can't be taken again for 30 days: an old device can't bring it back
 
 /** Takes erased players out of a room's state ({ lots, chat }, changed in place): their ger lots are freed and the chat
@@ -188,10 +190,16 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
   const deviceTicketFile = path.join(dataDir, 'device-tickets.json');
   const erasedFile = path.join(dataDir, 'erased.json');
   const voiceFile = path.join(dataDir, 'voice.json'); // { [family code]: { [memory id]: { size, by, ts } } }
+  const emailFile = path.join(dataDir, 'family-emails.json');
+  const emailSendFile = path.join(dataDir, 'email-sends.json');
   const roomPlayersFile = path.join(dataDir, 'room-players.json');
 
   if (!databaseUrl) {
     const dropVoice = (code) => { const all = readLegacyFile(voiceFile, 'voice clips'); if (Object.hasOwn(all, code)) { delete all[code]; writeIdentityFile(voiceFile, all); } };
+    const dropEmail = (code) => { // a family that goes takes its parent email and links with it
+      const emails = readLegacyFile(emailFile, 'family emails');
+      if (Object.hasOwn(emails, code)) { delete emails[code]; writeIdentityFile(emailFile, emails); }
+    };
     return {
       kind: 'json',
       sharedRealtime: false,
@@ -254,7 +262,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         const outcome = mutate(family);
         if (family && outcome.changed) {
           if (family.members.length) Object.defineProperty(families, code, { value: family, writable: true, configurable: true, enumerable: true });
-          else { delete families[code]; dropVoice(code); } // the last child left: the family's voice clips go with it
+          else { delete families[code]; dropVoice(code); dropEmail(code); } // the last child left: the family's voice clips and parent email go with it
           writeIdentityFile(familyFile, families);
         }
         return outcome.result;
@@ -286,6 +294,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
           fs.renameSync(temporaryFile, dataFile);
         }
         dropVoice(code);
+        dropEmail(code);
         for (const players of Object.values(seen)) if (isRecord(players)) for (const id of ids) delete players[id];
         writeIdentityFile(roomPlayersFile, seen);
         delete families[code];
@@ -318,6 +327,59 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         if (!Object.keys(all[code]).length) delete all[code];
         writeIdentityFile(voiceFile, all);
         return clip;
+      },
+      /** The family's parent email record (its format is parent-email.js's, with `dueAt`) or null. */
+      async getFamilyEmail(code) {
+        const emails = readLegacyFile(emailFile, 'family emails');
+        return FAMILY_CODE.test(code || '') && Object.hasOwn(emails, code) ? emailOut(emails[code]) : null;
+      },
+      /** mutate(record or null, does the family exist) returns { record, token, clearTokens, result }: `record` is saved (null
+       *  deletes it with its links, undefined changes nothing), `clearTokens` forgets its links, `token` ({ hash, kind, until })
+       *  is a new link that finds it (familyEmailToken). */
+      async mutateFamilyEmail(code, mutate) {
+        if (!FAMILY_CODE.test(code || '')) return mutate(null, false).result;
+        const families = readLegacyFile(familyFile, 'families'), emails = readLegacyFile(emailFile, 'family emails');
+        let row = Object.hasOwn(emails, code) ? emails[code] : null;
+        const outcome = mutate(row && emailOut(row), Object.hasOwn(families, code));
+        if (outcome.record === undefined && !outcome.token && !outcome.clearTokens) return outcome.result;
+        if (outcome.record === null || !Object.hasOwn(families, code)) row = null;
+        else if (outcome.record) { const { dueAt, ...data } = outcome.record; row = { data, dueAt: emailDue(dueAt), tokens: row ? row.tokens : {} }; }
+        if (row) {
+          const t = Date.now(), tokens = outcome.clearTokens ? {} : Object.fromEntries(Object.entries(row.tokens || {}).filter(([, k]) => k && k.until > t));
+          if (outcome.token) tokens[outcome.token.hash] = { kind: outcome.token.kind, until: outcome.token.until };
+          Object.defineProperty(emails, code, { value: { ...row, tokens }, writable: true, configurable: true, enumerable: true });
+        } else delete emails[code];
+        writeIdentityFile(emailFile, emails);
+        return outcome.result;
+      },
+      /** The link `hash` (still good at `at`): { code, kind } or null. */
+      async familyEmailToken(hash, at) {
+        for (const [code, row] of Object.entries(readLegacyFile(emailFile, 'family emails'))) {
+          const k = row && row.tokens && Object.hasOwn(row.tokens, hash) ? row.tokens[hash] : null;
+          if (k && k.until > at) return { code, kind: k.kind };
+        }
+        return null;
+      },
+      /** Counts one confirm mail on every key of `limits` ([{ key, max }]) unless one of them already has `max` in the
+       *  `windowMs` before `at`: { ok } or { ok: false, wait } (ms until it can). Older counts are forgotten. */
+      async takeEmailSend(limits, at, windowMs) {
+        const sends = readLegacyFile(emailSendFile, 'email sends'), out = {};
+        for (const [key, list] of Object.entries(sends)) { const recent = Array.isArray(list) ? list.filter((t) => t > at - windowMs) : []; if (recent.length) out[key] = recent; }
+        const full = limits.filter((l) => Object.hasOwn(out, l.key) && out[l.key].length >= l.max);
+        if (!full.length) for (const l of limits) Object.defineProperty(out, l.key, { value: [...(Object.hasOwn(out, l.key) ? out[l.key] : []), at], writable: true, configurable: true, enumerable: true });
+        writeIdentityFile(emailSendFile, out);
+        return full.length ? { ok: false, wait: Math.max(...full.map((l) => Math.min(...out[l.key]))) + windowMs - at } : { ok: true };
+      },
+      /** Takes one family whose report is due at `at` and moves its due time to `next` in the same write, so it is sent
+       *  once: { code, record } or null. */
+      async claimFamilyReport(at, next) {
+        const emails = readLegacyFile(emailFile, 'family emails');
+        const code = Object.keys(emails).find((c) => isRecord(emails[c]) && emailDue(emails[c].dueAt) > 0 && emails[c].dueAt <= at);
+        if (!code) return null;
+        const record = emailOut(emails[code]);
+        emails[code].dueAt = next;
+        writeIdentityFile(emailFile, emails);
+        return { code, record };
       },
       async getAccount(id, initial = {}, inventorySeed = {}) {
         if (!PLAYER_ID.test(id || '')) throw new Error('Invalid player id for wallet');
@@ -537,6 +599,28 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
             erased_at timestamptz NOT NULL DEFAULT now()
           )
         `);
+        // the grown-up's email for the weekly report (parent-email.js) and its confirm/stop links (hashed); both go with the family
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_family_emails (
+            code text PRIMARY KEY REFERENCES naadamy_families (code) ON DELETE CASCADE,
+            data jsonb NOT NULL,
+            due_at bigint NOT NULL DEFAULT 0,
+            updated_at timestamptz NOT NULL DEFAULT now()
+          )
+        `);
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS naadamy_email_tokens (
+            hash text PRIMARY KEY,
+            code text NOT NULL REFERENCES naadamy_family_emails (code) ON DELETE CASCADE,
+            kind text NOT NULL,
+            until bigint NOT NULL
+          )
+        `);
+        // confirm mails sent, by hashed key (address, sender address, all), for the daily caps; older than a day is deleted
+        await client.query('CREATE TABLE IF NOT EXISTS naadamy_email_sends (key text NOT NULL, at bigint NOT NULL)');
+        await client.query('CREATE INDEX IF NOT EXISTS naadamy_email_sends_key_idx ON naadamy_email_sends (key, at)');
+        await client.query('CREATE INDEX IF NOT EXISTS naadamy_family_emails_due_idx ON naadamy_family_emails (due_at) WHERE due_at > 0');
+        await client.query('CREATE INDEX IF NOT EXISTS naadamy_email_tokens_code_idx ON naadamy_email_tokens (code)');
         await client.query(`
           CREATE TABLE IF NOT EXISTS naadamy_voice (
             family_code text NOT NULL,
@@ -563,7 +647,7 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         // Supabase serves every public table over its REST API to anyone with the project's anon key. Row level security with
         // no policies closes that door; the server connects as the tables' owner, which RLS does not apply to.
         for (const table of ['naadamy_rooms', 'naadamy_players', 'naadamy_identities', 'naadamy_wallets', 'naadamy_wallet_ops', 'naadamy_player_progress',
-          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased', 'naadamy_voice', 'naadamy_room_players']) {
+          'naadamy_player_tickets', 'naadamy_families', 'naadamy_erased', 'naadamy_family_emails', 'naadamy_email_tokens', 'naadamy_email_sends', 'naadamy_voice', 'naadamy_room_players']) {
           await client.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
         }
         for (const [code, state] of Object.entries(legacy)) {
@@ -851,10 +935,80 @@ function createRoomStore({ dataDir, databaseUrl = readDatabaseUrl(), Pool: PoolO
         client.release();
       }
     },
+    /** As in JSON mode. The email rows go with the family row (ON DELETE CASCADE): erasing it or taking out its last child. */
+    async getFamilyEmail(code) {
+      if (!FAMILY_CODE.test(code || '')) return null;
+      const result = await pool.query('SELECT data, due_at FROM naadamy_family_emails WHERE code = $1', [code]);
+      return result.rows[0] ? emailOut(result.rows[0]) : null;
+    },
+    async mutateFamilyEmail(code, mutate) {
+      if (!FAMILY_CODE.test(code || '')) return mutate(null, false).result;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        // the family row first, as mutateFamily and eraseFamily lock it, so they never wait on each other
+        const family = await client.query('SELECT 1 FROM naadamy_families WHERE code = $1 FOR UPDATE', [code]);
+        const row = await client.query('SELECT data, due_at FROM naadamy_family_emails WHERE code = $1 FOR UPDATE', [code]);
+        const outcome = mutate(row.rows[0] ? emailOut(row.rows[0]) : null, family.rows.length > 0);
+        let kept = row.rows.length > 0;
+        if (outcome.record === null) { await client.query('DELETE FROM naadamy_family_emails WHERE code = $1', [code]); kept = false; } // its links go with it
+        else if (outcome.record && family.rows.length) {
+          const { dueAt, ...data } = outcome.record;
+          await client.query(`INSERT INTO naadamy_family_emails (code, data, due_at) VALUES ($1, $2::jsonb, $3)
+            ON CONFLICT (code) DO UPDATE SET data = EXCLUDED.data, due_at = EXCLUDED.due_at, updated_at = now()`, [code, JSON.stringify(data), emailDue(dueAt)]);
+          kept = true;
+        }
+        if (kept && outcome.clearTokens) await client.query('DELETE FROM naadamy_email_tokens WHERE code = $1', [code]);
+        if (kept && outcome.token) {
+          await client.query('DELETE FROM naadamy_email_tokens WHERE code = $1 AND until <= $2', [code, Date.now()]);
+          await client.query('INSERT INTO naadamy_email_tokens (hash, code, kind, until) VALUES ($1, $2, $3, $4)',
+            [outcome.token.hash, code, outcome.token.kind, outcome.token.until]);
+        }
+        await client.query('COMMIT');
+        return outcome.result;
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back family email change:', rollbackError.message); }
+        throw new Error(`Could not save family email: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
     async voiceDelete(code, id) {
       if (!FAMILY_CODE.test(code || '') || !VOICE_ID.test(id || '')) return null;
       const result = await pool.query('DELETE FROM naadamy_voice WHERE family_code = $1 AND memory_id = $2 RETURNING size, uploader', [code, id]);
       return result.rows[0] ? { size: result.rows[0].size, by: result.rows[0].uploader } : null;
+    },
+    async familyEmailToken(hash, at) {
+      const result = await pool.query('SELECT code, kind FROM naadamy_email_tokens WHERE hash = $1 AND until > $2', [hash, at]);
+      return result.rows[0] || null;
+    },
+    /** As in JSON mode; one taker at a time on every server (a transaction advisory lock). */
+    async takeEmailSend(limits, at, windowMs) {
+      const client = await pool.connect(), keys = limits.map((l) => l.key);
+      try {
+        await client.query('BEGIN');
+        await client.query("SELECT pg_advisory_xact_lock(hashtext('naadamy_email_sends'))");
+        await client.query('DELETE FROM naadamy_email_sends WHERE at <= $1', [at - windowMs]);
+        const counts = await client.query('SELECT key, count(*)::int AS n, min(at) AS first FROM naadamy_email_sends WHERE key = ANY($1::text[]) GROUP BY key', [keys]);
+        const full = counts.rows.filter((row) => row.n >= limits.find((l) => l.key === row.key).max);
+        if (!full.length) await client.query('INSERT INTO naadamy_email_sends (key, at) SELECT unnest($1::text[]), $2::bigint', [keys, at]);
+        await client.query('COMMIT');
+        return full.length ? { ok: false, wait: Math.max(...full.map((row) => Number(row.first))) + windowMs - at } : { ok: true };
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch (rollbackError) { console.error('Could not roll back email count:', rollbackError.message); }
+        throw new Error(`Could not count email sends: ${error.message}`, { cause: error });
+      } finally {
+        client.release();
+      }
+    },
+    /** One statement: of the due rows, one that no other server holds (SKIP LOCKED) gets its next due time, so two servers
+     *  never claim the same report. */
+    async claimFamilyReport(at, next) {
+      const result = await pool.query(`UPDATE naadamy_family_emails SET due_at = $2, updated_at = now()
+        WHERE code = (SELECT code FROM naadamy_family_emails WHERE due_at > 0 AND due_at <= $1 ORDER BY due_at LIMIT 1 FOR UPDATE SKIP LOCKED)
+          AND due_at > 0 AND due_at <= $1
+        RETURNING code, data, $1::bigint AS due_at`, [at, next]);
+      return result.rows[0] ? { code: result.rows[0].code, record: emailOut(result.rows[0]) } : null;
     },
     async getAccount(id, initial = {}, inventorySeed = {}) {
       if (!PLAYER_ID.test(id || '')) throw new Error('Invalid player id for wallet');

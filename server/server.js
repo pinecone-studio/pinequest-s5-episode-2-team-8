@@ -61,7 +61,8 @@ const DATA_DIR = process.env.DATA_DIR || path.join(REPO, 'data');
 const roomStore = createRoomStore({ dataDir: DATA_DIR });
 const { resyncRealtime } = require('./realtime-resync.js');
 const board = require('./leaderboard.js')(roomStore);
-const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id), onErase: (ids) => eraseLive(ids), onChange: (ids) => board.forget(ids), onGone: (code) => voice.purge(code) });
+const parentEmail = require('./parent-email.js')(roomStore); // weekly report to a grown-up's email; off without RESEND_API_KEY
+const family = require('./family.js')(roomStore, { cloudOf: (id) => getCloudSave(id), onErase: (ids) => eraseLive(ids), onChange: (ids) => board.forget(ids), onGone: (code) => voice.purge(code), email: parentEmail });
 const voice = require('./voice.js')(roomStore, { dataDir: DATA_DIR, checkPin: (message) => family.checkPin(message) }); // memory book voice clips
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.ttf': 'font/ttf', '.webmanifest': 'application/manifest+json', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8', '.png': 'image/png',
@@ -93,6 +94,7 @@ function serveStatic(req, res) {
   }
   if (url.pathname === '/api/family') return family.handle(req, res);
   if (url.pathname === '/api/voice' || url.pathname.startsWith('/api/voice/')) return voice.handle(req, res, url.pathname);
+  if (url.pathname === '/api/email/confirm' || url.pathname === '/api/email/stop') return parentEmail.handle(req, res, url);
   if (!ROOT || (req.method !== 'GET' && req.method !== 'HEAD')) { res.writeHead(ROOT ? 405 : 404, { 'content-type': 'text/plain; charset=utf-8' }); return res.end(ROOT ? 'Method not allowed' : 'Not found'); }
   let p;
   try { p = decodeURIComponent(url.pathname); } catch { res.writeHead(400); return res.end(); } // a broken %-escape used to throw and stop the server
@@ -1254,6 +1256,7 @@ roomStore.load().then(async (state) => {
       .catch((error) => console.error('Could not resync after the realtime listener returned:', error.message));
   });
   server.listen(PORT, '0.0.0.0');
+  parentEmail.start();
 }).catch(async (error) => {
   console.error('Could not initialize room storage:', error.message);
   try { await roomStore.close(); } catch (closeError) { console.error('Could not close room storage:', closeError.message); }
