@@ -678,15 +678,9 @@ public sealed partial class Game
         GUILayout.FlexibleSpace();
         GUILayout.BeginVertical(sPanel);
         var m = modal; m.winScroll = BeginScroll(m.winScroll, h - U(40));
-        // the mouth-open sheet cell draws the face at a slightly different offset than the mouth-closed cell, so any toggle made the eyes and mouth look misaligned; keep the mouth closed and animate only the blink (0.18 s dip every 4.2 s, offset per character so two speakers don't blink together)
+        // every animated cell on the bust sheet (mouth-open and blink) draws the head at a slightly different pixel offset than the base cell, so toggling creates a ghost / double-face. Freeze both states until the sheet is re-authored with pixel-perfect head placement across all four cells per face.
         var sp = m.Speaker;
-        PxCanvas port = null;
-        if (sp != null)
-        {
-            float tt = Time.time;
-            bool blinking = (tt + sp.Value.who.Length * 0.37f) % 4.2f < 0.18f;
-            port = Portrait(sp.Value.who, sp.Value.face, false, blinking);
-        }
+        PxCanvas port = sp != null ? Portrait(sp.Value.who, sp.Value.face, false, false) : null;
         if (port != null)   // the one you are talking to, in a portrait at the window's left
         {
             GUILayout.BeginHorizontal();
