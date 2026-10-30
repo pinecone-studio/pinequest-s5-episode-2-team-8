@@ -257,17 +257,19 @@ def bolormaa_reference():
 def bolormaa_frame(base, talk, blink):
     """Use the exact reference portrait and add only the small mouth/eyelid changes needed for dialogue animation."""
     frame = base.copy(); d = ImageDraw.Draw(frame)
-    skin = base.getpixel((44, 70)); ink = rgb('#08060a') + (255,)
+    skin = base.getpixel((50, 80)); ink = rgb('#08060a') + (255,)
+    # the patches cover the whole reference eye or mouth (lashes, iris, highlights, lips, smile line), so none of it shows twice
     if blink:
-        d.polygon([(39, 68), (43, 66), (51, 66), (58, 68), (59, 71), (55, 74), (45, 74), (40, 72)], fill=skin)
-        d.polygon([(71, 66), (75, 64), (82, 64), (88, 66), (89, 69), (85, 72), (77, 72), (72, 70)], fill=skin)
-        d.line([(40, 70), (45, 67), (51, 67), (58, 70)], fill=ink, width=2)
-        d.line([(72, 68), (77, 65), (82, 65), (88, 68)], fill=ink, width=2)
+        d.polygon([(38, 64), (41, 59), (47, 58), (59, 59), (62, 62), (62, 71), (58, 74), (41, 74), (38, 70)], fill=skin)
+        d.polygon([(74, 59), (77, 56), (90, 56), (91, 59), (91, 66), (88, 69), (77, 69), (74, 66)], fill=skin)
+        d.line([(39, 66), (44, 68), (52, 69), (60, 67)], fill=ink, width=2)
+        d.line([(75, 63), (80, 65), (86, 65), (90, 63)], fill=ink, width=2)
     if talk:
-        d.polygon([(61, 92), (64, 90), (77, 90), (80, 93), (77, 97), (68, 99), (63, 96)], fill=skin)
-        d.ellipse((65, 92, 78, 98), fill=rgb('#7e3437') + (255,), outline=ink, width=1)
-        d.line([(67, 93), (75, 93)], fill=(255, 239, 224, 255), width=2)
-        d.line([(68, 97), (75, 97)], fill=(208, 105, 103, 255), width=1)
+        d.polygon([(57, 87), (60, 84), (80, 84), (81, 87), (78, 96), (62, 96)], fill=skin)
+        d.line([(59, 88), (63, 88)], fill=ink, width=1); d.line([(76, 87), (79, 86)], fill=ink, width=1)
+        d.ellipse((63, 86, 76, 94), fill=rgb('#7e3437') + (255,), outline=ink, width=1)
+        d.line([(66, 87), (73, 87)], fill=(255, 239, 224, 255), width=2)
+        d.line([(66, 92), (73, 92)], fill=(208, 105, 103, 255), width=1)
     return frame
 
 
