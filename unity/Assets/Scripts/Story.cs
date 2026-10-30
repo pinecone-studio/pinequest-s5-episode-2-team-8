@@ -405,13 +405,13 @@ public sealed partial class Game
             float h = Mathf.Max(pic * 0.72f + pad, pad + 26 + th + (n > 0 ? 10 + oht : 20) + pad), x = vw / 2 - w / 2, y = vh - h - 10;
             // a dark box with a gold frame; the portrait stands on its left, a little taller than the box
             g.Box(g.URect(x - 2, y - 2, w + 4, h + 4), Px.Col("#e0b04a")); g.Box(g.URect(x, y, w, h), new Color(0.04f, 0.03f, 0.07f, 0.94f));
-            bool talking = l.shown < l.text.Length && (int)(Time.time * 8) % 2 == 0, blink = Time.time % 4.1f < 0.12f;
+            // the story_face sheet's mouth-open and blink cells draw the head at slightly different pixel offsets than the base cell, so toggling creates a ghost that reads as an extra mouth / extra pair of eyes (same bug the dialog bust had). Freeze the face at the closed-mouth cell until the sheet is re-authored with pixel-perfect head placement across all three cells.
             if (l.who != null && WHO.ContainsKey(l.who))
             {
                 var fr = g.URect(x + pad, y - pic * 0.28f, pic, pic);
                 g.Box(new Rect(fr.x - U * 3, fr.y - U * 3, fr.width + U * 6, fr.height + U * 6), Px.Col("#e0b04a"));
                 g.Box(fr, Px.Col(l.who == "merkit" ? "#3a1c22" : "#1c2440"));
-                GUI.DrawTexture(fr, g.Tex(StoryFace(l.who, l.expr, blink ? 2 : talking ? 1 : 0)));
+                GUI.DrawTexture(fr, g.Tex(StoryFace(l.who, l.expr, 0)));
                 GUI.Label(g.URect(x + tx, y + pad - 4, tw, 24), WHO[l.who].name.ToString().ToUpper(), new GUIStyle(g.sPixel) { alignment = TextAnchor.UpperLeft, fontSize = PxSize(U * 16), normal = { textColor = Px.Col("#f7c646") } });
             }
             string vis = l.text.Substring(0, Mathf.Min(l.text.Length, (int)l.shown));

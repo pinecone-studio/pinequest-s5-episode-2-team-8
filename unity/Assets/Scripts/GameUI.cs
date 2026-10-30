@@ -678,9 +678,7 @@ public sealed partial class Game
         GUILayout.FlexibleSpace();
         GUILayout.BeginVertical(sPanel);
         var m = modal; m.winScroll = BeginScroll(m.winScroll, h - U(40));
-        // every animated cell on the bust sheet (mouth-open and blink) draws the head at a slightly different pixel offset than the base cell, so toggling creates a ghost / double-face. Freeze both states until the sheet is re-authored with pixel-perfect head placement across all four cells per face.
-        var sp = m.Speaker;
-        PxCanvas port = sp != null ? Portrait(sp.Value.who, sp.Value.face, false, false) : null;
+        var sp = m.Speaker; PxCanvas port = sp != null ? Portrait(sp.Value.who, sp.Value.face, spWho == sp.Value.who && Time.time - spAt < 1.6f && (int)(Time.time * 9) % 2 == 0, (Time.time + sp.Value.who.Length) % 3.4f < 0.12f) : null;
         if (port != null)   // the one you are talking to, in a portrait at the window's left
         {
             GUILayout.BeginHorizontal();
